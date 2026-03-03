@@ -1,0 +1,18 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "pnpm": true,
+    "/^node -e \"const ai = require\\('ai'\\); console\\.log\\(Object\\.keys\\(ai\\)\\.filter\\(k => k\\.includes\\('Part'\\)\\)\\.join\\('\\\\n'\\)\\)\" 2>&1 \\| head -20 && grep -r '\"image\"' node_modules/ai/dist/\\*\\.d\\.ts 2>/dev/null \\| grep \"mimeType\" \\| head -5$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^node -e \"const ai = require\\('ai'\\); console\\.log\\(typeof ai\\.output, typeof ai\\.Output\\)\" 2>/dev/null$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^node -e \"const \\{ Output \\} = require\\('ai'\\); console\\.log\\(Object\\.keys\\(Output\\)\\)\" 2>/dev/null$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "pkill": true
+  }
+}

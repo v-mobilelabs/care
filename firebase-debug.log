@@ -1,0 +1,70 @@
+[debug] [2026-03-01T19:29:33.113Z] ----------------------------------------------------------------------
+[debug] [2026-03-01T19:29:33.114Z] Command:       /usr/local/bin/node /usr/local/bin/firebase projects:list
+[debug] [2026-03-01T19:29:33.115Z] CLI Version:   13.31.0
+[debug] [2026-03-01T19:29:33.115Z] Platform:      darwin
+[debug] [2026-03-01T19:29:33.115Z] Node Version:  v22.12.0
+[debug] [2026-03-01T19:29:33.115Z] Time:          Mon Mar 02 2026 00:59:33 GMT+0530 (India Standard Time)
+[debug] [2026-03-01T19:29:33.115Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-01T19:29:33.120Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-01T19:29:33.120Z] > authorizing via signed-in user (v@cosmoops.com)
+[debug] [2026-03-01T19:29:33.122Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:29:33.122Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:29:33.122Z] > refreshing access token with scopes: []
+[debug] [2026-03-01T19:29:33.123Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-01T19:29:33.123Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:29:33.294Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[debug] [2026-03-01T19:29:33.294Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:29:33.295Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-03-01T19:29:33.697Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 401
+[debug] [2026-03-01T19:29:33.697Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[debug] [2026-03-01T19:29:33.698Z] Got a 401 Unauthenticated error for a call that required authentication. Refreshing tokens.
+[debug] [2026-03-01T19:29:33.698Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:29:33.698Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:29:33.698Z] > refreshing access token with scopes: []
+[debug] [2026-03-01T19:29:33.698Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-01T19:29:33.698Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:29:33.762Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[debug] [2026-03-01T19:29:33.762Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:29:33.763Z] Request to https://firebase.googleapis.com/v1beta1/projects?pageSize=1000 had HTTP Error: 401, Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[debug] [2026-03-01T19:29:33.764Z] FirebaseError: Request to https://firebase.googleapis.com/v1beta1/projects?pageSize=1000 had HTTP Error: 401, Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at responseToError (/usr/local/lib/node_modules/firebase-tools/lib/responseToError.js:52:12)
+    at RetryOperation._fn (/usr/local/lib/node_modules/firebase-tools/lib/apiv2.js:312:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[error] 
+[error] Error: Failed to list Firebase projects. See firebase-debug.log for more info.
+[debug] [2026-03-01T19:31:54.087Z] ----------------------------------------------------------------------
+[debug] [2026-03-01T19:31:54.089Z] Command:       /usr/local/bin/node /usr/local/bin/firebase apps:list --project care-ai-cosmoops
+[debug] [2026-03-01T19:31:54.090Z] CLI Version:   13.31.0
+[debug] [2026-03-01T19:31:54.090Z] Platform:      darwin
+[debug] [2026-03-01T19:31:54.090Z] Node Version:  v22.12.0
+[debug] [2026-03-01T19:31:54.090Z] Time:          Mon Mar 02 2026 01:01:54 GMT+0530 (India Standard Time)
+[debug] [2026-03-01T19:31:54.090Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-01T19:31:54.095Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-01T19:31:54.096Z] > authorizing via signed-in user (v@cosmoops.com)
+[debug] [2026-03-01T19:31:54.098Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:31:54.098Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:31:54.098Z] > refreshing access token with scopes: []
+[debug] [2026-03-01T19:31:54.099Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-01T19:31:54.099Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:31:54.244Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[debug] [2026-03-01T19:31:54.245Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:31:54.245Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/care-ai-cosmoops:searchApps pageSize=100
+[debug] [2026-03-01T19:31:54.388Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/care-ai-cosmoops:searchApps 401
+[debug] [2026-03-01T19:31:54.389Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/care-ai-cosmoops:searchApps {"error":{"code":401,"message":"Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.","status":"UNAUTHENTICATED"}}
+[debug] [2026-03-01T19:31:54.389Z] Got a 401 Unauthenticated error for a call that required authentication. Refreshing tokens.
+[debug] [2026-03-01T19:31:54.389Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:31:54.389Z] Checked if tokens are valid: false, expires at: 1742500067651
+[debug] [2026-03-01T19:31:54.389Z] > refreshing access token with scopes: []
+[debug] [2026-03-01T19:31:54.390Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-01T19:31:54.390Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:31:54.448Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 400
+[debug] [2026-03-01T19:31:54.448Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-01T19:31:54.448Z] Request to https://firebase.googleapis.com/v1beta1/projects/care-ai-cosmoops:searchApps?pageSize=100 had HTTP Error: 401, Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[debug] [2026-03-01T19:31:54.449Z] FirebaseError: Request to https://firebase.googleapis.com/v1beta1/projects/care-ai-cosmoops:searchApps?pageSize=100 had HTTP Error: 401, Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+    at responseToError (/usr/local/lib/node_modules/firebase-tools/lib/responseToError.js:52:12)
+    at RetryOperation._fn (/usr/local/lib/node_modules/firebase-tools/lib/apiv2.js:312:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[error] 
+[error] Error: Failed to list Firebase apps. See firebase-debug.log for more info.

@@ -1,0 +1,15 @@
+import { NextResponse } from "next/server";
+import { WithContext } from "@/lib/api/with-context";
+import { DeleteConditionUseCase } from "@/data/conditions";
+
+// DELETE /api/conditions/[conditionId]
+export const DELETE = WithContext<{ conditionId: string }>(
+  async ({ user, dependentId }, { conditionId }) => {
+    const input = DeleteConditionUseCase.validate({
+      userId: user.uid,
+      conditionId,
+    });
+    await new DeleteConditionUseCase(dependentId).execute(input);
+    return NextResponse.json({ ok: true });
+  },
+);

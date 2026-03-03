@@ -1,26 +1,92 @@
-@import "tailwindcss";
+/* ── Mobile-first base resets ──────────────────────────────────────────────── */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Prevent iOS text inflation and ensure consistent font scaling */
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  /* Better mobile font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove tap flash on iOS / Android — brand primary ghost instead */
+* {
+  -webkit-tap-highlight-color: rgba(107, 79, 248, 0.08);
+}
+
+/* Prevent accidental double-tap zoom on interactive elements */
+button,
+[role="button"],
+a,
+label,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* Ensure media never overflows its container on mobile */
+img,
+video,
+iframe,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── Touch targets ─────────────────────────────────────────────────────────── */
+/* Icon-only buttons already receive size="lg" (42px) from theme defaults.
+   This rule catches any bare <button>/<a> elements not using Mantine. */
+a:not([class]),
+button:not([class]) {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Hide the reCAPTCHA v3 badge — per Google's policy you must mention
+   reCAPTCHA protection in the UI instead (done in the login form). */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 82, 82, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(250, 82, 82, 0);
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.09);
+    opacity: 0.82;
+  }
+}
+
+@keyframes live-ripple {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(32, 201, 151, 0.45),
+      0 0 0 0 rgba(32, 201, 151, 0.2);
+  }
+  100% {
+    box-shadow:
+      0 0 0 40px rgba(32, 201, 151, 0),
+      0 0 0 80px rgba(32, 201, 151, 0);
+  }
 }

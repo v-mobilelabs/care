@@ -1,0 +1,35 @@
+// ── Models ────────────────────────────────────────────────────────────────────
+export * from "./models/session.model";
+export * from "./models/message.model";
+export * from "./models/file.model";
+
+// ── Repositories ──────────────────────────────────────────────────────────────
+export { sessionRepository } from "./repositories/session.repository";
+export { messageRepository } from "./repositories/message.repository";
+export { fileRepository } from "./repositories/file.repository";
+
+// ── Services ──────────────────────────────────────────────────────────────────
+export { sessionService, SessionService } from "./service/session.service";
+export { messageService, MessageService } from "./service/message.service";
+export { fileService, FileService } from "./service/file.service";
+
+// ── Use Cases ─────────────────────────────────────────────────────────────────
+
+// Session
+export { CreateSessionUseCase } from "./use-cases/create-session.use-case";
+export { FindOrCreateSessionUseCase } from "./use-cases/find-or-create-session.use-case";
+export { GetSessionUseCase } from "./use-cases/get-session.use-case";
+export { ListSessionsUseCase } from "./use-cases/list-sessions.use-case";
+export { UpdateSessionUseCase } from "./use-cases/update-session.use-case";
+export { DeleteSessionUseCase } from "./use-cases/delete-session.use-case";
+
+// Message
+export { AddMessageUseCase } from "./use-cases/add-message.use-case";
+export { ListMessagesUseCase } from "./use-cases/list-messages.use-case";
+
+// File
+export { UploadFileUseCase } from "./use-cases/upload-file.use-case";
+export { GetFileUseCase } from "./use-cases/get-file.use-case";
+export { ListFilesUseCase } from "./use-cases/list-files.use-case";
+export { ListAllFilesUseCase } from "./use-cases/list-all-files.use-case";
+export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
