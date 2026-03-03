@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Provider } from "@/ui/providers/provider";
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
-
-const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-
 import { AuthProvider } from "@/ui/providers/auth-provider";
 import "./globals.css";
 
@@ -24,6 +21,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = crypto.randomUUID();
   return (
     <html lang="en"  {...mantineHtmlProps}>
       <head>
