@@ -14,7 +14,7 @@
  *      via ReactDOM.createPortal and tracks mount/unmount to drive auto-hide.
  */
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useDisclosure } from "@mantine/hooks";
 
 export interface RightSidebarContextValue {
@@ -34,6 +34,10 @@ export interface RightSidebarContextValue {
     rightOpened: boolean;
     /** Toggle open/closed. */
     toggleRight: () => void;
+    /** Programmatically open the sidebar. */
+    openRight: () => void;
+    /** Programmatically close the sidebar. */
+    closeRight: () => void;
 }
 
 const RightSidebarContext = createContext<RightSidebarContextValue | null>(null);
@@ -47,10 +51,22 @@ export function useRightSidebar(): RightSidebarContextValue {
 export function RightSidebarProvider({ children }: Readonly<{ children: React.ReactNode }>) {
     const [container, setContainer] = useState<HTMLDivElement | null>(null);
     const [portalCount, setPortalCount] = useState(0);
-    const [rightOpened, { toggle: toggleRight }] = useDisclosure(true);
+    // Start closed — auto-open only when the first portal mounts so it never
+    // flashes open on pages that don't inject sidebar content.
+    const [rightOpened, { open: openRight, close: closeRight, toggle: toggleRight }] = useDisclosure(false);
+    const prevPortalCountRef = useRef(0);
 
     const incPortal = useCallback(() => setPortalCount((c) => c + 1), []);
     const decPortal = useCallback(() => setPortalCount((c) => Math.max(0, c - 1)), []);
+
+    // Auto-open when the first portal mounts (0 → 1). Does NOT re-open if the
+    // user manually closed the sidebar and new content is still mounted.
+    useEffect(() => {
+        if (prevPortalCountRef.current === 0 && portalCount > 0) {
+            openRight();
+        }
+        prevPortalCountRef.current = portalCount;
+    }, [portalCount, openRight]);
 
     return (
         <RightSidebarContext.Provider
@@ -63,6 +79,8 @@ export function RightSidebarProvider({ children }: Readonly<{ children: React.Re
                 decPortal,
                 rightOpened,
                 toggleRight,
+                openRight,
+                closeRight,
             }}
         >
             {children}

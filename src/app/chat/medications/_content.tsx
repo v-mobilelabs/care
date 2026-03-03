@@ -114,13 +114,13 @@ interface MedicationFormValues {
     status: string;
 }
 
-interface MedicationModalProps {
+export interface MedicationModalProps {
     opened: boolean;
     onClose: () => void;
     initial?: MedicationRecord;
 }
 
-function MedicationModal({ opened, onClose, initial }: Readonly<MedicationModalProps>) {
+export function MedicationModal({ opened, onClose, initial }: Readonly<MedicationModalProps>) {
     const addMutation = useAddMedicationMutation();
     const updateMutation = useUpdateMedicationMutation();
     const isEdit = !!initial;

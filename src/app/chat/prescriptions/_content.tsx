@@ -20,6 +20,7 @@ import {
     Tooltip,
 } from "@mantine/core";
 import { useRef, useState } from "react";
+import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
@@ -47,6 +48,7 @@ import {
     type ExtractedMedication,
 } from "@/app/chat/_query";
 import { colors } from "@/ui/tokens";
+import { MedicationModal } from "@/app/chat/medications/_content";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -440,6 +442,7 @@ export function PrescriptionsContent() {
 
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [addMedOpened, { open: openAddMed, close: closeAddMed }] = useDisclosure(false);
 
     const [extractingFileId, setExtractingFileId] = useState<string | null>(null);
     const [detailFileId, setDetailFileId] = useState<string | null>(null);
@@ -520,6 +523,9 @@ export function PrescriptionsContent() {
 
     return (
         <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+            {/* Add Medication modal */}
+            <MedicationModal opened={addMedOpened} onClose={closeAddMed} />
+
             {/* Detail drawer — key resets state when switching between prescriptions */}
             <PrescriptionDetailDrawer
                 key={detailFileId ?? ""}
@@ -575,6 +581,15 @@ export function PrescriptionsContent() {
                                 {prescriptions.length} {prescriptions.length === 1 ? "file" : "files"}
                             </Badge>
                         )}
+                        <Button
+                            leftSection={<IconCapsule size={15} />}
+                            size="xs"
+                            variant="light"
+                            color="violet"
+                            onClick={openAddMed}
+                        >
+                            Add Medication
+                        </Button>
                         <Button
                             leftSection={<IconCamera size={15} />}
                             size="xs"

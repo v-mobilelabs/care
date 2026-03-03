@@ -1,7 +1,6 @@
 "use client";
 import {
   Anchor,
-  AppShell,
   Badge,
   Box,
   Button,
@@ -15,6 +14,7 @@ import {
   ThemeIcon,
   Title,
 } from "@mantine/core";
+import { LandingLayout } from "@/ui/layouts/landing";
 import {
   IconApple,
   IconBrain,
@@ -259,197 +259,167 @@ export default function HomePage() {
   const router = useRouter();
 
   return (
-    <AppShell>
-      <AppShell.Main>
+    <LandingLayout>
 
-        {/* ── Nav bar ── */}
-        <Box
-          pos="sticky"
-          py="sm"
-          px="md"
-          style={{
-            top: 0,
-            zIndex: 100,
-            backdropFilter: "blur(8px)",
-            background: "light-dark(rgba(255,255,255,0.85), rgba(26,27,30,0.85))",
-            borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-          }}
-        >
-          <Container size="lg" p={0}>
-            <Group justify="space-between">
-              <Group gap={8}>
-                <ThemeIcon size={30} radius="md" color="primary" variant="light">
-                  <IconHeartbeat size={17} />
-                </ThemeIcon>
-                <Text c="primary" size="xl" fw={900}>CareAI</Text>
-              </Group>
-              <Button color="primary" size="sm" leftSection={<IconMessageChatbot size={15} />} onClick={() => router.push("/chat")}>
-                Start Assessment
+      {/* ── Hero ── */}
+      <Box
+        py={{ base: 80, sm: 120 }}
+        style={{
+          background: "light-dark(linear-gradient(135deg, var(--mantine-color-primary-0) 0%, var(--mantine-color-blue-0) 100%), linear-gradient(135deg, rgba(61,42,160,0.2) 0%, rgba(13,110,253,0.1) 100%))",
+        }}
+      >
+        <Container size="md">
+          <Stack align="center" gap="xl">
+            <Badge color="primary" variant="light" size="lg" radius="xl" leftSection={<IconBrain size={14} />}>
+              12 Clinical Outputs · 5 Input Modes
+            </Badge>
+            <Title ta="center" style={{ fontSize: "clamp(2rem, 6vw, 3.2rem)", lineHeight: 1.2 }}>
+              Your symptoms turned into{" "}
+              <Text component="span" c="primary" inherit>a full clinical report.</Text>
+            </Title>
+            <Text size="lg" c="dimmed" ta="center" maw={580} style={{ lineHeight: 1.7 }}>
+              Type, talk, photograph, or upload. CareAI asks the right follow-up questions
+              then hands you diagnoses, medications, lab orders, SOAP notes, specialist
+              referrals, and more — all from one conversation.
+            </Text>
+            <Group gap="md" justify="center" wrap="wrap">
+              <Button size="lg" color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
+                Check My Symptoms
               </Button>
             </Group>
-          </Container>
-        </Box>
-
-        {/* ── Hero ── */}
-        <Box
-          py={{ base: 80, sm: 120 }}
-          style={{
-            background: "light-dark(linear-gradient(135deg, var(--mantine-color-primary-0) 0%, var(--mantine-color-blue-0) 100%), linear-gradient(135deg, rgba(61,42,160,0.2) 0%, rgba(13,110,253,0.1) 100%))",
-          }}
-        >
-          <Container size="md">
-            <Stack align="center" gap="xl">
-              <Badge color="primary" variant="light" size="lg" radius="xl" leftSection={<IconBrain size={14} />}>
-                12 Clinical Outputs · 5 Input Modes
-              </Badge>
-              <Title ta="center" style={{ fontSize: "clamp(2rem, 6vw, 3.2rem)", lineHeight: 1.2 }}>
-                Your symptoms turned into{" "}
-                <Text component="span" c="primary" inherit>a full clinical report.</Text>
-              </Title>
-              <Text size="lg" c="dimmed" ta="center" maw={580} style={{ lineHeight: 1.7 }}>
-                Type, talk, photograph, or upload. CareAI asks the right follow-up questions
-                then hands you diagnoses, medications, lab orders, SOAP notes, specialist
-                referrals, and more — all from one conversation.
-              </Text>
-              <Group gap="md" justify="center" wrap="wrap">
-                <Button size="lg" color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
-                  Check My Symptoms
-                </Button>
-              </Group>
-              <Group gap="xl" wrap="wrap" justify="center">
-                {[
-                  { icon: IconHeartRateMonitor, text: "ICD-10 diagnoses" },
-                  { icon: IconShieldHalfFilled, text: "Risk scoring" },
-                  { icon: IconClipboardText, text: "SOAP notes" },
-                  { icon: IconDental, text: "Dental chart" },
-                ].map(({ icon: Icon, text }) => (
-                  <Group key={text} gap={6}>
-                    <Icon size={15} color="var(--mantine-color-primary-5)" />
-                    <Text size="sm" c="dimmed">{text}</Text>
-                  </Group>
-                ))}
-              </Group>
-            </Stack>
-          </Container>
-        </Box>
-
-        {/* ── Input modes ── */}
-        <Container size="lg" py={{ base: 60, sm: 80 }}>
-          <Stack gap="xl">
-            <Stack gap={6} align="center">
-              <Title order={2} ta="center">5 Ways to Describe Your Condition</Title>
-              <Text size="md" c="dimmed" ta="center" maw={500}>
-                No forms. No checkboxes. Just tell CareAI what&apos;s wrong — however is easiest.
-              </Text>
-            </Stack>
-            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 5 }} spacing="md">
-              {INPUT_MODES.map((mode) => (
-                <InputModeCard key={mode.label} {...mode} />
+            <Group gap="xl" wrap="wrap" justify="center">
+              {[
+                { icon: IconHeartRateMonitor, text: "ICD-10 diagnoses" },
+                { icon: IconShieldHalfFilled, text: "Risk scoring" },
+                { icon: IconClipboardText, text: "SOAP notes" },
+                { icon: IconDental, text: "Dental chart" },
+              ].map(({ icon: Icon, text }) => (
+                <Group key={text} gap={6}>
+                  <Icon size={15} color="var(--mantine-color-primary-5)" />
+                  <Text size="sm" c="dimmed">{text}</Text>
+                </Group>
               ))}
-            </SimpleGrid>
+            </Group>
           </Stack>
         </Container>
+      </Box>
 
-        <Divider />
+      {/* ── Input modes ── */}
+      <Container size="lg" py={{ base: 60, sm: 80 }}>
+        <Stack gap="xl">
+          <Stack gap={6} align="center">
+            <Title order={2} ta="center">5 Ways to Describe Your Condition</Title>
+            <Text size="md" c="dimmed" ta="center" maw={500}>
+              No forms. No checkboxes. Just tell CareAI what&apos;s wrong — however is easiest.
+            </Text>
+          </Stack>
+          <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 5 }} spacing="md">
+            {INPUT_MODES.map((mode) => (
+              <InputModeCard key={mode.label} {...mode} />
+            ))}
+          </SimpleGrid>
+        </Stack>
+      </Container>
 
-        {/* ── Clinical outputs ── */}
-        <Container size="lg" py={{ base: 60, sm: 80 }}>
-          <Stack gap="xl">
-            <Stack gap={6} align="center">
-              <Badge color="primary" variant="dot" size="sm">12 Structured Outputs</Badge>
-              <Title order={2} ta="center">What CareAI Produces</Title>
-              <Text size="md" c="dimmed" ta="center" maw={520}>
-                Not just a summary — a full structured clinical report covering every dimension
-                of your condition.
-              </Text>
-            </Stack>
-            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
-              {CLINICAL_OUTPUTS.map((output) => (
-                <OutputCard key={output.label} {...output} />
-              ))}
-            </SimpleGrid>
+      <Divider />
+
+      {/* ── Clinical outputs ── */}
+      <Container size="lg" py={{ base: 60, sm: 80 }}>
+        <Stack gap="xl">
+          <Stack gap={6} align="center">
+            <Badge color="primary" variant="dot" size="sm">12 Structured Outputs</Badge>
+            <Title order={2} ta="center">What CareAI Produces</Title>
+            <Text size="md" c="dimmed" ta="center" maw={520}>
+              Not just a summary — a full structured clinical report covering every dimension
+              of your condition.
+            </Text>
+          </Stack>
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+            {CLINICAL_OUTPUTS.map((output) => (
+              <OutputCard key={output.label} {...output} />
+            ))}
+          </SimpleGrid>
+        </Stack>
+      </Container>
+
+      <Divider />
+
+      {/* ── How it works ── */}
+      <Container size="lg" py={{ base: 60, sm: 80 }}>
+        <Stack gap="xl">
+          <Stack gap={6} align="center">
+            <Title order={2} ta="center">How CareAI Works</Title>
+            <Text size="md" c="dimmed" ta="center" maw={500}>From first symptom to complete assessment in a single conversation.</Text>
+          </Stack>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {HOW_IT_WORKS.map((item) => (
+              <StepCard key={item.step} {...item} />
+            ))}
+          </SimpleGrid>
+        </Stack>
+      </Container>
+
+      <Divider />
+
+      {/* ── CTA banner ── */}
+      <Box py={{ base: 60, sm: 80 }} style={{ background: "light-dark(var(--mantine-color-primary-6), var(--mantine-color-primary-9))" }}>
+        <Container size="sm">
+          <Stack align="center" gap="lg">
+            <ThemeIcon size={64} radius="xl" color="white" variant="white">
+              <IconHeartbeat size={36} color="var(--mantine-color-primary-6)" />
+            </ThemeIcon>
+            <Title ta="center" c="white" style={{ fontSize: "clamp(1.5rem, 4vw, 2.2rem)" }}>
+              Not sure what&apos;s wrong?
+            </Title>
+            <Text c="rgba(255,255,255,0.8)" ta="center" maw={460} size="md" lh={1.7}>
+              CareAI will work through your symptoms, ask the right questions, and hand you
+              a full clinical report — conditions, medications, labs, referrals, SOAP notes,
+              and a clear action plan.
+            </Text>
+            <Button size="lg" color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
+              Start Free Assessment
+            </Button>
           </Stack>
         </Container>
+      </Box>
 
-        <Divider />
-
-        {/* ── How it works ── */}
-        <Container size="lg" py={{ base: 60, sm: 80 }}>
-          <Stack gap="xl">
-            <Stack gap={6} align="center">
-              <Title order={2} ta="center">How CareAI Works</Title>
-              <Text size="md" c="dimmed" ta="center" maw={500}>From first symptom to complete assessment in a single conversation.</Text>
-            </Stack>
-            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-              {HOW_IT_WORKS.map((item) => (
-                <StepCard key={item.step} {...item} />
-              ))}
-            </SimpleGrid>
-          </Stack>
+      {/* ── Stats ── */}
+      <Box py="xl" style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))" }}>
+        <Container size="lg">
+          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+            {STATS.map(({ icon: Icon, value, label }) => (
+              <Stack key={label} align="center" gap={4}>
+                <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                  <Icon size={20} />
+                </ThemeIcon>
+                <Text fw={800} size="xl">{value}</Text>
+                <Text size="xs" c="dimmed">{label}</Text>
+              </Stack>
+            ))}
+          </SimpleGrid>
         </Container>
+      </Box>
 
-        <Divider />
-
-        {/* ── CTA banner ── */}
-        <Box py={{ base: 60, sm: 80 }} style={{ background: "light-dark(var(--mantine-color-primary-6), var(--mantine-color-primary-9))" }}>
-          <Container size="sm">
-            <Stack align="center" gap="lg">
-              <ThemeIcon size={64} radius="xl" color="white" variant="white">
-                <IconHeartbeat size={36} color="var(--mantine-color-primary-6)" />
+      {/* ── Footer ── */}
+      <Box py="lg" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
+        <Container size="lg">
+          <Group justify="space-between" wrap="wrap" gap="sm">
+            <Group gap={8}>
+              <ThemeIcon size={22} radius="md" color="primary" variant="light">
+                <IconHeartbeat size={13} />
               </ThemeIcon>
-              <Title ta="center" c="white" style={{ fontSize: "clamp(1.5rem, 4vw, 2.2rem)" }}>
-                Not sure what&apos;s wrong?
-              </Title>
-              <Text c="rgba(255,255,255,0.8)" ta="center" maw={460} size="md" lh={1.7}>
-                CareAI will work through your symptoms, ask the right questions, and hand you
-                a full clinical report — conditions, medications, labs, referrals, SOAP notes,
-                and a clear action plan.
-              </Text>
-              <Button size="lg" color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
-                Start Free Assessment
-              </Button>
-            </Stack>
-          </Container>
-        </Box>
-
-        {/* ── Stats ── */}
-        <Box py="xl" style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))" }}>
-          <Container size="lg">
-            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
-              {STATS.map(({ icon: Icon, value, label }) => (
-                <Stack key={label} align="center" gap={4}>
-                  <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                    <Icon size={20} />
-                  </ThemeIcon>
-                  <Text fw={800} size="xl">{value}</Text>
-                  <Text size="xs" c="dimmed">{label}</Text>
-                </Stack>
-              ))}
-            </SimpleGrid>
-          </Container>
-        </Box>
-
-        {/* ── Footer ── */}
-        <Box py="lg" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
-          <Container size="lg">
-            <Group justify="space-between" wrap="wrap" gap="sm">
-              <Group gap={8}>
-                <ThemeIcon size={22} radius="md" color="primary" variant="light">
-                  <IconHeartbeat size={13} />
-                </ThemeIcon>
-                <Text size="sm" fw={700} c="primary">CareAI</Text>
-                <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
-              </Group>
-              <Group gap="md">
-                <Anchor size="xs" c="dimmed" onClick={() => router.push("/design-system")}>Design System</Anchor>
-                <Anchor size="xs" c="dimmed" onClick={() => router.push("/chat")}>Symptom Check</Anchor>
-              </Group>
+              <Text size="sm" fw={700} c="primary">CareAI</Text>
+              <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
             </Group>
-          </Container>
-        </Box>
+            <Group gap="md">
+              <Anchor size="xs" c="dimmed" onClick={() => router.push("/design-system")}>Design System</Anchor>
+              <Anchor size="xs" c="dimmed" onClick={() => router.push("/chat")}>Symptom Check</Anchor>
+            </Group>
+          </Group>
+        </Container>
+      </Box>
 
-      </AppShell.Main>
-    </AppShell>
+    </LandingLayout>
   );
 }
 
