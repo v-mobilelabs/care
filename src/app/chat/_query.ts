@@ -1388,3 +1388,117 @@ export function useExtractInsuranceMutation() {
     },
   });
 }
+
+// ── Blood Tests ───────────────────────────────────────────────────────────────
+
+export type BiomarkerStatus = "normal" | "low" | "high" | "critical";
+
+export interface BiomarkerRecord {
+  name: string;
+  value: string;
+  unit: string;
+  referenceRange?: string;
+  status: BiomarkerStatus;
+}
+
+export interface BloodTestRecord {
+  id: string;
+  userId: string;
+  fileId: string;
+  sessionId: string;
+  testName: string;
+  labName?: string;
+  orderedBy?: string;
+  testDate?: string;
+  notes?: string;
+  biomarkers: BiomarkerRecord[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/** Fetch all blood test records for the authenticated user (or active dependent). */
+export function useBloodTestsQuery() {
+  const pid = useActiveDependentId();
+  return useQuery({
+    queryKey: [...chatKeys.bloodTests(), pid],
+    queryFn: () => apiFetch<BloodTestRecord[]>("/api/blood-tests"),
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Upload a blood test file (image / PDF / doc) and auto-extract structured
+ * data via AI. Returns the created BloodTestRecord on success.
+ */
+export function useUploadBloodTestMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  return useMutation({
+    mutationFn: async (file: File): Promise<BloodTestRecord> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const headers = new Headers();
+      if (pid) headers.set("x-dependent-id", pid);
+      const res = await fetch("/api/blood-tests", {
+        method: "POST",
+        body: formData,
+        headers,
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(body.error?.message ?? `Upload failed (${res.status})`);
+      }
+      return res.json() as Promise<BloodTestRecord>;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...chatKeys.bloodTests(), pid] });
+    },
+  });
+}
+
+/** Delete a blood test record (and its underlying file). Optimistic update. */
+export function useDeleteBloodTestMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  const btKey = [...chatKeys.bloodTests(), pid] as const;
+  return useMutation({
+    mutationFn: (recordId: string) =>
+      apiFetch<{ ok: boolean }>(`/api/blood-tests/${recordId}`, {
+        method: "DELETE",
+      }),
+    onMutate: async (recordId) => {
+      await qc.cancelQueries({ queryKey: btKey });
+      const snapshot = qc.getQueryData<BloodTestRecord[]>(btKey);
+      qc.setQueryData<BloodTestRecord[]>(btKey, (old = []) =>
+        old.filter((r) => r.id !== recordId),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(btKey, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: btKey });
+    },
+  });
+}
+
+/** Re-run AI extraction for an existing blood test record. */
+export function useReExtractBloodTestMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  return useMutation({
+    mutationFn: (recordId: string) =>
+      apiFetch<BloodTestRecord>(`/api/blood-tests/${recordId}`, {
+        method: "PATCH",
+      }),
+    onSuccess: (updated) => {
+      const btKey = [...chatKeys.bloodTests(), pid] as const;
+      qc.setQueryData<BloodTestRecord[]>(btKey, (old = []) =>
+        old.map((r) => (r.id === updated.id ? updated : r)),
+      );
+    },
+  });
+}

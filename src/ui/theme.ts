@@ -245,7 +245,7 @@ export const theme: MantineThemeOverride = createTheme({
     // size "lg" → ~42px min-height; comfortable with the 16px base font and
     // meets WCAG 2.5.8 44px touch target guideline.
     Button: {
-      defaultProps: { radius: "md", size: "lg" },
+      defaultProps: { radius: "md", size: "sm", variant: "light" },
       classNames: Button.extend({}).classNames,
     },
     ActionIcon: {

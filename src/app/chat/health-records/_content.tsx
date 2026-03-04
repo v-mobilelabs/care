@@ -5,10 +5,12 @@ import {
     Badge,
     Box,
     Button,
+    Center,
     Collapse,
     Divider,
     Group,
     List,
+    Loader,
     Paper,
     Progress,
     ScrollArea,
@@ -26,36 +28,50 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconActivity,
+    IconAlertCircle,
+    IconArrowUp,
+    IconArrowDown,
     IconCheck,
     IconChevronDown,
     IconChevronRight,
+    IconCircleCheck,
     IconClipboardList,
     IconClipboardText,
+    IconFlask,
     IconHeartbeat,
     IconMapPin,
     IconMessage,
     IconNotes,
     IconPill,
+    IconRefresh,
     IconSalad,
     IconScale,
     IconShield,
     IconStethoscope,
     IconTrash,
+    IconUpload,
     IconUser,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import {
     useAssessmentsQuery,
+    useBloodTestsQuery,
     useConditionsQuery,
+    useDeleteBloodTestMutation,
     useDeleteConditionMutation,
     useDeleteSoapNoteMutation,
     useDependentsQuery,
     useMedicationsQuery,
     useProfileQuery,
+    useReExtractBloodTestMutation,
     useSoapNotesQuery,
+    useUploadBloodTestMutation,
     type AssessmentRecord,
+    type BiomarkerRecord,
+    type BiomarkerStatus,
+    type BloodTestRecord,
     type ConditionRecord,
     type MedicationRecord,
     type SoapNoteRecord,
@@ -195,7 +211,7 @@ function KpiCard({ icon, label, value, color = "primary", description }: Readonl
             radius="lg"
             p="md"
             style={{
-                height: "100%",
+                aspectRatio: "4 / 3",
                 display: "flex",
                 flexDirection: "column",
             }}
@@ -275,6 +291,11 @@ function PatientSnapshotCard({ name, profile }: Readonly<{
                         py="xs"
                         px="xs"
                         style={{
+                            aspectRatio: "1",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
                             textAlign: "center",
                             borderRadius: 8,
                             background: "light-dark(white, var(--mantine-color-dark-7))",
@@ -697,10 +718,10 @@ function OverviewSkeletons() {
         <Stack gap="md">
             <Skeleton height={148} radius="lg" />
             <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-                <Skeleton height={86} radius="lg" />
-                <Skeleton height={86} radius="lg" />
-                <Skeleton height={86} radius="lg" />
-                <Skeleton height={86} radius="lg" />
+                <Skeleton radius="lg" style={{ aspectRatio: "4 / 3" }} />
+                <Skeleton radius="lg" style={{ aspectRatio: "4 / 3" }} />
+                <Skeleton radius="lg" style={{ aspectRatio: "4 / 3" }} />
+                <Skeleton radius="lg" style={{ aspectRatio: "4 / 3" }} />
             </SimpleGrid>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                 <Skeleton height={130} radius="lg" />
@@ -1028,6 +1049,340 @@ function SoapNotesTab() {
     );
 }
 
+// ── Blood tests tab ───────────────────────────────────────────────────────────
+
+const BIOMARKER_STATUS_COLOR: Record<BiomarkerStatus, string> = {
+    normal: colors.success,
+    low: colors.warning,
+    high: colors.warning,
+    critical: colors.danger,
+};
+
+const BIOMARKER_STATUS_ICON: Record<BiomarkerStatus, ReactNode> = {
+    normal: <IconCircleCheck size={12} />,
+    low: <IconArrowDown size={12} />,
+    high: <IconArrowUp size={12} />,
+    critical: <IconAlertCircle size={12} />,
+};
+
+function biomarkerBadgeColor(status: BiomarkerStatus): string {
+    if (status === "normal") return "teal";
+    if (status === "critical") return "red";
+    return "yellow";
+}
+
+function BiomarkerRow({ b }: Readonly<{ b: BiomarkerRecord }>) {
+    return (
+        <Group justify="space-between" gap="xs" py={4}
+            style={{ borderBottom: "1px solid light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))" }}
+        >
+            <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm" fw={500} truncate>{b.name}</Text>
+                {b.referenceRange && (
+                    <Text size="xs" c="dimmed">Ref: {b.referenceRange}</Text>
+                )}
+            </Box>
+            <Group gap={6} wrap="nowrap" align="center">
+                <Text size="sm" fw={600} c={BIOMARKER_STATUS_COLOR[b.status]}>
+                    {b.value} {b.unit}
+                </Text>
+                <Badge
+                    size="xs"
+                    variant="light"
+                    color={biomarkerBadgeColor(b.status)}
+                    leftSection={BIOMARKER_STATUS_ICON[b.status]}
+                >
+                    {b.status}
+                </Badge>
+            </Group>
+        </Group>
+    );
+}
+
+function BloodTestCard({
+    record,
+    isPendingDelete,
+    isReExtracting,
+    onDelete,
+    onReExtract,
+}: Readonly<{
+    record: BloodTestRecord;
+    isPendingDelete: boolean;
+    isReExtracting: boolean;
+    onDelete: () => void;
+    onReExtract: () => void;
+}>) {
+    const [expanded, { toggle }] = useDisclosure(false);
+
+    const abnormalCount = record.biomarkers.filter(
+        (b) => b.status !== "normal",
+    ).length;
+    const criticalCount = record.biomarkers.filter((b) => b.status === "critical").length;
+
+    return (
+        <Paper withBorder radius="lg" p="md" opacity={isPendingDelete ? 0.5 : 1}>
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Group gap="xs" align="center">
+                        <ThemeIcon size={28} radius="md" variant="light" color="primary">
+                            <IconFlask size={15} />
+                        </ThemeIcon>
+                        <Title order={5} lh={1.3} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {record.testName}
+                        </Title>
+                    </Group>
+
+                    <Group gap="xs" mt={6} wrap="wrap">
+                        {record.testDate && (
+                            <Text size="xs" c="dimmed">
+                                {formatDate(record.testDate)}
+                            </Text>
+                        )}
+                        {record.labName && (
+                            <Text size="xs" c="dimmed">· {record.labName}</Text>
+                        )}
+                        {record.orderedBy && (
+                            <Text size="xs" c="dimmed">· Dr. {record.orderedBy}</Text>
+                        )}
+                    </Group>
+
+                    <Group gap={6} mt={8} wrap="wrap">
+                        <Badge variant="light" size="xs" color="gray">
+                            {record.biomarkers.length} parameters
+                        </Badge>
+                        {abnormalCount > 0 && (
+                            <Badge variant="light" size="xs" color="yellow">
+                                {abnormalCount} abnormal
+                            </Badge>
+                        )}
+                        {criticalCount > 0 && (
+                            <Badge variant="filled" size="xs" color="red">
+                                {criticalCount} critical
+                            </Badge>
+                        )}
+                    </Group>
+                </Box>
+
+                <Group gap={4} wrap="nowrap">
+                    <Tooltip label="Re-extract with AI">
+                        <ActionIcon
+                            variant="subtle"
+                            color="primary"
+                            size="sm"
+                            loading={isReExtracting}
+                            onClick={onReExtract}
+                        >
+                            <IconRefresh size={14} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                        <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            size="sm"
+                            loading={isPendingDelete}
+                            onClick={onDelete}
+                        >
+                            <IconTrash size={14} />
+                        </ActionIcon>
+                    </Tooltip>
+                </Group>
+            </Group>
+
+            {record.biomarkers.length > 0 && (
+                <>
+                    <Divider my="sm" />
+                    <Button
+                        variant="subtle"
+                        size="compact-xs"
+                        color="primary"
+                        rightSection={
+                            expanded
+                                ? <IconChevronDown size={12} />
+                                : <IconChevronRight size={12} />
+                        }
+                        onClick={toggle}
+                    >
+                        {expanded ? "Hide" : "Show"} {record.biomarkers.length} results
+                    </Button>
+
+                    <Collapse in={expanded}>
+                        <Stack gap={0} mt="xs">
+                            {record.biomarkers.map((b, i) => (
+                                // eslint-disable-next-line react/no-array-index-key
+                                <BiomarkerRow key={`${b.name}-${i}`} b={b} />
+                            ))}
+                        </Stack>
+                    </Collapse>
+                </>
+            )}
+        </Paper>
+    );
+}
+
+function BloodTestsTab() {
+    const { data: records = [], isLoading } = useBloodTestsQuery();
+    const upload = useUploadBloodTestMutation();
+    const deleteRecord = useDeleteBloodTestMutation();
+    const reExtract = useReExtractBloodTestMutation();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [reExtractingId, setReExtractingId] = useState<string | null>(null);
+
+    function handleFiles(files: FileList | null) {
+        if (!files || files.length === 0) return;
+        Array.from(files).forEach((file) => {
+            upload.mutate(file, {
+                onSuccess: (record) =>
+                    notifications.show({
+                        title: "Blood test extracted",
+                        message: `${record.testName} — ${record.biomarkers.length} parameters extracted.`,
+                        color: colors.success,
+                        icon: <IconCheck size={16} />,
+                    }),
+                onError: (err) =>
+                    notifications.show({
+                        title: "Upload failed",
+                        message: err instanceof Error ? err.message : "Unknown error.",
+                        color: colors.danger,
+                    }),
+            });
+        });
+    }
+
+    function handleDelete(record: BloodTestRecord) {
+        modals.openConfirmModal({
+            title: "Delete blood test?",
+            children: (
+                <Text size="sm">
+                    <strong>{record.testName}</strong> and all its results will be permanently removed. This cannot be undone.
+                </Text>
+            ),
+            labels: { confirm: "Delete", cancel: "Cancel" },
+            confirmProps: { color: "red" },
+            onConfirm: () => {
+                deleteRecord.mutate(record.id, {
+                    onSuccess: () =>
+                        notifications.show({
+                            message: `${record.testName} deleted.`,
+                            color: colors.success,
+                            icon: <IconCheck size={16} />,
+                        }),
+                });
+            },
+        });
+    }
+
+    function handleReExtract(record: BloodTestRecord) {
+        setReExtractingId(record.id);
+        reExtract.mutate(record.id, {
+            onSuccess: (updated) => {
+                setReExtractingId(null);
+                notifications.show({
+                    title: "Re-extracted",
+                    message: `${updated.testName} — ${updated.biomarkers.length} parameters updated.`,
+                    color: colors.success,
+                    icon: <IconCheck size={16} />,
+                });
+            },
+            onError: (err) => {
+                setReExtractingId(null);
+                notifications.show({
+                    title: "Re-extraction failed",
+                    message: err instanceof Error ? err.message : "Could not re-extract data.",
+                    color: colors.danger,
+                });
+            },
+        });
+    }
+
+    return (
+        <Stack gap="md">
+            {/* Hidden file input */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                multiple
+                style={{ display: "none" }}
+                onChange={(e) => handleFiles(e.target.files)}
+                onClick={(e) => { (e.target as HTMLInputElement).value = ""; }}
+            />
+
+            {/* Upload strip */}
+            <Paper
+                withBorder
+                radius="lg"
+                p="lg"
+                style={{
+                    borderStyle: "dashed",
+                    cursor: upload.isPending ? "default" : "pointer",
+                    background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
+                }}
+                onClick={() => !upload.isPending && fileInputRef.current?.click()}
+            >
+                <Center>
+                    <Stack align="center" gap="xs">
+                        {upload.isPending
+                            ? (
+                                <>
+                                    <Loader size="sm" type="bars" color="primary" />
+                                    <Text size="sm" c="dimmed">Uploading &amp; extracting…</Text>
+                                </>
+                            )
+                            : (
+                                <>
+                                    <ThemeIcon size={40} radius="xl" variant="light" color="primary">
+                                        <IconUpload size={20} />
+                                    </ThemeIcon>
+                                    <Text size="sm" fw={500}>Upload blood test report</Text>
+                                    <Text size="xs" c="dimmed">
+                                        Image, PDF, or Word document · AI will extract results automatically
+                                    </Text>
+                                </>
+                            )
+                        }
+                    </Stack>
+                </Center>
+            </Paper>
+
+            {/* Loading skeletons */}
+            {isLoading && (
+                <Stack gap="sm">
+                    <Skeleton height={100} radius="lg" />
+                    <Skeleton height={100} radius="lg" />
+                    <Skeleton height={100} radius="lg" />
+                </Stack>
+            )}
+
+            {/* Empty state */}
+            {!isLoading && records.length === 0 && (
+                <EmptyState
+                    icon={<IconFlask size={32} />}
+                    message="No blood tests yet. Upload an image, PDF, or document — AI will extract your results automatically."
+                />
+            )}
+
+            {/* Records list */}
+            {!isLoading && records.length > 0 && (
+                <Stack gap="sm">
+                    {records.map((r) => (
+                        <BloodTestCard
+                            key={r.id}
+                            record={r}
+                            isPendingDelete={
+                                deleteRecord.isPending && deleteRecord.variables === r.id
+                            }
+                            isReExtracting={reExtractingId === r.id}
+                            onDelete={() => handleDelete(r)}
+                            onReExtract={() => handleReExtract(r)}
+                        />
+                    ))}
+                </Stack>
+            )}
+        </Stack>
+    );
+}
+
 // ── Root content ──────────────────────────────────────────────────────────────
 
 export function HealthRecordsContent() {
@@ -1085,6 +1440,9 @@ export function HealthRecordsContent() {
                     <Tabs.Tab value="soap-notes" leftSection={<IconClipboardText size={14} />}>
                         SOAP Notes
                     </Tabs.Tab>
+                    <Tabs.Tab value="blood-tests" leftSection={<IconFlask size={14} />}>
+                        Blood Tests
+                    </Tabs.Tab>
                 </Tabs.List>
 
                 <Box style={{ flex: 1, overflow: "hidden" }}>
@@ -1098,6 +1456,9 @@ export function HealthRecordsContent() {
                             </Tabs.Panel>
                             <Tabs.Panel value="soap-notes">
                                 <SoapNotesTab />
+                            </Tabs.Panel>
+                            <Tabs.Panel value="blood-tests">
+                                <BloodTestsTab />
                             </Tabs.Panel>
                         </Box>
                     </ScrollArea>

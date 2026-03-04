@@ -129,7 +129,7 @@ export function ConsentSection() {
                     title="Informed consent"
                     description="Review the terms you agreed to."
                     action={
-                        <Button size="sm" variant="light" color="blue" leftSection={<IconFileDescription size={14} />} onClick={handleViewConsent}>
+                        <Button variant="light" color="blue" leftSection={<IconFileDescription size={16} />} onClick={handleViewConsent}>
                             View form
                         </Button>
                     }
@@ -139,7 +139,7 @@ export function ConsentSection() {
                     title="Withdraw consent"
                     description="Removes your consent and signs you out."
                     action={
-                        <Button size="sm" variant="light" color="red" leftSection={<IconShieldLock size={14} />} onClick={confirmWithdraw}>
+                        <Button variant="light" color="red" leftSection={<IconShieldLock size={16} />} onClick={confirmWithdraw}>
                             Withdraw
                         </Button>
                     }
@@ -211,7 +211,7 @@ export function DangerSection() {
                     title="Sign out"
                     description="Sign out of your account on this device."
                     action={
-                        <Button size="sm" variant="light" color="gray" leftSection={<IconLogout size={14} />} onClick={() => void handleWithdrawConsent()}>
+                        <Button variant="light" color="gray" leftSection={<IconLogout size={16} />} onClick={() => void handleWithdrawConsent()}>
                             Sign out
                         </Button>
                     }
@@ -221,7 +221,7 @@ export function DangerSection() {
                     title="Delete my account"
                     description="Permanently deletes your account and all data."
                     action={
-                        <Button size="sm" variant="light" color="red" leftSection={<IconTrash size={14} />} loading={deleting} onClick={confirmDelete}>
+                        <Button variant="light" color="red" leftSection={<IconTrash size={16} />} loading={deleting} onClick={confirmDelete}>
                             Delete account
                         </Button>
                     }

@@ -57,7 +57,7 @@ export function MagicLinkForm() {
                         We sent a magic link to <strong>{form.values.email}</strong>.
                         Click it to sign in — no password needed.
                     </Text>
-                    <Button variant="subtle" size="xs" onClick={() => setSent(false)}>Use a different email</Button>
+                    <Button variant="subtle" onClick={() => setSent(false)}>Use a different email</Button>
                 </Stack>
             </Paper>
         );
@@ -68,6 +68,12 @@ export function MagicLinkForm() {
             <Stack gap="md">
                 <TextInput label="Email address" placeholder="you@example.com" leftSection={<IconMail size={16} />} {...form.getInputProps("email")} />
                 <Button type="submit" fullWidth loading={loading}>Send magic link</Button>
+                <Text size="xs" c="dimmed" ta="center">
+                    By signing in you agree to our{" "}
+                    <Text component="a" href="/terms" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Terms &amp; Conditions</Text>
+                    {" and "}
+                    <Text component="a" href="/privacy" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Privacy Policy</Text>.
+                </Text>
                 <Text size="xs" c="dimmed" ta="center">
                     Protected by reCAPTCHA —{" "}
                     <Text component="a" href="https://policies.google.com/privacy" target="_blank" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Privacy</Text>

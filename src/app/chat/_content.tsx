@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useChatContext } from "@/app/chat/_context/chat-context";
 import { useMessages } from "@/app/chat/_hooks/use-messages";
+import { useAuth } from "@/ui/providers/auth-provider";
 import { Messages } from "@/app/chat/_components/messages";
 import { InputBar } from "@/app/chat/_components/input-bar";
 import { useUploadFileMutation } from "@/app/chat/_query";
@@ -17,7 +18,12 @@ import { useRightSidebar } from "@/app/chat/_context/right-sidebar-context";
 
 export function ChatContent() {
     const { sessionId } = useChatContext();
+    const { user } = useAuth();
     const uploadFile = useUploadFileMutation();
+
+    const userInitials = user?.displayName
+        ? user.displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+        : user?.email?.[0]?.toUpperCase() ?? undefined;
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -29,6 +35,7 @@ export function ChatContent() {
         editingId, editingText, setEditingText,
         handleEditStart, handleEditCancel, handleEditSubmit, handleEditKeyDown,
         handleAnswer,
+        error, regenerate,
     } = useMessages(sessionId);
 
     const { rightOpened, toggleRight, hasContent } = useRightSidebar();
@@ -62,11 +69,15 @@ export function ChatContent() {
                     messages={messages}
                     isLoading={isLoading}
                     chatStatus={status}
+                    userPhotoURL={user?.photoURL}
+                    userInitials={userInitials}
                     answeredIds={answeredIds}
                     editingId={editingId}
                     editingText={editingText}
                     phraseIdx={phraseIdx}
                     phraseFading={phraseFading}
+                    error={error}
+                    onRetry={regenerate}
                     onAnswer={handleAnswer}
                     onEditStart={handleEditStart}
                     onEditChange={setEditingText}

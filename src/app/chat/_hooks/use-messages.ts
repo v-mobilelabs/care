@@ -57,7 +57,16 @@ export function useMessages(sessionId: string) {
   );
 
   // ── AI SDK chat ───────────────────────────────────────────────────────────
-  const { messages, setMessages, sendMessage, status, stop } = useChat({
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    stop,
+    error,
+    clearError,
+    regenerate,
+  } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { sessionId },
@@ -221,6 +230,9 @@ export function useMessages(sessionId: string) {
     messages,
     sendMessage,
     stop,
+    regenerate,
+    error,
+    clearError,
     status,
     isLoading,
     isMessagesLoading,

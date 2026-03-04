@@ -1,8 +1,9 @@
 // Login page shell — no auth required.
-import { Box, Container, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Box, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { IconSparkles } from "@tabler/icons-react";
 import { MagicLinkForm } from "@/app/auth/login/_form";
 import { CaptchaProvider } from "@/ui/providers/captcha-provider";
+import Link from "next/link";
 
 export const metadata = { title: "Sign In — CareAI" };
 
@@ -29,6 +30,11 @@ export default function LoginPage() {
                     <CaptchaProvider>
                         <MagicLinkForm />
                     </CaptchaProvider>
+                    <Group gap="xs" justify="center">
+                        <Anchor component={Link} href="/privacy" size="xs" c="dimmed">Privacy Policy</Anchor>
+                        <Text size="xs" c="dimmed">·</Text>
+                        <Anchor component={Link} href="/terms" size="xs" c="dimmed">Terms &amp; Conditions</Anchor>
+                    </Group>
                 </Stack>
             </Container>
         </Box>

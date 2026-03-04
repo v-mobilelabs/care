@@ -353,7 +353,7 @@ export function SessionSidebar({ sessionId, messages }: Readonly<SessionSidebarP
             <Box px="lg" py="sm" style={{ flexShrink: 0 }}>
                 <Group justify="space-between" align="center">
                     <Text size="sm" fw={600}>Session Panel</Text>
-                    <ActionIcon variant="subtle" color="gray" size="md" hiddenFrom="md" aria-label="Close panel" onClick={toggleRight}>
+                    <ActionIcon variant="subtle" color="gray" hiddenFrom="md" aria-label="Close panel" onClick={toggleRight}>
                         <IconLayoutSidebarRightCollapse size={20} />
                     </ActionIcon>
                 </Group>

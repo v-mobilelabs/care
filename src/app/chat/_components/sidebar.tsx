@@ -307,6 +307,13 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                         style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
                     />
                     <NavLink
+                        label={<Text size="sm">Family Members</Text>}
+                        leftSection={<IconUsers size={16} />}
+                        active={pathname.startsWith("/chat/family-members")}
+                        onClick={() => { startNavTransition(() => { router.push("/chat/family-members"); }); onCloseMobile(); }}
+                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                    />
+                    <NavLink
                         label={<Text size="sm">Profile</Text>}
                         leftSection={<IconUser size={16} />}
                         active={pathname === "/chat/profile"}

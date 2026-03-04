@@ -117,7 +117,7 @@ function FoodPreferencePicker({
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
                     style={{ flex: 1 }}
                 />
-                <Button size="xs" variant="light" color="primary" leftSection={<IconPlus size={12} />} onClick={addCustom}>
+                <Button variant="light" color="primary" leftSection={<IconPlus size={16} />} onClick={addCustom}>
                     Add
                 </Button>
             </Group>
@@ -199,7 +199,7 @@ function HealthInfoForm({ initial, onSave, saving, bmi }: Readonly<FormProps>) {
                 </Stack>
 
                 <Group justify="flex-end" mt={4}>
-                    <Button type="submit" size="sm" color="primary" loading={saving} leftSection={<IconCheck size={14} />}>
+                    <Button type="submit" color="primary" loading={saving} leftSection={<IconCheck size={16} />}>
                         Save
                     </Button>
                 </Group>

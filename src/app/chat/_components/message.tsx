@@ -18,8 +18,8 @@ import {
     IconCheck,
     IconFileTypePdf,
     IconFlag,
+    IconHeartbeat,
     IconPencil,
-    IconRobot,
     IconThumbDown,
     IconThumbUp,
     IconUser,
@@ -192,6 +192,8 @@ interface TextMessageProps {
     msgId: string;
     /** Firebase user photo URL — shown in the user avatar when available. */
     userPhotoURL?: string | null;
+    /** Name initials shown when no photo URL is available (e.g. "JD"). */
+    userInitials?: string;
     /**
      * Pass the id of the message currently being edited — the edit controls
      * are rendered only when `editingId === msgId`.
@@ -211,6 +213,7 @@ export function TextMessage({
     isUser,
     msgId,
     userPhotoURL,
+    userInitials,
     editingId,
     editingText,
     isLoading,
@@ -233,7 +236,9 @@ export function TextMessage({
                     variant={isUser ? "filled" : "light"}
                     src={isUser ? (userPhotoURL ?? undefined) : undefined}
                 >
-                    {isUser ? <IconUser size={16} /> : <IconRobot size={16} />}
+                    {isUser
+                        ? (userInitials ?? <IconUser size={16} />)
+                        : <IconHeartbeat size={16} />}
                 </Avatar>
                 <Text size="sm" c="dimmed" fw={500}>{isUser ? "You" : "CareAI"}</Text>
             </Group>
@@ -337,7 +342,7 @@ export function StatusIndicator({ chatStatus, phraseIdx, phraseFading }: Readonl
     return (
         <Group gap={10} align="center">
             <Avatar size={30} radius="xl" color="primary" variant="light">
-                <IconRobot size={16} />
+                <IconHeartbeat size={16} />
             </Avatar>
             <Paper
                 px="md"

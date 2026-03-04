@@ -333,58 +333,68 @@ export function AssessmentsContent() {
     }
 
     return (
-        <ScrollArea
-            style={{ flex: 1 }}
-            styles={{ viewport: { height: "100%" } }}
-        >
-            <Stack gap="xl" maw={720} mx="auto" px="xl" py="xl">
-                {/* Header */}
-                <Group justify="space-between" align="flex-start">
-                    <Group gap="sm" align="flex-start">
-                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                            <IconClipboardHeart size={20} />
+        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+            {/* Sticky header */}
+            <Box
+                pos="sticky"
+                style={{
+                    top: 0,
+                    zIndex: 100,
+                    backdropFilter: "blur(8px)",
+                    background: "light-dark(rgba(255,255,255,0.85), rgba(26,27,30,0.85))",
+                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
+                }}
+                px="xl"
+                py="md"
+            >
+                <Group justify="space-between" wrap="nowrap">
+                    <Group gap={12} wrap="nowrap">
+                        <ThemeIcon size={40} radius="md" color="primary" variant="light">
+                            <IconClipboardHeart size={22} />
                         </ThemeIcon>
                         <Box>
-                            <Title order={3} fw={700} lh={1.2}>
-                                My Assessments
-                            </Title>
-                            <Text size="sm" c="dimmed" mt={2}>
+                            <Title order={3} style={{ lineHeight: 1.2 }}>My Assessments</Title>
+                            <Text size="xs" c="dimmed">
                                 AI clinical assessments — linked to your chat sessions
                             </Text>
                         </Box>
                     </Group>
                     {!isLoading && assessments.length > 0 && (
-                        <Badge variant="light" color="primary" radius="xl">
+                        <Badge variant="light" color="primary" radius="xl" size="lg">
                             {assessments.length}
                         </Badge>
                     )}
                 </Group>
+            </Box>
 
-                <Divider />
-
-                {/* Content */}
-                {(() => {
-                    if (isLoading) return <AssessmentSkeletons />;
-                    if (assessments.length === 0) return <EmptyState />;
-                    return (
-                        <Stack gap="sm">
-                            {assessments.map((assessment: AssessmentRecord) => (
-                                <AssessmentCard
-                                    key={assessment.id}
-                                    assessment={assessment}
-                                    isPendingDelete={
-                                        deleteAssessment.isPending &&
-                                        deleteAssessment.variables === assessment.id
-                                    }
-                                    onDelete={() =>
-                                        handleDelete(assessment.id, assessment.title)
-                                    }
-                                />
-                            ))}
-                        </Stack>
-                    );
-                })()}
-            </Stack>
-        </ScrollArea>
+            {/* Scrollable content */}
+            <Box style={{ flex: 1, overflow: "hidden" }}>
+                <ScrollArea style={{ height: "100%" }}>
+                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
+                        {(() => {
+                            if (isLoading) return <AssessmentSkeletons />;
+                            if (assessments.length === 0) return <EmptyState />;
+                            return (
+                                <Stack gap="sm">
+                                    {assessments.map((assessment: AssessmentRecord) => (
+                                        <AssessmentCard
+                                            key={assessment.id}
+                                            assessment={assessment}
+                                            isPendingDelete={
+                                                deleteAssessment.isPending &&
+                                                deleteAssessment.variables === assessment.id
+                                            }
+                                            onDelete={() =>
+                                                handleDelete(assessment.id, assessment.title)
+                                            }
+                                        />
+                                    ))}
+                                </Stack>
+                            );
+                        })()}
+                    </Box>
+                </ScrollArea>
+            </Box>
+        </Box>
     );
 }

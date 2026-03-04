@@ -15,7 +15,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 
 export interface RightSidebarContextValue {
     /** The DOM element that portals render into. Null until the aside mounts. */
@@ -55,18 +55,22 @@ export function RightSidebarProvider({ children }: Readonly<{ children: React.Re
     // flashes open on pages that don't inject sidebar content.
     const [rightOpened, { open: openRight, close: closeRight, toggle: toggleRight }] = useDisclosure(false);
     const prevPortalCountRef = useRef(0);
+    // lg breakpoint = 1024px — iPads (768–1024px) stay closed, only full
+    // desktop/large-tablet widths auto-open the right sidebar.
+    const isLargeScreen = useMediaQuery("(min-width: 1024px)", false, { getInitialValueInEffect: false });
 
     const incPortal = useCallback(() => setPortalCount((c) => c + 1), []);
     const decPortal = useCallback(() => setPortalCount((c) => Math.max(0, c - 1)), []);
 
-    // Auto-open when the first portal mounts (0 → 1). Does NOT re-open if the
-    // user manually closed the sidebar and new content is still mounted.
+    // Auto-open when the first portal mounts (0 → 1) — but only on large
+    // screens. On small screens the sidebar starts closed so it doesn't block
+    // the full-screen layout on first load.
     useEffect(() => {
-        if (prevPortalCountRef.current === 0 && portalCount > 0) {
+        if (prevPortalCountRef.current === 0 && portalCount > 0 && isLargeScreen) {
             openRight();
         }
         prevPortalCountRef.current = portalCount;
-    }, [portalCount, openRight]);
+    }, [portalCount, openRight, isLargeScreen]);
 
     return (
         <RightSidebarContext.Provider

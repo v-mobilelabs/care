@@ -2,7 +2,8 @@
 export type PromptId =
   | "clinical-system"
   | "prescription-extraction"
-  | "insurance-extraction";
+  | "insurance-extraction"
+  | "blood-test-extraction";
 
 // ── DTO ───────────────────────────────────────────────────────────────────────
 export interface PromptDto {

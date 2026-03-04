@@ -22,4 +22,5 @@ export const chatKeys = {
   profile: () => ["chat", "profile"] as const,
   dependents: () => ["chat", "dependents"] as const,
   insurance: () => ["chat", "insurance"] as const,
+  bloodTests: () => ["chat", "blood-tests"] as const,
 } as const;

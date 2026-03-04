@@ -173,7 +173,7 @@ export function FamilySection({ dependents }: Readonly<Props>) {
                     title="Family members"
                     subtitle="Manage health profiles for people in your care"
                     action={
-                        <Button size="xs" variant="light" leftSection={<IconPlus size={12} />} onClick={() => openModal()}>
+                        <Button variant="light" leftSection={<IconPlus size={16} />} onClick={() => openModal()}>
                             Add
                         </Button>
                     }
@@ -233,11 +233,11 @@ export function FamilySection({ dependents }: Readonly<Props>) {
                                         </Box>
                                     </Group>
                                     <Group gap={4}>
-                                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => openModal(dep)}>
-                                            <IconEdit size={13} />
+                                        <ActionIcon variant="subtle" color="gray" onClick={() => openModal(dep)}>
+                                            <IconEdit size={18} />
                                         </ActionIcon>
-                                        <ActionIcon size="sm" variant="subtle" color="red" onClick={() => confirmDelete(dep)}>
-                                            <IconTrash size={13} />
+                                        <ActionIcon variant="subtle" color="red" onClick={() => confirmDelete(dep)}>
+                                            <IconTrash size={18} />
                                         </ActionIcon>
                                     </Group>
                                 </Group>

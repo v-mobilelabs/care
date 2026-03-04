@@ -1,7 +1,8 @@
 "use client";
-import { Box, ScrollArea, Stack } from "@mantine/core";
+import { ActionIcon, Avatar, Box, Button, Group, ScrollArea, Stack, Text, Transition } from "@mantine/core";
+import { IconAlertCircle, IconArrowDown, IconHeartbeat, IconRefresh } from "@tabler/icons-react";
 import type { ChatStatus, UIMessage } from "ai";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FileMessage, StatusIndicator, TextMessage } from "@/app/chat/_components/message";
 import { StarterCards } from "@/app/chat/_components/starter-cards";
@@ -18,6 +19,8 @@ export interface MessagesProps {
     chatStatus: ChatStatus;
     /** Firebase user photo URL — shown in the user avatar. */
     userPhotoURL?: string | null;
+    /** Name initials shown as avatar fallback when no photo URL is available. */
+    userInitials?: string;
     answeredIds: ReadonlySet<string>;
     editingId: string | null;
     editingText: string;
@@ -33,6 +36,40 @@ export interface MessagesProps {
     onStarterSelect: (text: string) => void;
     /** Called when the user clicks "Ask about [condition]" on a condition card — sends the message directly. */
     onLearnMore?: (text: string) => void;
+    /** Error from the AI request, if any. */
+    error?: Error | null;
+    /** Called when the user clicks the Retry chip after an error. */
+    onRetry?: () => void;
+}
+
+// ── RetryBlock ────────────────────────────────────────────────────────────────
+
+function RetryBlock({ errorMessage, onRetry }: Readonly<{ errorMessage?: string; onRetry: () => void }>) {
+    return (
+        <Group align="flex-start" gap="xs" wrap="nowrap">
+            <Avatar size={28} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 2 }}>
+                <IconHeartbeat size={16} />
+            </Avatar>
+            <Stack gap={6}>
+                <Group gap={6} align="center">
+                    <IconAlertCircle size={14} style={{ color: "var(--mantine-color-red-5)", flexShrink: 0 }} />
+                    <Text size="sm" c="dimmed">
+                        {errorMessage ?? "Response didn't generate. Something went wrong."}
+                    </Text>
+                </Group>
+                <Button
+                    variant="default"
+                    size="xs"
+                    radius="xl"
+                    leftSection={<IconRefresh size={13} />}
+                    onClick={onRetry}
+                    style={{ alignSelf: "flex-start", fontWeight: 500 }}
+                >
+                    Regenerate response
+                </Button>
+            </Stack>
+        </Group>
+    );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -47,6 +84,7 @@ export function Messages({
     isLoading,
     chatStatus,
     userPhotoURL,
+    userInitials,
     answeredIds,
     editingId,
     editingText,
@@ -60,93 +98,164 @@ export function Messages({
     onEditSubmit,
     onStarterSelect,
     onLearnMore,
+    error,
+    onRetry,
 }: Readonly<MessagesProps>) {
     const bottomRef = useRef<HTMLDivElement>(null);
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-    // Scroll to bottom on every new message or loading state change
-    useEffect(() => {
+    const SCROLL_THRESHOLD = 120; // px from bottom before button appears
+
+    const checkScrollPosition = useCallback(() => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        setShowScrollBtn(distanceFromBottom > SCROLL_THRESHOLD);
+    }, []);
+
+    const scrollToBottom = useCallback(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, []);
+
+    // Auto-scroll to bottom only when already near the bottom
+    useEffect(() => {
+        const el = viewportRef.current;
+        if (!el) {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            return;
+        }
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom <= SCROLL_THRESHOLD) {
+            bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
     }, [messages, isLoading]);
 
     const hasUserMessages = messages.some(m => m.role === "user");
 
+    // True when the last message is from the user with no AI reply yet.
+    const lastMsg = messages.at(-1);
+    const unansweredUser = lastMsg?.role === "user";
+
     return (
-        <ScrollArea style={{ flex: 1 }}>
-            <Stack gap="lg" maw={760} mx="auto" px="lg" py="lg">
+        <Box style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            <ScrollArea
+                style={{ height: "100%" }}
+                viewportRef={viewportRef}
+                onScrollPositionChange={checkScrollPosition}
+            >
+                <Stack gap="lg" maw={760} mx="auto" px="lg" py="lg">
 
-                {/* Empty state — starter prompt cards */}
-                {!hasUserMessages && (
-                    <StarterCards onSelect={onStarterSelect} />
-                )}
+                    {/* Empty state — starter prompt cards */}
+                    {!hasUserMessages && (
+                        <StarterCards onSelect={onStarterSelect} />
+                    )}
 
-                {/* Message thread */}
-                {messages.map((msg: UIMessage) => {
-                    const isUser = msg.role === "user";
-                    return (
-                        <Stack key={msg.id} gap="xs">
-                            {msg.parts.map((part, i) => {
-                                if (part.type === "file") {
-                                    return (
-                                        <FileMessage
-                                            key={i}
-                                            part={part as Parameters<typeof FileMessage>[0]["part"]}
-                                            isUser={isUser}
-                                        />
-                                    );
-                                }
-
-                                if (part.type === "text") {
-                                    return (
-                                        <TextMessage
-                                            key={i}
-                                            text={"text" in part ? String(part.text) : ""}
-                                            isUser={isUser}
-                                            userPhotoURL={isUser ? userPhotoURL : undefined}
-                                            msgId={msg.id}
-                                            editingId={editingId}
-                                            editingText={editingText}
-                                            isLoading={isLoading}
-                                            onEditStart={onEditStart}
-                                            onEditChange={onEditChange}
-                                            onEditKeyDown={onEditKeyDown}
-                                            onEditCancel={onEditCancel}
-                                            onEditSubmit={onEditSubmit}
-                                        />
-                                    );
-                                }
-
-                                if (!isUser && part.type.startsWith("tool-")) {
-                                    return (
-                                        <Box key={i} pl={34}>
-                                            <ToolPartRenderer
-                                                part={part as Parameters<typeof ToolPartRenderer>[0]["part"]}
-                                                onAnswer={onAnswer}
-                                                answeredIds={answeredIds}
-                                                isLoading={isLoading}
-                                                onLearnMore={onLearnMore}
+                    {/* Message thread */}
+                    {messages.map((msg: UIMessage) => {
+                        const isUser = msg.role === "user";
+                        return (
+                            <Stack key={msg.id} gap="xs">
+                                {msg.parts.map((part, i) => {
+                                    if (part.type === "file") {
+                                        return (
+                                            <FileMessage
+                                                key={i}
+                                                part={part as Parameters<typeof FileMessage>[0]["part"]}
+                                                isUser={isUser}
                                             />
-                                        </Box>
-                                    );
-                                }
+                                        );
+                                    }
 
-                                return null;
-                            })}
-                        </Stack>
-                    );
-                })}
+                                    if (part.type === "text") {
+                                        return (
+                                            <TextMessage
+                                                key={i}
+                                                text={"text" in part ? String(part.text) : ""}
+                                                isUser={isUser}
+                                                userPhotoURL={isUser ? userPhotoURL : undefined}
+                                                userInitials={isUser ? userInitials : undefined}
+                                                msgId={msg.id}
+                                                editingId={editingId}
+                                                editingText={editingText}
+                                                isLoading={isLoading}
+                                                onEditStart={onEditStart}
+                                                onEditChange={onEditChange}
+                                                onEditKeyDown={onEditKeyDown}
+                                                onEditCancel={onEditCancel}
+                                                onEditSubmit={onEditSubmit}
+                                            />
+                                        );
+                                    }
 
-                {/* Loading indicator */}
-                {isLoading && (
-                    <StatusIndicator
-                        chatStatus={chatStatus}
-                        phraseIdx={phraseIdx}
-                        phraseFading={phraseFading}
-                    />
-                )}
+                                    if (!isUser && part.type.startsWith("tool-")) {
+                                        return (
+                                            <Box key={i} pl={34}>
+                                                <ToolPartRenderer
+                                                    part={part as Parameters<typeof ToolPartRenderer>[0]["part"]}
+                                                    onAnswer={onAnswer}
+                                                    answeredIds={answeredIds}
+                                                    isLoading={isLoading}
+                                                    onLearnMore={onLearnMore}
+                                                />
+                                            </Box>
+                                        );
+                                    }
 
-                {/* Scroll anchor */}
-                <div ref={bottomRef} />
-            </Stack>
-        </ScrollArea>
+                                    return null;
+                                })}
+                            </Stack>
+                        );
+                    })}
+
+                    {/* No AI reply or error — "Regenerate response" slot */}
+                    {!isLoading && onRetry && (unansweredUser || error) && (
+                        <RetryBlock
+                            errorMessage={error?.message}
+                            onRetry={onRetry}
+                        />
+                    )}
+
+                    {/* Loading indicator */}
+                    {isLoading && (
+                        <StatusIndicator
+                            chatStatus={chatStatus}
+                            phraseIdx={phraseIdx}
+                            phraseFading={phraseFading}
+                        />
+                    )}
+
+                    {/* Scroll anchor */}
+                    <div ref={bottomRef} />
+                </Stack>
+            </ScrollArea>
+
+            {/* Scroll-to-bottom FAB */}
+            {hasUserMessages && (
+                <Transition mounted={showScrollBtn} transition="slide-up" duration={200}>
+                    {(styles) => (
+                        <ActionIcon
+                            variant="filled"
+                            color="primary"
+                            size="lg"
+                            radius="xl"
+                            aria-label="Scroll to bottom"
+                            onClick={scrollToBottom}
+                            style={{
+                                ...styles,
+                                position: "absolute",
+                                bottom: 16,
+                                left: "50%",
+                                transform: "translateX(-50%)",
+                                zIndex: 20,
+                                boxShadow: "0 2px 12px rgba(0,0,0,0.22)",
+                            }}
+                        >
+                            <IconArrowDown size={18} />
+                        </ActionIcon>
+                    )}
+                </Transition>
+            )}
+        </Box>
     );
 }

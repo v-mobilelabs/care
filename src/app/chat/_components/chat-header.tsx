@@ -50,10 +50,10 @@ export function ChatHeader({
         >
             <Group justify="space-between">
                 <Group gap="sm">
-                    <ActionIcon variant="subtle" color="gray" size="md" hiddenFrom="sm" onClick={onOpenMobile} aria-label="Toggle sidebar">
+                    <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={onOpenMobile} aria-label="Toggle sidebar">
                         {mobileNavOpened ? <IconLayoutSidebarLeftCollapse size={20} /> : <IconLayoutSidebarLeftExpand size={20} />}
                     </ActionIcon>
-                    <ActionIcon variant="subtle" color="gray" size="md" visibleFrom="sm" onClick={onToggleDesktop} aria-label="Toggle sidebar">
+                    <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={onToggleDesktop} aria-label="Toggle sidebar">
                         {desktopNavOpened ? <IconLayoutSidebarLeftCollapse size={20} /> : <IconLayoutSidebarLeftExpand size={20} />}
                     </ActionIcon>
                     <Button

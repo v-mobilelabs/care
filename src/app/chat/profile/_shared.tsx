@@ -204,7 +204,7 @@ export function DependentForm({
                     <TextInput size="sm" label="City" placeholder="Chennai" {...form.getInputProps("city")} />
                 </SimpleGrid>
                 <Group justify="flex-end" mt={4}>
-                    <Button type="submit" size="sm" color="primary" leftSection={<IconCheck size={14} />}>
+                    <Button type="submit" color="primary" leftSection={<IconCheck size={16} />}>
                         {existing ? "Save changes" : "Add family member"}
                     </Button>
                 </Group>

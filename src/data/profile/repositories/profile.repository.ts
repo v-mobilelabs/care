@@ -30,8 +30,14 @@ export const profileRepository = {
 
     // Only set defined fields
     if (input.dateOfBirth !== undefined) data.dateOfBirth = input.dateOfBirth;
+    if (input.sex !== undefined) data.sex = input.sex;
     if (input.height !== undefined) data.height = input.height;
     if (input.weight !== undefined) data.weight = input.weight;
+    if (input.waistCm !== undefined) data.waistCm = input.waistCm;
+    if (input.neckCm !== undefined) data.neckCm = input.neckCm;
+    if (input.hipCm !== undefined) data.hipCm = input.hipCm;
+    if (input.activityLevel !== undefined)
+      data.activityLevel = input.activityLevel;
     if (input.country !== undefined) data.country = input.country;
     if (input.city !== undefined) data.city = input.city;
     if (input.foodPreferences !== undefined)

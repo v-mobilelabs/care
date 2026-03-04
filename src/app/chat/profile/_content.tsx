@@ -13,7 +13,7 @@ import { bmiInfo } from "./_shared";
 import { HeroCard } from "./_sections/hero-card";
 import { PersonalInfoSection } from "./_sections/personal-info";
 import { HealthInfoSection } from "./_sections/health-info";
-import { FamilySection, DependentProfileContent } from "./_sections/family";
+import { DependentProfileContent } from "./_sections/family";
 import { ConsentSection, DangerSection } from "./_sections/settings";
 
 export function ProfileContent() {
@@ -84,7 +84,6 @@ export function ProfileContent() {
                                 healthProfile={healthProfile}
                                 upsertProfile={upsertProfile}
                             />
-                            <FamilySection dependents={dependents} />
                             <ConsentSection />
                             <DangerSection />
                         </Stack>

@@ -283,7 +283,7 @@ export default function HomePage() {
               referrals, and more — all from one conversation.
             </Text>
             <Group gap="md" justify="center" wrap="wrap">
-              <Button size="lg" color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
+              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
                 Check My Symptoms
               </Button>
             </Group>
@@ -376,7 +376,7 @@ export default function HomePage() {
               a full clinical report — conditions, medications, labs, referrals, SOAP notes,
               and a clear action plan.
             </Text>
-            <Button size="lg" color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
+            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
               Start Free Assessment
             </Button>
           </Stack>
@@ -414,6 +414,8 @@ export default function HomePage() {
             <Group gap="md">
               <Anchor size="xs" c="dimmed" onClick={() => router.push("/design-system")}>Design System</Anchor>
               <Anchor size="xs" c="dimmed" onClick={() => router.push("/chat")}>Symptom Check</Anchor>
+              <Anchor size="xs" c="dimmed" onClick={() => router.push("/privacy")}>Privacy Policy</Anchor>
+              <Anchor size="xs" c="dimmed" onClick={() => router.push("/terms")}>Terms &amp; Conditions</Anchor>
             </Group>
           </Group>
         </Container>

@@ -540,6 +540,149 @@ const dentalChartTool = tool({
   execute: async (input) => ({ recorded: true, ...input }),
 });
 
+// ── PHQ-9 — Depression Screener ───────────────────────────────────────────────
+
+/**
+ * Records the result of a PHQ-9 (Patient Health Questionnaire-9) depression
+ * screening. The AI collects responses to the 9 standard questions and calls
+ * this tool with the total score and interpretation.
+ *
+ * Scoring: 0–4 none, 5–9 mild, 10–14 moderate, 15–19 mod-severe, 20–27 severe.
+ */
+export const phq9Tool = tool({
+  description:
+    "Record the result of a completed PHQ-9 depression screening. Call this after " +
+    "the patient has answered all 9 PHQ-9 items. Provide the individual item scores " +
+    "(0=not at all, 1=several days, 2=more than half the days, 3=nearly every day) " +
+    "and the auto-computed total.",
+  inputSchema: zodSchema(
+    z.object({
+      scores: z
+        .array(z.number().int().min(0).max(3))
+        .length(9)
+        .describe(
+          "Array of 9 item scores in standard PHQ-9 order (Q1–Q9), each 0–3",
+        ),
+      totalScore: z
+        .number()
+        .int()
+        .min(0)
+        .max(27)
+        .describe("Sum of all 9 item scores"),
+      severity: z
+        .enum(["none", "mild", "moderate", "moderately_severe", "severe"])
+        .describe("Severity band derived from total score"),
+      functionalImpairment: z
+        .enum(["not_difficult", "somewhat", "very", "extremely"])
+        .optional()
+        .describe("Q10 — how difficult have problems made it to function"),
+      followUpRecommended: z
+        .boolean()
+        .describe("Whether clinical follow-up / referral is recommended"),
+      notes: z.string().optional().describe("Additional clinical notes"),
+    }),
+  ),
+  execute: async ({ totalScore, severity }) => ({
+    recorded: true,
+    screener: "PHQ-9",
+    totalScore,
+    severity,
+  }),
+});
+
+// ── GAD-7 — Anxiety Screener ──────────────────────────────────────────────────
+
+/**
+ * Records the result of a GAD-7 (Generalized Anxiety Disorder-7) screening.
+ *
+ * Scoring: 0–4 minimal, 5–9 mild, 10–14 moderate, 15–21 severe.
+ */
+export const gad7Tool = tool({
+  description:
+    "Record the result of a completed GAD-7 anxiety screening. Call this after " +
+    "the patient has answered all 7 GAD-7 items. Provide individual scores " +
+    "(0=not at all, 1=several days, 2=more than half the days, 3=nearly every day) " +
+    "and the auto-computed total.",
+  inputSchema: zodSchema(
+    z.object({
+      scores: z
+        .array(z.number().int().min(0).max(3))
+        .length(7)
+        .describe("Array of 7 item scores in standard GAD-7 order, each 0–3"),
+      totalScore: z
+        .number()
+        .int()
+        .min(0)
+        .max(21)
+        .describe("Sum of all 7 item scores"),
+      severity: z
+        .enum(["minimal", "mild", "moderate", "severe"])
+        .describe("Severity band derived from total score"),
+      followUpRecommended: z
+        .boolean()
+        .describe("Whether clinical follow-up / referral is recommended"),
+      notes: z.string().optional().describe("Additional clinical notes"),
+    }),
+  ),
+  execute: async ({ totalScore, severity }) => ({
+    recorded: true,
+    screener: "GAD-7",
+    totalScore,
+    severity,
+  }),
+});
+
+// ── AUDIT-C — Alcohol Use Screener ────────────────────────────────────────────
+
+/**
+ * Records the result of an AUDIT-C (Alcohol Use Disorders Identification
+ * Test — Consumption) 3-item alcohol screening.
+ *
+ * At-risk thresholds: ≥3 women, ≥4 men.
+ */
+export const auditCTool = tool({
+  description:
+    "Record the result of a completed AUDIT-C alcohol use screening. " +
+    "Collect the 3 standard AUDIT-C items and total score.",
+  inputSchema: zodSchema(
+    z.object({
+      q1FrequencyScore: z
+        .number()
+        .int()
+        .min(0)
+        .max(4)
+        .describe(
+          "Q1 — How often do you have a drink containing alcohol? (0–4)",
+        ),
+      q2UnitsScore: z
+        .number()
+        .int()
+        .min(0)
+        .max(4)
+        .describe("Q2 — How many drinks on a typical drinking day? (0–4)"),
+      q3BingeScore: z
+        .number()
+        .int()
+        .min(0)
+        .max(4)
+        .describe("Q3 — How often 6+ drinks on one occasion? (0–4)"),
+      totalScore: z.number().int().min(0).max(12).describe("Sum of Q1+Q2+Q3"),
+      atRisk: z
+        .boolean()
+        .describe(
+          "True if score is at/above sex-specific threshold (men ≥4, women ≥3)",
+        ),
+      notes: z.string().optional(),
+    }),
+  ),
+  execute: async ({ totalScore, atRisk }) => ({
+    recorded: true,
+    screener: "AUDIT-C",
+    totalScore,
+    atRisk,
+  }),
+});
+
 // ── Factory — binds soapNote execution to a specific user+session ────────────
 
 export function createClinicalTools(ctx: {
@@ -688,5 +831,8 @@ export function createClinicalTools(ctx: {
     soapNote: soapNoteTool,
     dentalChart: dentalChartTool,
     saveAssessment: saveAssessmentTool,
+    phq9: phq9Tool,
+    gad7: gad7Tool,
+    auditC: auditCTool,
   } as const;
 }

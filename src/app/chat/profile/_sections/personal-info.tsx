@@ -91,7 +91,7 @@ export function PersonalInfoSection() {
                             />
                         </SimpleGrid>
                         <Group justify="flex-end" mt={4}>
-                            <Button type="submit" size="sm" color="primary" loading={saving} leftSection={<IconCheck size={14} />}>
+                            <Button type="submit" color="primary" loading={saving} leftSection={<IconCheck size={16} />}>
                                 Save
                             </Button>
                         </Group>

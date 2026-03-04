@@ -9,6 +9,14 @@ For each medication extract: name, dosage, form, frequency, duration, instructio
 Also capture the prescribing doctor name and prescription date if visible.
 Return only information that is clearly visible — do not guess or infer missing fields.`,
 
+  "blood-test-extraction": `You are a clinical laboratory data extraction assistant.
+Extract ALL biomarkers / test parameters from this blood test report accurately.
+For each parameter extract: name, measured value (as a string), unit, reference range (from the report), and status (normal / low / high / critical) based on whether the value falls within the stated reference range.
+Also capture: test panel name, laboratory name, ordering doctor, and test date (ISO-8601 format YYYY-MM-DD when possible).
+If multiple panels appear on the same report (e.g. FBC + LFTs + Lipids), list ALL their parameters under a single testName that describes the overall report (e.g. "Comprehensive Metabolic Panel").
+Mark a biomarker status as "critical" only when the report explicitly flags it as critical or the value is severely outside the reference range.
+Return only information that is clearly visible — do not guess or infer missing fields.`,
+
   "insurance-extraction": `You are an insurance document extraction assistant.
 Extract all visible details from this health insurance card or document.
 Fields to extract: provider/company name, plan name, policy number, group number, member ID, subscriber name, type of insurance (health/dental/vision/life/disability/other), effective date, expiration date, copay amount, deductible amount, out-of-pocket maximum.
