@@ -10,12 +10,14 @@ import {
   ThemeIcon,
   Title,
 } from "@mantine/core";
-import { LandingLayout } from "@/ui/layouts/landing";
+import { LegalLayout } from "@/ui/layouts/legal";
 import {
   IconFileDescription,
   IconHeartbeat,
   IconShieldCheck,
 } from "@tabler/icons-react";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Terms & Conditions — CareAI",
@@ -35,7 +37,7 @@ function Section({ title, children }: Readonly<{ title: string; children: React.
 
 export default function TermsPage() {
   return (
-    <LandingLayout>
+    <LegalLayout>
       {/* Header */}
       <Box
         py={{ base: 60, sm: 80 }}
@@ -405,6 +407,6 @@ export default function TermsPage() {
           Always seek the advice of a qualified health provider.
         </Text>
       </Group>
-    </LandingLayout>
+    </LegalLayout>
   );
 }

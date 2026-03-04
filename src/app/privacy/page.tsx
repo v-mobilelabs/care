@@ -10,13 +10,15 @@ import {
   ThemeIcon,
   Title,
 } from "@mantine/core";
-import { LandingLayout } from "@/ui/layouts/landing";
+import { LegalLayout } from "@/ui/layouts/legal";
 import {
   IconHeartbeat,
   IconLock,
   IconMail,
   IconShieldCheck,
 } from "@tabler/icons-react";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Privacy Policy — CareAI",
@@ -36,7 +38,7 @@ function Section({ title, children }: Readonly<{ title: string; children: React.
 
 export default function PrivacyPage() {
   return (
-    <LandingLayout>
+    <LegalLayout>
       {/* Header */}
       <Box
         py={{ base: 60, sm: 80 }}
@@ -370,6 +372,6 @@ export default function PrivacyPage() {
           Always seek the advice of a qualified health provider.
         </Text>
       </Group>
-    </LandingLayout>
+    </LegalLayout>
   );
 }
