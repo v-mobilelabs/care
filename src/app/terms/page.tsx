@@ -16,7 +16,6 @@ import {
   IconHeartbeat,
   IconShieldCheck,
 } from "@tabler/icons-react";
-import Link from "next/link";
 
 export const metadata = {
   title: "Terms & Conditions — CareAI",
@@ -100,7 +99,7 @@ export default function TermsPage() {
               (&quot;Service&quot;) operated by CosmoOps (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;), you confirm
               that you have read, understood, and agree to be legally bound by these Terms
               &amp; Conditions and our{" "}
-              <Anchor component={Link} href="/privacy" size="sm">Privacy Policy</Anchor>.
+              <Anchor href="/privacy" size="sm">Privacy Policy</Anchor>.
               If you do not agree, do not use the Service.
             </Text>
             <Text size="sm" c="dimmed" lh={1.8}>
@@ -201,7 +200,7 @@ export default function TermsPage() {
                 You grant CareAI a limited, non-exclusive, worldwide licence to store, process,
                 and transmit your User Content solely to provide the Service to you and as
                 described in our{" "}
-                <Anchor component={Link} href="/privacy" size="sm">Privacy Policy</Anchor>.
+                <Anchor href="/privacy" size="sm">Privacy Policy</Anchor>.
               </List.Item>
               <List.Item>You represent that you have the right to submit all content you provide and that it does not violate any law or third-party rights.</List.Item>
               <List.Item>You are responsible for ensuring uploaded medical documents are your own or that you have authorisation to share them.</List.Item>
@@ -390,9 +389,9 @@ export default function TermsPage() {
               <Text size="xs" c="dimmed">© {new Date().getFullYear()}</Text>
             </Group>
             <Group gap="md">
-              <Anchor component={Link} href="/" size="xs" c="dimmed">Home</Anchor>
-              <Anchor component={Link} href="/terms" size="xs" c="dimmed">Terms</Anchor>
-              <Anchor component={Link} href="/privacy" size="xs" c="dimmed">Privacy</Anchor>
+              <Anchor href="/" size="xs" c="dimmed">Home</Anchor>
+              <Anchor href="/terms" size="xs" c="dimmed">Terms</Anchor>
+              <Anchor href="/privacy" size="xs" c="dimmed">Privacy</Anchor>
             </Group>
           </Group>
         </Container>

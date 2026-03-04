@@ -17,7 +17,6 @@ import {
   IconMail,
   IconShieldCheck,
 } from "@tabler/icons-react";
-import Link from "next/link";
 
 export const metadata = {
   title: "Privacy Policy — CareAI",
@@ -355,9 +354,9 @@ export default function PrivacyPage() {
               <Text size="xs" c="dimmed">© {new Date().getFullYear()}</Text>
             </Group>
             <Group gap="md">
-              <Anchor component={Link} href="/" size="xs" c="dimmed">Home</Anchor>
-              <Anchor component={Link} href="/terms" size="xs" c="dimmed">Terms</Anchor>
-              <Anchor component={Link} href="/privacy" size="xs" c="dimmed">Privacy</Anchor>
+              <Anchor href="/" size="xs" c="dimmed">Home</Anchor>
+              <Anchor href="/terms" size="xs" c="dimmed">Terms</Anchor>
+              <Anchor href="/privacy" size="xs" c="dimmed">Privacy</Anchor>
             </Group>
           </Group>
         </Container>
