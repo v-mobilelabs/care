@@ -16,6 +16,7 @@ import { IconCheck, IconMapPin } from "@tabler/icons-react";
 import { colors } from "@/ui/tokens";
 import type { ProfileRecord } from "@/app/chat/_query";
 import { COUNTRIES, SectionHeader } from "../_shared";
+import { trackEvent } from "@/lib/analytics";
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 
@@ -92,13 +93,15 @@ export function LocationInfoSection({ healthProfile, upsertProfile }: Readonly<S
                     }}
                     onSave={(data) => {
                         upsertProfile.mutate(data, {
-                            onSuccess: () =>
+                            onSuccess: () => {
+                                trackEvent({ name: "profile_updated", params: { section: "location-info" } });
                                 notifications.show({
                                     title: "Saved",
                                     message: "Location updated.",
                                     color: colors.success,
                                     icon: <IconCheck size={16} />,
-                                }),
+                                });
+                            },
                         });
                     }}
                     saving={upsertProfile.isPending}

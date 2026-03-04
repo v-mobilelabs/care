@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { addToSet, extractToolInput } from "@/app/chat/_types";
 import type { AskQuestionInput, ConditionInput } from "@/app/chat/_types";
 import { INITIAL_MESSAGES } from "@/app/chat/_session";
+import { trackEvent } from "@/lib/analytics";
 import {
   useMessagesQuery,
   useInvalidateSessions,
@@ -86,6 +87,7 @@ export function useMessages(sessionId: string) {
       } else {
         // New / empty session — reset to the welcome message.
         setMessages(INITIAL_MESSAGES);
+        trackEvent({ name: "chat_started", params: { session_id: sessionId } });
       }
     }
   }, [dbLoaded, dbMessages, setMessages]);
@@ -102,6 +104,10 @@ export function useMessages(sessionId: string) {
     // full AI response to finish streaming.
     if (status === "submitted") {
       invalidateSessions();
+      trackEvent({
+        name: "chat_message_sent",
+        params: { session_id: sessionId },
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);

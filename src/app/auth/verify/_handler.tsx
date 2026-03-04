@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Center, Loader, Stack, Text, Button } from "@mantine/core";
 import { completeMagicLink } from "@/lib/firebase/magic-link";
+import { trackEvent } from "@/lib/analytics";
 
 export function VerifyHandler() {
     const router = useRouter();
@@ -18,6 +19,7 @@ export function VerifyHandler() {
                     body: JSON.stringify({ idToken }),
                 });
                 if (!res.ok) throw new Error("Session creation failed");
+                trackEvent({ name: "login", params: { method: "magic_link" } });
                 router.replace("/chat");
             } catch (e) {
                 setError(e instanceof Error ? e.message : "Sign-in failed");

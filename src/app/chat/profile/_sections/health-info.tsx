@@ -23,6 +23,7 @@ import type { BiologicalSex, ActivityLevel } from "@/lib/health-metrics";
 
 import { colors } from "@/ui/tokens";
 import type { ProfileRecord } from "@/app/chat/_query";
+import { trackEvent } from "@/lib/analytics";
 import {
     SectionHeader,
     bmiInfo,
@@ -298,13 +299,15 @@ export function HealthInfoSection({ healthProfile, upsertProfile }: Readonly<Sec
                                 activityLevel: (data.activityLevel as ProfileRecord["activityLevel"]) || undefined,
                             },
                             {
-                                onSuccess: () =>
+                                onSuccess: () => {
+                                    trackEvent({ name: "profile_updated", params: { section: "health-info" } });
                                     notifications.show({
                                         title: "Saved",
                                         message: "Physical details updated.",
                                         color: colors.success,
                                         icon: <IconCheck size={16} />,
-                                    }),
+                                    });
+                                },
                             },
                         );
                     }}

@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { chatKeys } from "@/app/chat/_keys";
 export { chatKeys } from "@/app/chat/_keys";
 import type { ExtractResult } from "@/data/prescriptions/models/extract.model";
+import { trackEvent } from "@/lib/analytics";
 export type {
   ExtractedMedication,
   ExtractResult,
@@ -464,8 +465,12 @@ export function useUploadFileMutation() {
       }
       return res.json() as Promise<FileRecord>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: chatKeys.files() });
+      trackEvent({
+        name: "file_uploaded",
+        params: { file_type: data.mimeType },
+      });
     },
   });
 }

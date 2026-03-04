@@ -1,7 +1,8 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
 import { firebaseApp } from "@/lib/firebase/client";
+import { trackEvent } from "@/lib/analytics";
 
 interface AuthContextValue {
     user: User | null;
@@ -19,10 +20,15 @@ export function useAuth() {
 export function AuthProvider({ children }: Readonly<{ children: React.ReactNode }>) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const prevUserRef = useRef<User | null>(null);
 
     useEffect(() => {
         const auth = getAuth(firebaseApp);
         const unsubscribe = onAuthStateChanged(auth, (u) => {
+            if (prevUserRef.current && !u) {
+                trackEvent({ name: "logout" });
+            }
+            prevUserRef.current = u;
             setUser(u);
             setLoading(false);
         });
