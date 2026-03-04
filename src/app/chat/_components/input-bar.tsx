@@ -145,11 +145,12 @@ export function InputBar({
     return (
         <>
             <Box
-                px="lg" py="md"
+                px="md"
                 style={{
                     flexShrink: 0,
-                    borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-8))",
+                    paddingBottom: 16,
+                    paddingTop: 0,
+                    background: "linear-gradient(to bottom, transparent, light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8)) 40%)",
                 }}
             >
                 <Box maw={760} mx="auto">
@@ -159,8 +160,8 @@ export function InputBar({
                             icon={<IconAlertCircle size={18} />}
                             color="orange"
                             variant="light"
-                            mb={8}
-                            radius="md"
+                            mb={10}
+                            radius="lg"
                             title="Daily credits exhausted"
                         >
                             {(() => {
@@ -171,36 +172,6 @@ export function InputBar({
                             })()}
                         </Alert>
                     )}
-                    {/* Attachment previews */}
-                    {attachments.length > 0 && (
-                        <Group gap={8} mb={8} wrap="wrap">
-                            {attachments.map((file) => (
-                                <Box key={`${file.name}-${file.lastModified}`} style={{ position: "relative", display: "inline-block" }}>
-                                    {(file.type === "application/pdf" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") ? (
-                                        <Paper withBorder radius="md" px="sm" py={6}
-                                            style={{ display: "flex", alignItems: "center", gap: 6, height: 64, maxWidth: 200 }}>
-                                            {file.type === "application/pdf"
-                                                ? <IconFileTypePdf size={24} color="var(--mantine-color-red-6)" style={{ flexShrink: 0 }} />
-                                                : <IconFileWord size={24} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />}
-                                            <Box style={{ overflow: "hidden" }}>
-                                                <Text size="xs" fw={600} truncate>{file.name}</Text>
-                                                <Text size="xs" c="dimmed">{(file.size / 1024).toFixed(0)} KB</Text>
-                                            </Box>
-                                        </Paper>
-                                    ) : (
-                                        <Image src={getPreviewURL(file)} w={64} h={64} radius="md"
-                                            style={{ objectFit: "cover", border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))" }}
-                                            alt={file.name}
-                                        />
-                                    )}
-                                    <CloseButton size="xs" radius="xl"
-                                        style={{ position: "absolute", top: -6, right: -6, background: "var(--mantine-color-dark-7)", color: "white" }}
-                                        onClick={() => removeAttachment(file)} aria-label="Remove attachment"
-                                    />
-                                </Box>
-                            ))}
-                        </Group>
-                    )}
 
                     {/* Hidden file inputs */}
                     <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" multiple style={{ display: "none" }}
@@ -208,75 +179,127 @@ export function InputBar({
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
                         onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
 
-                    {/* Textarea + toolbar */}
-                    <Group gap="sm" align="flex-end">
-                        <Paper withBorder radius="xl" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                            <Textarea
-                                ref={textareaRef}
-                                placeholder={pendingFreeTextId ? "Type your answer…" : "Describe your symptoms…"}
-                                minRows={1} maxRows={5} autosize
-                                autoFocus
-                                value={input}
-                                onChange={e => onInputChange(e.currentTarget.value)}
-                                onKeyDown={handleKeyDown}
-                                disabled={isLoading || outOfCredits}
-                                variant="unstyled"
-                                styles={{ input: { paddingTop: 12, paddingBottom: 4, paddingLeft: 16, paddingRight: 16 } }}
-                            />
-                            <Group justify="space-between" px="xs" pb="xs" pt={2} gap={4}>
-                                <Group gap={4}>
-                                    <Tooltip label="Upload image or document (PDF, DOCX · max 10 MB)" withArrow position="top">
-                                        <ActionIcon size={38} radius="xl" color="gray" variant="subtle" disabled={isLoading}
-                                            onClick={() => fileInputRef.current?.click()} aria-label="Upload image or document">
-                                            <IconPaperclip size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Take photo" withArrow position="top">
-                                        <ActionIcon size={38} radius="xl" color="gray" variant="subtle" disabled={isLoading}
-                                            onClick={() => cameraInputRef.current?.click()} aria-label="Take photo">
-                                            <IconCamera size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label={isListening ? "Stop recording" : "Use microphone"} withArrow position="top">
-                                        <ActionIcon size={38} radius="xl"
-                                            color={isListening ? "red" : "gray"}
-                                            variant={isListening ? "filled" : "subtle"}
-                                            disabled={isLoading}
-                                            onClick={toggleMic}
-                                            aria-label={isListening ? "Stop recording" : "Use microphone"}
-                                            style={isListening ? { animation: "pulse 1.2s ease-in-out infinite" } : undefined}>
-                                            {isListening ? <IconMicrophoneOff size={18} /> : <IconMicrophone size={18} />}
-                                        </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Live conversation — coming soon" withArrow position="top">
-                                        <ActionIcon size={38} radius="xl" color="gray" variant="subtle" disabled
-                                            aria-label="Live conversation — coming soon"
-                                            style={{ opacity: 0.4, cursor: "not-allowed" }}>
-                                            <IconWaveSine size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                </Group>
-                                {isLoading ? (
-                                    <Tooltip label="Stop generating" withArrow position="top">
-                                        <ActionIcon size={38} radius="xl" color="red" variant="filled"
-                                            onClick={onStop} aria-label="Stop generating">
-                                            <IconPlayerStopFilled size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                ) : (
-                                    <Tooltip label="Send (Enter)" withArrow position="top">
-                                        <ActionIcon size={38} radius="xl" color="primary" variant="filled"
-                                            disabled={(!input.trim() && attachments.length === 0) || outOfCredits}
-                                            onClick={handleSend} aria-label="Send">
-                                            <IconSend size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                )}
+                    {/* Floating card */}
+                    <Paper
+                        radius="xl"
+                        style={{
+                            overflow: "hidden",
+                            display: "flex",
+                            flexDirection: "column",
+                            boxShadow: "light-dark(0 4px 24px rgba(0,0,0,0.10), 0 4px 32px rgba(0,0,0,0.40))",
+                            border: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
+                            background: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-7))",
+                        }}
+                    >
+                        {/* Attachment previews — inside the card */}
+                        {attachments.length > 0 && (
+                            <Group gap={8} px="md" pt="md" wrap="wrap">
+                                {attachments.map((file) => (
+                                    <Box key={`${file.name}-${file.lastModified}`} style={{ position: "relative", display: "inline-block" }}>
+                                        {(file.type === "application/pdf" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") ? (
+                                            <Paper withBorder radius="md" px="sm" py={6}
+                                                style={{ display: "flex", alignItems: "center", gap: 6, height: 64, maxWidth: 200 }}>
+                                                {file.type === "application/pdf"
+                                                    ? <IconFileTypePdf size={24} color="var(--mantine-color-red-6)" style={{ flexShrink: 0 }} />
+                                                    : <IconFileWord size={24} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />}
+                                                <Box style={{ overflow: "hidden" }}>
+                                                    <Text size="xs" fw={600} truncate>{file.name}</Text>
+                                                    <Text size="xs" c="dimmed">{(file.size / 1024).toFixed(0)} KB</Text>
+                                                </Box>
+                                            </Paper>
+                                        ) : (
+                                            <Image src={getPreviewURL(file)} w={64} h={64} radius="md"
+                                                style={{ objectFit: "cover", border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))" }}
+                                                alt={file.name}
+                                            />
+                                        )}
+                                        <CloseButton size="xs" radius="xl"
+                                            style={{ position: "absolute", top: -6, right: -6, background: "var(--mantine-color-dark-7)", color: "white" }}
+                                            onClick={() => removeAttachment(file)} aria-label="Remove attachment"
+                                        />
+                                    </Box>
+                                ))}
                             </Group>
-                        </Paper>
-                    </Group>
+                        )}
 
-                    <Text size="xs" c="dimmed" ta="center" mt={8}>
+                        {/* Textarea */}
+                        <Textarea
+                            ref={textareaRef}
+                            placeholder={pendingFreeTextId ? "Type your answer…" : "Describe your symptoms…"}
+                            minRows={1} maxRows={6} autosize
+                            autoFocus
+                            value={input}
+                            onChange={e => onInputChange(e.currentTarget.value)}
+                            onKeyDown={handleKeyDown}
+                            disabled={isLoading || outOfCredits}
+                            variant="unstyled"
+                            styles={{
+                                input: {
+                                    paddingTop: 16,
+                                    paddingBottom: 8,
+                                    paddingLeft: 20,
+                                    paddingRight: 20,
+                                    fontSize: "var(--mantine-font-size-sm)",
+                                    lineHeight: 1.6,
+                                    resize: "none",
+                                },
+                            }}
+                        />
+
+                        {/* Toolbar */}
+                        <Group justify="space-between" px="sm" pb="sm" pt={4} gap={4}>
+                            <Group gap={2}>
+                                <Tooltip label="Upload image or document (PDF, DOCX · max 10 MB)" withArrow position="top">
+                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isLoading}
+                                        onClick={() => fileInputRef.current?.click()} aria-label="Upload image or document">
+                                        <IconPaperclip size={17} />
+                                    </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="Take photo" withArrow position="top">
+                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isLoading}
+                                        onClick={() => cameraInputRef.current?.click()} aria-label="Take photo">
+                                        <IconCamera size={17} />
+                                    </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label={isListening ? "Stop recording" : "Use microphone"} withArrow position="top">
+                                    <ActionIcon size={36} radius="xl"
+                                        color={isListening ? "red" : "gray"}
+                                        variant={isListening ? "light" : "subtle"}
+                                        disabled={isLoading}
+                                        onClick={toggleMic}
+                                        aria-label={isListening ? "Stop recording" : "Use microphone"}
+                                        style={isListening ? { animation: "pulse 1.2s ease-in-out infinite" } : undefined}>
+                                        {isListening ? <IconMicrophoneOff size={17} /> : <IconMicrophone size={17} />}
+                                    </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="Live conversation — coming soon" withArrow position="top">
+                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled
+                                        aria-label="Live conversation — coming soon"
+                                        style={{ opacity: 0.35, cursor: "not-allowed" }}>
+                                        <IconWaveSine size={17} />
+                                    </ActionIcon>
+                                </Tooltip>
+                            </Group>
+                            {isLoading ? (
+                                <Tooltip label="Stop generating" withArrow position="top">
+                                    <ActionIcon size={36} radius="xl" color="red" variant="filled"
+                                        onClick={onStop} aria-label="Stop generating">
+                                        <IconPlayerStopFilled size={16} />
+                                    </ActionIcon>
+                                </Tooltip>
+                            ) : (
+                                <Tooltip label="Send (Enter)" withArrow position="top">
+                                    <ActionIcon size={36} radius="xl" color="primary" variant="filled"
+                                        disabled={(!input.trim() && attachments.length === 0) || outOfCredits}
+                                        onClick={handleSend} aria-label="Send">
+                                        <IconSend size={16} />
+                                    </ActionIcon>
+                                </Tooltip>
+                            )}
+                        </Group>
+                    </Paper>
+
+                    <Text size="xs" c="dimmed" ta="center" mt={10}>
                         CareAI is not a substitute for professional medical advice. Always consult a qualified doctor.
                     </Text>
                 </Box>

@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toAssessmentDto,
   type AssessmentDocument,
@@ -31,7 +32,7 @@ export const assessmentRepository = {
     const now = Timestamp.now();
     const doc: AssessmentDocument = { userId, ...data, createdAt: now };
     const ref = assessmentsCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toAssessmentDto(ref.id, doc);
   },
 

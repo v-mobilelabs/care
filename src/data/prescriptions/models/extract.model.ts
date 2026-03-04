@@ -60,6 +60,7 @@ export const ExtractionSchema = z.object({
 
 export const ExtractPrescriptionInputSchema = z.object({
   userId: z.string().min(1),
+  profileId: z.string().min(1),
   sessionId: z.string().optional(),
   fileId: z.string().min(1),
 });

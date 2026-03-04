@@ -14,21 +14,26 @@ export class MessageService {
    * `messageCount` and `updatedAt` fields.
    */
   async add(input: AddMessageInput): Promise<MessageDto> {
-    const { userId, sessionId } = input;
+    const { userId, profileId, sessionId } = input;
 
     const [message] = await Promise.all([
-      messageRepository.add(userId, sessionId, {
+      messageRepository.add(userId, profileId, sessionId, {
         role: input.role,
         content: input.content,
       }),
-      sessionRepository.incrementMessageCount(userId, sessionId),
+      sessionRepository.incrementMessageCount(userId, profileId, sessionId),
     ]);
 
     return message;
   }
 
   async list(input: ListMessagesInput): Promise<MessageDto[]> {
-    return messageRepository.list(input.userId, input.sessionId, input.limit);
+    return messageRepository.list(
+      input.userId,
+      input.profileId,
+      input.sessionId,
+      input.limit,
+    );
   }
 }
 

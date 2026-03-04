@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toConditionDto,
   type ConditionDocument,
@@ -21,11 +22,15 @@ export const conditionRepository = {
     const now = Timestamp.now();
     const doc: ConditionDocument = { userId, ...data, createdAt: now };
     const ref = conditionsCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toConditionDto(ref.id, doc);
   },
 
-  async list(userId: string, limit: number, dependentId?: string): Promise<ConditionDto[]> {
+  async list(
+    userId: string,
+    limit: number,
+    dependentId?: string,
+  ): Promise<ConditionDto[]> {
     const snap = await conditionsCol(userId, dependentId)
       .orderBy("createdAt", "desc")
       .limit(limit)
@@ -35,7 +40,11 @@ export const conditionRepository = {
     );
   },
 
-  async delete(userId: string, conditionId: string, dependentId?: string): Promise<void> {
+  async delete(
+    userId: string,
+    conditionId: string,
+    dependentId?: string,
+  ): Promise<void> {
     await conditionsCol(userId, dependentId).doc(conditionId).delete();
   },
 };

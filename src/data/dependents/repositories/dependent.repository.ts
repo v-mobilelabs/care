@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDependentDto,
   type DependentDocument,
@@ -36,7 +37,7 @@ export const dependentRepository = {
     if (input.city !== undefined) doc.city = input.city;
 
     const ref = profilesCol(input.ownerId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toDependentDto(ref.id, doc);
   },
 

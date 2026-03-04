@@ -1,6 +1,6 @@
 "use client";
-import { ActionIcon, Avatar, Box, Button, Group, ScrollArea, Stack, Text, Transition } from "@mantine/core";
-import { IconAlertCircle, IconArrowDown, IconHeartbeat, IconRefresh } from "@tabler/icons-react";
+import { ActionIcon, Alert, Avatar, Box, Button, Group, ScrollArea, Stack, Text, Transition } from "@mantine/core";
+import { IconAlertCircle, IconArrowDown, IconCoins, IconHeartbeat, IconRefresh } from "@tabler/icons-react";
 import type { ChatStatus, UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -42,9 +42,50 @@ export interface MessagesProps {
     onRetry?: () => void;
 }
 
+// ── Error parsing helper ──────────────────────────────────────────────────────
+
+interface ParsedApiError {
+    code: string | null;
+    message: string;
+}
+
+function parseApiError(err: Error | null | undefined): ParsedApiError {
+    if (!err) return { code: null, message: "Response didn't generate. Something went wrong." };
+    try {
+        const parsed = JSON.parse(err.message) as { error?: { code?: string; message?: string } };
+        const code = parsed.error?.code ?? null;
+        const message = parsed.error?.message ?? err.message;
+        return { code, message };
+    } catch {
+        return { code: null, message: err.message };
+    }
+}
+
 // ── RetryBlock ────────────────────────────────────────────────────────────────
 
-function RetryBlock({ errorMessage, onRetry }: Readonly<{ errorMessage?: string; onRetry: () => void }>) {
+function RetryBlock({ error, onRetry }: Readonly<{ error?: Error | null; onRetry: () => void }>) {
+    const { code, message } = parseApiError(error);
+
+    if (code === "CREDITS_EXHAUSTED") {
+        return (
+            <Group align="flex-start" gap="xs" wrap="nowrap">
+                <Avatar size={28} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 2 }}>
+                    <IconHeartbeat size={16} />
+                </Avatar>
+                <Alert
+                    icon={<IconCoins size={16} />}
+                    color="orange"
+                    radius="md"
+                    variant="light"
+                    title="Daily credits used up"
+                    style={{ flex: 1 }}
+                >
+                    <Text size="sm">{message}</Text>
+                </Alert>
+            </Group>
+        );
+    }
+
     return (
         <Group align="flex-start" gap="xs" wrap="nowrap">
             <Avatar size={28} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 2 }}>
@@ -54,7 +95,7 @@ function RetryBlock({ errorMessage, onRetry }: Readonly<{ errorMessage?: string;
                 <Group gap={6} align="center">
                     <IconAlertCircle size={14} style={{ color: "var(--mantine-color-red-5)", flexShrink: 0 }} />
                     <Text size="sm" c="dimmed">
-                        {errorMessage ?? "Response didn't generate. Something went wrong."}
+                        {message}
                     </Text>
                 </Group>
                 <Button
@@ -144,7 +185,7 @@ export function Messages({
                 viewportRef={viewportRef}
                 onScrollPositionChange={checkScrollPosition}
             >
-                <Stack gap="lg" maw={760} mx="auto" px="lg" py="lg">
+                <Stack gap="lg" maw={760} mx="auto" px="lg" pt="lg" pb={80}>
 
                     {/* Empty state — starter prompt cards */}
                     {!hasUserMessages && (
@@ -211,7 +252,7 @@ export function Messages({
                     {/* No AI reply or error — "Regenerate response" slot */}
                     {!isLoading && onRetry && (unansweredUser || error) && (
                         <RetryBlock
-                            errorMessage={error?.message}
+                            error={error}
                             onRetry={onRetry}
                         />
                     )}

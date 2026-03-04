@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { ExtractPrescriptionUseCase } from "@/data/prescriptions";
-import { getPrescriptionSessionId } from "../../route";
+import { PRESCRIPTIONS_SESSION_ID } from "../../route";
 
 // Re-export types so existing client code that imports from this path keeps working
 export type { ExtractedMedication, ExtractResult } from "@/data/prescriptions";
@@ -9,17 +9,18 @@ export type { ExtractedMedication, ExtractResult } from "@/data/prescriptions";
 // ── POST /api/prescriptions/[fileId]/extract ───────────────────────────────────────
 
 export const POST = WithContext<{ fileId: string }>(
-  async ({ user, dependentId, req }, { fileId }) => {
+  async ({ user, profileId, req }, { fileId }) => {
     // Accept an optional sessionId from the request body — callers that upload
     // from within a chat session pass their sessionId so the direct Firestore
     // path resolves correctly without needing a collectionGroup index.
     const body = (await req.json().catch(() => ({}))) as { sessionId?: string };
-    const sessionId = body.sessionId ?? getPrescriptionSessionId(dependentId);
+    const sessionId = body.sessionId ?? PRESCRIPTIONS_SESSION_ID;
 
     try {
       const result = await new ExtractPrescriptionUseCase().execute(
         ExtractPrescriptionUseCase.validate({
           userId: user.uid,
+          profileId,
           sessionId,
           fileId,
         }),

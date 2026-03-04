@@ -18,7 +18,7 @@ export default async function HistoryPage() {
             queryKey: [...chatKeys.sessions(), undefined],
             queryFn: () =>
                 new ListSessionsUseCase().execute(
-                    ListSessionsUseCase.validate({ userId: user.uid }),
+                    ListSessionsUseCase.validate({ userId: user.uid, profileId: user.uid }),
                 ),
         });
     }

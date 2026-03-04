@@ -82,6 +82,15 @@ export interface FileRecord {
   extractedData?: ExtractResult;
 }
 
+export interface StorageMetricsRecord {
+  /** Total bytes used across all uploaded files. */
+  usedBytes: number;
+  /** Total number of files. */
+  fileCount: number;
+  /** Per-user storage allocation in bytes (100 MB). */
+  limitBytes: number;
+}
+
 export type MedicationStatus =
   | "active"
   | "completed"
@@ -279,6 +288,35 @@ export function useDeleteSessionMutation() {
 }
 
 /**
+ * Persist a new session in Firestore immediately when it is created client-side.
+ * Pass the client-generated UUID as `id` so the server uses it as the doc ID,
+ * avoiding a mismatch between the URL param and the Firestore document.
+ */
+export function useCreateSessionMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  const sessKey = [...chatKeys.sessions(), pid] as const;
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title?: string }) =>
+      apiFetch<SessionSummary>("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title: title ?? "New Session" }),
+      }),
+    onSuccess: (newSession) => {
+      // Optimistically prepend to the cached list so the sidebar updates instantly.
+      qc.setQueryData<SessionSummary[]>(sessKey, (old = []) => [
+        newSession,
+        ...old,
+      ]);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: sessKey });
+    },
+  });
+}
+
+/**
  * Returns a function that invalidates the sessions list — call after a new
  * message is sent so the sidebar title refreshes without a page reload.
  */
@@ -468,6 +506,49 @@ export function useDeleteFileMutation() {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.files() });
+      void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
+    },
+  });
+}
+
+/** Fetch authenticated user's storage usage metrics (used/limit/count). */
+export function useStorageMetricsQuery() {
+  return useQuery({
+    queryKey: chatKeys.storageMetrics(),
+    queryFn: () => apiFetch<StorageMetricsRecord>("/api/files/storage"),
+    staleTime: 30_000,
+  });
+}
+
+// ── Person extraction ─────────────────────────────────────────────────────────
+
+/**
+ * Result of extracting person details from a document/image.
+ * Returned by POST /api/files/extract-person.
+ */
+export interface ExtractedPersonResult {
+  hasPersonData: boolean;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+}
+
+/**
+ * Calls the person-extraction endpoint on a file (image / PDF).
+ * Does NOT consume a user credit — this is a background system check.
+ * On any failure it resolves to `{ hasPersonData: false }` so the send proceeds.
+ */
+export function useExtractPersonFromFileMutation() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<ExtractedPersonResult> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/files/extract-person", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) return { hasPersonData: false };
+      return res.json() as Promise<ExtractedPersonResult>;
     },
   });
 }

@@ -11,7 +11,6 @@ import type {
   ConditionInput,
   PrescriptionInput,
   NextStepsInput,
-  DosDontsInput,
   SoapNoteInput,
   DietPlanInput,
 } from "@/app/chat/_types";
@@ -91,16 +90,6 @@ function renderNextSteps(n: NextStepsInput): string {
   if (n.longTerm && n.longTerm.length > 0)
     rows.push(`<p><strong>Long term:</strong></p>${ul(n.longTerm)}`);
   return `<div class="card">${rows.join("")}</div>`;
-}
-
-function renderDosDonts(d: DosDontsInput): string {
-  const doItems = (d.dos ?? []).map((x) => `${x.action} — ${x.reason}`);
-  const dontItems = (d.donts ?? []).map((x) => `${x.action} — ${x.reason}`);
-  return `
-        <div class="card two-col">
-            <div><strong>✓ Do</strong>${ul(doItems)}</div>
-            <div><strong>✗ Don't</strong>${ul(dontItems)}</div>
-        </div>`;
 }
 
 function renderSoap(s: SoapNoteInput): string {
@@ -199,7 +188,6 @@ interface CollectedData {
   conditions: ConditionInput[];
   prescriptions: PrescriptionInput[];
   nextStepsList: NextStepsInput[];
-  dosDontsList: DosDontsInput[];
   soapNotes: SoapNoteInput[];
   dietPlans: DietPlanInput[];
 }
@@ -229,12 +217,6 @@ function processPart(
     return;
   }
 
-  const dosDonts = extractToolInput<DosDontsInput>(part, "dosDonts");
-  if (dosDonts) {
-    data.dosDontsList.push(dosDonts);
-    return;
-  }
-
   const soap = extractToolInput<SoapNoteInput>(part, "soapNote");
   if (soap) {
     data.soapNotes.push(soap);
@@ -252,7 +234,6 @@ function collectToolData(messages: UIMessage[]): CollectedData {
     conditions: [],
     prescriptions: [],
     nextStepsList: [],
-    dosDontsList: [],
     soapNotes: [],
     dietPlans: [],
   };
@@ -268,14 +249,8 @@ function collectToolData(messages: UIMessage[]): CollectedData {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function printSessionSummary(messages: UIMessage[]): void {
-  const {
-    conditions,
-    prescriptions,
-    nextStepsList,
-    dosDontsList,
-    soapNotes,
-    dietPlans,
-  } = collectToolData(messages);
+  const { conditions, prescriptions, nextStepsList, soapNotes, dietPlans } =
+    collectToolData(messages);
 
   // ── Build document ────────────────────────────────────────────────────────
   const now = new Date().toLocaleString(undefined, {
@@ -300,11 +275,6 @@ export function printSessionSummary(messages: UIMessage[]): void {
   if (nextStepsList.length > 0) {
     sections.push(
       section("Action Plan", nextStepsList.map(renderNextSteps).join("")),
-    );
-  }
-  if (dosDontsList.length > 0) {
-    sections.push(
-      section("Dos & Don'ts", dosDontsList.map(renderDosDonts).join("")),
     );
   }
   if (soapNotes.length > 0) {

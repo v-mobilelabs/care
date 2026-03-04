@@ -2,8 +2,7 @@
 import { ActionIcon, Avatar, Badge, Box, Button, Group, Menu, Text, Tooltip } from "@mantine/core";
 import {
     IconBolt,
-    IconLayoutSidebarLeftCollapse,
-    IconLayoutSidebarLeftExpand,
+    IconLayoutSidebar,
     IconLogout,
     IconPlus,
     IconUser,
@@ -50,12 +49,16 @@ export function ChatHeader({
         >
             <Group justify="space-between">
                 <Group gap="sm">
-                    <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={onOpenMobile} aria-label="Toggle sidebar">
-                        {mobileNavOpened ? <IconLayoutSidebarLeftCollapse size={20} /> : <IconLayoutSidebarLeftExpand size={20} />}
-                    </ActionIcon>
-                    <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={onToggleDesktop} aria-label="Toggle sidebar">
-                        {desktopNavOpened ? <IconLayoutSidebarLeftCollapse size={20} /> : <IconLayoutSidebarLeftExpand size={20} />}
-                    </ActionIcon>
+                    <Tooltip label={mobileNavOpened ? "Close sidebar" : "Open sidebar"} position="bottom" withArrow>
+                        <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={onOpenMobile} aria-label="Toggle sidebar">
+                            <IconLayoutSidebar size={20} stroke={1.5} />
+                        </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label={desktopNavOpened ? "Close sidebar" : "Open sidebar"} position="bottom" withArrow>
+                        <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={onToggleDesktop} aria-label="Toggle sidebar">
+                            <IconLayoutSidebar size={20} stroke={1.5} />
+                        </ActionIcon>
+                    </Tooltip>
                     <Button
                         variant="subtle"
                         color="primary"
@@ -68,7 +71,9 @@ export function ChatHeader({
                 </Group>
                 <Group gap={8}>
                     {credits !== undefined && (() => {
-                        const color = credits.remaining === 0 ? "red" : credits.remaining <= 3 ? "orange" : "teal";
+                        let color = "teal";
+                        if (credits.remaining === 0) color = "red";
+                        else if (credits.remaining <= 3) color = "orange";
                         return (
                             <Tooltip label={`${credits.remaining} of ${credits.total} credits remaining today. Resets at midnight UTC.`} withArrow position="bottom">
                                 <Badge

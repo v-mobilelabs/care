@@ -13,10 +13,7 @@ export class ListSessionsUseCase extends UseCase<
   ListSessionsInput,
   SessionDto[]
 > {
-  constructor(
-    private readonly dependentId: string | undefined = undefined,
-    private readonly service: SessionService = sessionService,
-  ) {
+  constructor(private readonly service: SessionService = sessionService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class ListSessionsUseCase extends UseCase<
   }
 
   protected async run(input: ListSessionsInput): Promise<SessionDto[]> {
-    return this.service.list({ ...input, dependentId: this.dependentId });
+    return this.service.list(input);
   }
 }

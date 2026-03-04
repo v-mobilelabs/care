@@ -9,8 +9,12 @@ import {
 
 // GET /api/sessions/[sessionId]/files
 export const GET = WithContext<{ sessionId: string }>(
-  async ({ user }, { sessionId }) => {
-    const input = ListFilesUseCase.validate({ userId: user.uid, sessionId });
+  async ({ user, profileId }, { sessionId }) => {
+    const input = ListFilesUseCase.validate({
+      userId: user.uid,
+      profileId,
+      sessionId,
+    });
     const files = await new ListFilesUseCase().execute(input);
     return NextResponse.json(files);
   },
@@ -18,7 +22,7 @@ export const GET = WithContext<{ sessionId: string }>(
 
 // POST /api/sessions/[sessionId]/files — multipart/form-data upload
 export const POST = WithContext<{ sessionId: string }>(
-  async ({ user, req }, { sessionId }) => {
+  async ({ user, profileId, req }, { sessionId }) => {
     const formData = await req.formData().catch(() => null);
     if (!formData) throw ApiError.badRequest("Expected multipart/form-data.");
 
@@ -46,6 +50,7 @@ export const POST = WithContext<{ sessionId: string }>(
 
     const input = UploadFileUseCase.validate({
       userId: user.uid,
+      profileId,
       sessionId,
       name: file.name,
       mimeType: file.type,

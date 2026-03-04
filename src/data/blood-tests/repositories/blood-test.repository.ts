@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toBloodTestDto,
   type BloodTestDocument,
@@ -31,7 +32,7 @@ export const bloodTestRepository = {
     const now = Timestamp.now();
     const doc: BloodTestDocument = { userId, ...data, createdAt: now };
     const ref = bloodTestsCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toBloodTestDto(ref.id, doc);
   },
 

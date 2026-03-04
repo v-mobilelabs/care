@@ -9,9 +9,14 @@ import type { SessionPayload } from "@/lib/auth/jwt";
 export interface ApiContext {
   user: SessionPayload; // { uid, email }
   req: NextRequest;
-  /** Set when the client sends an X-Dependent-Id header. All health data
-   *  queries should be scoped to users/{uid}/dependents/{dependentId}/… */
+  /** Raw dependent ID from the X-Dependent-Id header. Undefined for the user's own profile. */
   dependentId?: string;
+  /**
+   * Resolved profile ID used as the Firestore path segment:
+   *   users/{userId}/profiles/{profileId}/sessions/…
+   * Equals `dependentId` when viewing a dependent, or `user.uid` for self.
+   */
+  profileId: string;
 }
 
 // ── Handler signature ─────────────────────────────────────────────────────────
@@ -142,10 +147,14 @@ export function WithContext<
 
     // ── 1b. Extract optional dependent header ─────────────────────────────────
     const dependentId = req.headers.get("x-dependent-id") ?? undefined;
+    const profileId = dependentId ?? user.uid;
 
     // ── 2. Invoke handler ─────────────────────────────────────────────────────
     try {
-      return await handler({ user, req, dependentId }, resolvedParams);
+      return await handler(
+        { user, req, dependentId, profileId },
+        resolvedParams,
+      );
     } catch (err) {
       if (err instanceof ApiError) {
         return errorResponse(err.statusCode, err.code, err.message);

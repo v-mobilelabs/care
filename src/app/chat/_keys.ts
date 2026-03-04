@@ -11,6 +11,7 @@ export const chatKeys = {
   soapNotes: () => ["chat", "soap-notes"] as const,
   soapNote: (noteId: string) => ["chat", "soap-notes", noteId] as const,
   files: () => ["chat", "files"] as const,
+  storageMetrics: () => ["chat", "storage-metrics"] as const,
   prescriptions: () => ["chat", "prescriptions"] as const,
   medications: () => ["chat", "medications"] as const,
   dietPlans: () => ["chat", "diet-plans"] as const,

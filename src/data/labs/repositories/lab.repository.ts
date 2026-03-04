@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toLabDto,
   calcHomaIr,
@@ -54,7 +55,7 @@ export const labRepository = {
     }
 
     const ref = labsCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toLabDto(ref.id, doc);
   },
 

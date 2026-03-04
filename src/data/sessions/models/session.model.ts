@@ -5,7 +5,8 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 export interface SessionDocument {
   userId: string;
-  dependentId?: string;
+  /** Stored for reference; the authoritative scoping is the path:  users/{userId}/profiles/{profileId}/sessions */
+  profileId: string;
   title: string;
   messageCount: number;
   createdAt: Timestamp;
@@ -17,6 +18,7 @@ export interface SessionDocument {
 export interface SessionDto {
   id: string;
   userId: string;
+  profileId: string;
   title: string;
   messageCount: number;
   createdAt: string; // ISO-8601
@@ -27,7 +29,8 @@ export interface SessionDto {
 
 export const CreateSessionSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  dependentId: z.string().optional(),
+  /** Firestore path segment: users/{userId}/profiles/{profileId}/sessions */
+  profileId: z.string().min(1, { message: "profileId is required" }),
   /** Optional explicit Firestore document ID (client-generated UUID). */
   id: z.string().uuid({ message: "id must be a valid UUID" }).optional(),
   title: z
@@ -45,6 +48,7 @@ export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
 export const UpdateSessionSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   title: z
     .string()
     .min(1, { message: "title must not be empty" })
@@ -58,13 +62,14 @@ export type UpdateSessionInput = z.infer<typeof UpdateSessionSchema>;
 export const SessionRefSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
 });
 
 export type SessionRefInput = z.infer<typeof SessionRefSchema>;
 
 export const ListSessionsSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  dependentId: z.string().optional(),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   limit: z.number().int().min(1).max(100).optional().default(20),
 });
 
@@ -76,6 +81,7 @@ export function toSessionDto(id: string, doc: SessionDocument): SessionDto {
   return {
     id,
     userId: doc.userId,
+    profileId: doc.profileId,
     title: doc.title,
     messageCount: doc.messageCount,
     createdAt: doc.createdAt.toDate().toISOString(),

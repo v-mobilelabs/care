@@ -100,12 +100,6 @@ export interface NextStepsInput {
   redFlags: string[];
 }
 
-export interface DosDontsInput {
-  condition: string;
-  dos: { action: string; reason: string }[];
-  donts: { action: string; reason: string }[];
-}
-
 export interface DietFood {
   item: string;
   portion: string; // e.g. "1 cup (240 g)"

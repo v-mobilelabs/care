@@ -29,6 +29,7 @@ export class PrescriptionExtractionService {
     // 1. Resolve file metadata (raw — no signed-URL refresh needed for extraction)
     const file = await this.files.getRaw({
       userId: input.userId,
+      profileId: input.profileId,
       sessionId: input.sessionId!,
       fileId: input.fileId,
     });

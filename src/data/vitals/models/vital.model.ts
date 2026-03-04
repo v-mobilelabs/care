@@ -5,6 +5,16 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 export interface VitalDocument {
   userId: string;
+  /** Biological sex — used for body-fat and WHR calculations */
+  sex?: "male" | "female";
+  /** Waist circumference in cm */
+  waistCm?: number;
+  /** Hip circumference in cm — WHR and female body-fat formula */
+  hipCm?: number;
+  /** Neck circumference in cm — used in Navy body-fat formula */
+  neckCm?: number;
+  /** Physical activity level */
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   /** Systolic blood pressure in mmHg */
   systolicBp?: number;
   /** Diastolic blood pressure in mmHg */
@@ -31,6 +41,11 @@ export interface VitalDocument {
 export interface VitalDto {
   id: string;
   userId: string;
+  sex?: "male" | "female";
+  waistCm?: number;
+  hipCm?: number;
+  neckCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   systolicBp?: number;
   diastolicBp?: number;
   restingHr?: number;
@@ -68,6 +83,11 @@ export function toVitalDto(id: string, doc: VitalDocument): VitalDto {
   const dto: VitalDto = {
     id,
     userId: doc.userId,
+    sex: doc.sex,
+    waistCm: doc.waistCm,
+    hipCm: doc.hipCm,
+    neckCm: doc.neckCm,
+    activityLevel: doc.activityLevel,
     systolicBp: doc.systolicBp,
     diastolicBp: doc.diastolicBp,
     restingHr: doc.restingHr,
@@ -91,6 +111,13 @@ export function toVitalDto(id: string, doc: VitalDocument): VitalDto {
 
 export const CreateVitalSchema = z.object({
   userId: z.string().min(1),
+  sex: z.enum(["male", "female"]).optional(),
+  waistCm: z.number().positive().optional(),
+  hipCm: z.number().positive().optional(),
+  neckCm: z.number().positive().optional(),
+  activityLevel: z
+    .enum(["sedentary", "light", "moderate", "active", "very_active"])
+    .optional(),
   systolicBp: z.number().int().min(50).max(300).optional(),
   diastolicBp: z.number().int().min(20).max(200).optional(),
   restingHr: z.number().int().min(20).max(300).optional(),

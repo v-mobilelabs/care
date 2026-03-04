@@ -8,7 +8,7 @@ import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 const FindOrCreateSessionSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  dependentId: z.string().optional(),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   title: z.string().min(1).max(120).optional().default("New Session"),
 });
@@ -30,9 +30,9 @@ export class FindOrCreateSessionUseCase extends UseCase<
   protected async run(input: FindOrCreateSessionInput): Promise<SessionDto> {
     return this.service.findOrCreate(
       input.userId,
+      input.profileId,
       input.sessionId,
       input.title,
-      input.dependentId,
     );
   }
 }

@@ -3,8 +3,11 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** 10 MB upload limit */
+/** 10 MB upload limit per file */
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+/** 100 MB total storage allocation per user */
+export const USER_STORAGE_LIMIT_BYTES = 100 * 1024 * 1024;
 
 export const ALLOWED_MIME_TYPES = [
   // Images
@@ -76,6 +79,7 @@ export interface FileDto {
 export const UploadFileSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   name: z
     .string()
     .min(1, { message: "file name is required" })
@@ -100,6 +104,7 @@ export const FileRefSchema = z.object({
   fileId: z.string().min(1, { message: "fileId is required" }),
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
 });
 
 export type FileRefInput = z.infer<typeof FileRefSchema>;
@@ -107,9 +112,21 @@ export type FileRefInput = z.infer<typeof FileRefSchema>;
 export const ListFilesSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
 });
 
 export type ListFilesInput = z.infer<typeof ListFilesSchema>;
+
+// ── Storage metrics DTO ───────────────────────────────────────────────────────
+
+export interface StorageMetricsDto {
+  /** Total bytes used across all uploaded files. */
+  usedBytes: number;
+  /** Total number of files uploaded. */
+  fileCount: number;
+  /** Per-user storage allocation in bytes (100 MB). */
+  limitBytes: number;
+}
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
 

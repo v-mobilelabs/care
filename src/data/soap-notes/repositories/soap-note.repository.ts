@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toSoapNoteDto,
   type SoapNoteDocument,
@@ -24,7 +25,7 @@ export const soapNoteRepository = {
     const now = Timestamp.now();
     const doc = { ...data, userId, createdAt: now };
     const ref = soapNotesCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toSoapNoteDto(ref.id, doc);
   },
 

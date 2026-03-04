@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toMedicationDto,
   type MedicationDocument,
@@ -21,7 +22,7 @@ export const medicationRepository = {
     const ref = medicationsCol(userId, dependentId).doc();
     const now = Timestamp.now();
     const clean = { ...data, userId, createdAt: now, updatedAt: now };
-    await ref.set(clean);
+    await ref.set(stripUndefined(clean));
     return toMedicationDto(ref.id, clean);
   },
 

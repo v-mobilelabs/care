@@ -9,6 +9,7 @@ import {
     Group,
     Image,
     Paper,
+    Progress,
     ScrollArea,
     SimpleGrid,
     Skeleton,
@@ -22,6 +23,7 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconCheck,
+    IconDatabase,
     IconDownload,
     IconExternalLink,
     IconFile,
@@ -34,7 +36,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { useFilesQuery, useDeleteFileMutation, type FileRecord } from "@/app/chat/_query";
+import { useFilesQuery, useDeleteFileMutation, useStorageMetricsQuery, type FileRecord } from "@/app/chat/_query";
 import { colors } from "@/ui/tokens";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -72,6 +74,38 @@ function getMimeLabel(mimeType: string): string {
     if (mimeType.startsWith("image/")) return mimeType.split("/")[1]?.toUpperCase() ?? "Image";
     if (mimeType.includes("word")) return "Word";
     return "File";
+}
+
+// ── Storage bar ────────────────────────────────────────────────────────────
+
+function StorageBar() {
+    const { data: metrics, isLoading } = useStorageMetricsQuery();
+
+    if (isLoading) return <Skeleton height={52} radius="md" />;
+    if (!metrics) return null;
+
+    const usedMB = metrics.usedBytes / (1024 * 1024);
+    const limitMB = metrics.limitBytes / (1024 * 1024);
+    const pct = Math.min((metrics.usedBytes / metrics.limitBytes) * 100, 100);
+    const barColor = pct >= 90 ? "red" : pct >= 75 ? "orange" : "primary";
+
+    return (
+        <Paper withBorder radius="md" p="sm">
+            <Group gap="xs" mb={6}>
+                <ThemeIcon size={20} radius="sm" color={barColor} variant="light">
+                    <IconDatabase size={12} />
+                </ThemeIcon>
+                <Text size="xs" fw={600}>Storage</Text>
+                <Text size="xs" c="dimmed" ml="auto">
+                    {usedMB.toFixed(1)} MB of {limitMB.toFixed(0)} MB used
+                </Text>
+                <Badge size="xs" color={barColor} variant="light" radius="sm">
+                    {pct.toFixed(0)}%
+                </Badge>
+            </Group>
+            <Progress value={pct} color={barColor} size="sm" radius="xl" />
+        </Paper>
+    );
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
@@ -298,6 +332,10 @@ export function FilesContent() {
                         </Badge>
                     )}
                 </Group>
+                {/* Storage usage */}
+                <Box mt="sm">
+                    <StorageBar />
+                </Box>
             </Box>
 
             {/* Scrollable content */}

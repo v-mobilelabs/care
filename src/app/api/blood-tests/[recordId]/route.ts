@@ -6,7 +6,7 @@ import {
   DeleteBloodTestUseCase,
   ExtractBloodTestUseCase,
 } from "@/data/blood-tests";
-import { getBloodTestSessionId } from "../route";
+import { BLOOD_TESTS_SESSION_ID } from "../route";
 
 // ── GET /api/blood-tests/[recordId] — fetch a single blood test record ─────────
 
@@ -25,7 +25,7 @@ export const GET = WithContext<{ recordId: string }>(
 // ── DELETE /api/blood-tests/[recordId] — delete record + underlying file ───────
 
 export const DELETE = WithContext<{ recordId: string }>(
-  async ({ user, dependentId }, { recordId }) => {
+  async ({ user, dependentId, profileId }, { recordId }) => {
     // Fetch the record first to get the fileId and sessionId
     const getInput = GetBloodTestUseCase.validate({
       userId: user.uid,
@@ -45,6 +45,7 @@ export const DELETE = WithContext<{ recordId: string }>(
     try {
       const fileInput = DeleteFileUseCase.validate({
         userId: user.uid,
+        profileId,
         sessionId: record.sessionId,
         fileId: record.fileId,
       });
@@ -66,7 +67,7 @@ export const DELETE = WithContext<{ recordId: string }>(
 // This endpoint is a convenience alias: triggers re-extract for the given record.
 
 export const PATCH = WithContext<{ recordId: string }>(
-  async ({ user, dependentId }, { recordId }) => {
+  async ({ user, dependentId, profileId }, { recordId }) => {
     const getInput = GetBloodTestUseCase.validate({
       userId: user.uid,
       bloodTestId: recordId,
@@ -77,9 +78,10 @@ export const PATCH = WithContext<{ recordId: string }>(
     try {
       const extractInput = ExtractBloodTestUseCase.validate({
         userId: user.uid,
-        fileId: record.fileId,
-        sessionId: record.sessionId ?? getBloodTestSessionId(dependentId),
+        profileId,
         dependentId,
+        fileId: record.fileId,
+        sessionId: record.sessionId ?? BLOOD_TESTS_SESSION_ID,
       });
       const updated = await new ExtractBloodTestUseCase().execute(extractInput);
       return NextResponse.json(updated);

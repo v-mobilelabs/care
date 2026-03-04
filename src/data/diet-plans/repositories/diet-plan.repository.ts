@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDietPlanDto,
   type DietPlanDocument,
@@ -15,12 +16,6 @@ const dietPlansCol = (userId: string, dependentId?: string) =>
   scopedCol(userId, "diet-plans", dependentId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
-
-function stripUndefined(doc: DietPlanDocument): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(doc).filter(([, v]) => v !== undefined),
-  );
-}
 
 export const dietPlanRepository = {
   async create(

@@ -11,7 +11,7 @@ import { CreateSessionUseCase } from "./create-session.use-case";
 // Extends the base message schema: sessionId is optional (resolved internally).
 const AddMessageUseCaseSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  dependentId: z.string().optional(),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   sessionId: z.string().min(1).optional(),
   title: z.string().min(1).max(120).optional().default("New Session"),
   role: z.enum(["user", "assistant"], {
@@ -46,7 +46,7 @@ export class AddMessageUseCase extends UseCase<
       const session = await this.findOrCreateSession.execute(
         FindOrCreateSessionUseCase.validate({
           userId: input.userId,
-          dependentId: input.dependentId,
+          profileId: input.profileId,
           sessionId: input.sessionId,
           title: input.title,
         }),
@@ -56,7 +56,7 @@ export class AddMessageUseCase extends UseCase<
       const session = await this.createSession.execute(
         CreateSessionUseCase.validate({
           userId: input.userId,
-          dependentId: input.dependentId,
+          profileId: input.profileId,
           title: input.title,
         }),
       );
@@ -66,6 +66,7 @@ export class AddMessageUseCase extends UseCase<
     // ── 2. Persist message ────────────────────────────────────────────────────
     return this.service.add({
       userId: input.userId,
+      profileId: input.profileId,
       sessionId,
       role: input.role,
       content: input.content,

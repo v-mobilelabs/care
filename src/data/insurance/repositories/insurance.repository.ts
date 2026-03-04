@@ -4,6 +4,7 @@ import {
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toInsuranceDto,
   type InsuranceDocument,
@@ -44,7 +45,7 @@ export const insuranceRepository = {
       createdAt: now,
       updatedAt: now,
     };
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toInsuranceDto(ref.id, doc);
   },
 

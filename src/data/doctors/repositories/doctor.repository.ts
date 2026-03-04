@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDoctorDto,
   type DoctorDocument,
@@ -31,7 +32,7 @@ export const doctorRepository = {
       updatedAt: now,
     };
     const ref = doctorsCol(userId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toDoctorDto(ref.id, doc);
   },
 

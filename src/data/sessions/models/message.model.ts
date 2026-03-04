@@ -29,6 +29,7 @@ export interface MessageDto {
 export const AddMessageSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   role: z.enum(["user", "assistant"], {
     error: "role must be 'user' or 'assistant'",
   }),
@@ -43,6 +44,7 @@ export type AddMessageInput = z.infer<typeof AddMessageSchema>;
 export const ListMessagesSchema = z.object({
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   limit: z.number().int().min(1).max(500).optional().default(200),
 });
 

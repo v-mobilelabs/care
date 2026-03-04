@@ -4,6 +4,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import type { SessionDocument } from "../models/session.model";
 import { toSessionDto } from "../models/session.model";
 import type { SessionDto } from "../models/session.model";
@@ -12,31 +13,34 @@ const db = FirebaseService.getInstance().getDb();
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
-const sessionsCol = (userId: string) =>
-  db.collection(`users/${userId}/sessions`);
+const sessionsCol = (userId: string, profileId: string) =>
+  db.collection(`users/${userId}/profiles/${profileId}/sessions`);
 
-const sessionDoc = (userId: string, sessionId: string) =>
-  sessionsCol(userId).doc(sessionId);
+const sessionDoc = (userId: string, profileId: string, sessionId: string) =>
+  sessionsCol(userId, profileId).doc(sessionId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
 export const sessionRepository = {
   async create(
     userId: string,
-    data: Pick<SessionDocument, "title"> & { dependentId?: string },
+    profileId: string,
+    data: Pick<SessionDocument, "title">,
     id?: string,
   ): Promise<SessionDto> {
     const now = Timestamp.now();
     const doc: SessionDocument = {
       userId,
-      ...(data.dependentId ? { dependentId: data.dependentId } : {}),
+      profileId,
       title: data.title,
       messageCount: 0,
       createdAt: now,
       updatedAt: now,
     };
-    const ref = id ? sessionsCol(userId).doc(id) : sessionsCol(userId).doc();
-    await ref.set(doc);
+    const ref = id
+      ? sessionsCol(userId, profileId).doc(id)
+      : sessionsCol(userId, profileId).doc();
+    await ref.set(stripUndefined(doc));
     return toSessionDto(ref.id, doc);
   },
 
@@ -46,43 +50,53 @@ export const sessionRepository = {
    */
   async findOrCreate(
     userId: string,
+    profileId: string,
     sessionId: string,
-    data: Pick<SessionDocument, "title"> & { dependentId?: string },
+    data: Pick<SessionDocument, "title">,
   ): Promise<SessionDto> {
-    const existing = await sessionRepository.findById(userId, sessionId);
-    if (existing) return existing;
-    return sessionRepository.create(userId, data, sessionId);
+    const existing = await sessionRepository.findById(
+      userId,
+      profileId,
+      sessionId,
+    );
+    if (existing) {
+      const DEFAULT_TITLE = "New Session";
+      if (
+        existing.title === DEFAULT_TITLE &&
+        data.title &&
+        data.title !== DEFAULT_TITLE
+      ) {
+        const updated = await sessionRepository.update(
+          userId,
+          profileId,
+          sessionId,
+          {
+            title: data.title,
+          },
+        );
+        return updated ?? existing;
+      }
+      return existing;
+    }
+    return sessionRepository.create(userId, profileId, data, sessionId);
   },
 
   async findById(
     userId: string,
+    profileId: string,
     sessionId: string,
   ): Promise<SessionDto | null> {
-    const snap = await sessionDoc(userId, sessionId).get();
+    const snap = await sessionDoc(userId, profileId, sessionId).get();
     if (!snap.exists) return null;
     return toSessionDto(snap.id, snap.data() as SessionDocument);
   },
 
   async list(
     userId: string,
+    profileId: string,
     limit: number,
-    dependentId?: string,
   ): Promise<SessionDto[]> {
-    // Firestore can't query "field does not exist", so for self we fetch and
-    // filter client-side (all legacy docs and new self-docs have no dependentId).
-    if (!dependentId) {
-      const snap = await sessionsCol(userId)
-        .orderBy("updatedAt", "desc")
-        .limit(limit)
-        .get();
-      return snap.docs
-        .filter((d) => !(d.data() as SessionDocument).dependentId)
-        .map((d: QueryDocumentSnapshot) =>
-          toSessionDto(d.id, d.data() as SessionDocument),
-        );
-    }
-    const snap = await sessionsCol(userId)
-      .where("dependentId", "==", dependentId)
+    const snap = await sessionsCol(userId, profileId)
       .orderBy("updatedAt", "desc")
       .limit(limit)
       .get();
@@ -93,10 +107,11 @@ export const sessionRepository = {
 
   async update(
     userId: string,
+    profileId: string,
     sessionId: string,
     data: Partial<Pick<SessionDocument, "title">>,
   ): Promise<SessionDto | null> {
-    const ref = sessionDoc(userId, sessionId);
+    const ref = sessionDoc(userId, profileId, sessionId);
     await ref.update({ ...data, updatedAt: FieldValue.serverTimestamp() });
     const updated = await ref.get();
     if (!updated.exists) return null;
@@ -106,15 +121,20 @@ export const sessionRepository = {
   /** Atomically increment messageCount and bump updatedAt. */
   async incrementMessageCount(
     userId: string,
+    profileId: string,
     sessionId: string,
   ): Promise<void> {
-    await sessionDoc(userId, sessionId).update({
+    await sessionDoc(userId, profileId, sessionId).update({
       messageCount: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
     });
   },
 
-  async delete(userId: string, sessionId: string): Promise<void> {
-    await sessionDoc(userId, sessionId).delete();
+  async delete(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+  ): Promise<void> {
+    await sessionDoc(userId, profileId, sessionId).delete();
   },
 };

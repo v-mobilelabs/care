@@ -10,25 +10,19 @@ import {
 /** Virtual session ID used to namespace prescription files in Firestore/GCS. */
 export const PRESCRIPTIONS_SESSION_ID = "prescriptions";
 
-/** Returns the Firestore session ID for prescriptions scoped to the active profile. */
-export function getPrescriptionSessionId(dependentId?: string): string {
-  return dependentId
-    ? `prescriptions__${dependentId}`
-    : PRESCRIPTIONS_SESSION_ID;
-}
-
 // GET /api/prescriptions — list all prescription files for the current user
-export const GET = WithContext(async ({ user, dependentId }) => {
+export const GET = WithContext(async ({ user, profileId }) => {
   const input = ListFilesUseCase.validate({
     userId: user.uid,
-    sessionId: getPrescriptionSessionId(dependentId),
+    profileId,
+    sessionId: PRESCRIPTIONS_SESSION_ID,
   });
   const files = await new ListFilesUseCase().execute(input);
   return NextResponse.json(files);
 });
 
 // POST /api/prescriptions — upload a prescription image
-export const POST = WithContext(async ({ user, dependentId, req }) => {
+export const POST = WithContext(async ({ user, profileId, req }) => {
   const formData = await req.formData().catch(() => null);
   if (!formData) throw ApiError.badRequest("Expected multipart/form-data.");
 
@@ -37,10 +31,9 @@ export const POST = WithContext(async ({ user, dependentId, req }) => {
     throw ApiError.badRequest("'file' field is required.");
 
   // Optional session — if uploading from within a chat, pass the sessionId;
-  // otherwise falls back to the (profile-scoped) prescriptions virtual session.
+  // otherwise falls back to the virtual prescriptions session.
   const sessionId =
-    (formData.get("sessionId") as string | null) ??
-    getPrescriptionSessionId(dependentId);
+    (formData.get("sessionId") as string | null) ?? PRESCRIPTIONS_SESSION_ID;
 
   // Accept only image types for prescriptions
   const isImage = file.type.startsWith("image/");
@@ -69,6 +62,7 @@ export const POST = WithContext(async ({ user, dependentId, req }) => {
 
   const input = UploadFileUseCase.validate({
     userId: user.uid,
+    profileId,
     sessionId,
     name: file.name,
     mimeType: file.type,

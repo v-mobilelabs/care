@@ -13,10 +13,7 @@ export class CreateSessionUseCase extends UseCase<
   CreateSessionInput,
   SessionDto
 > {
-  constructor(
-    private readonly dependentId: string | undefined = undefined,
-    private readonly service: SessionService = sessionService,
-  ) {
+  constructor(private readonly service: SessionService = sessionService) {
     super();
   }
 
@@ -25,9 +22,6 @@ export class CreateSessionUseCase extends UseCase<
   }
 
   protected async run(input: CreateSessionInput): Promise<SessionDto> {
-    return this.service.create({
-      ...input,
-      dependentId: input.dependentId ?? this.dependentId,
-    });
+    return this.service.create(input);
   }
 }

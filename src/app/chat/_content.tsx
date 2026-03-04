@@ -1,11 +1,12 @@
 "use client";
 import { ActionIcon, Box, Tooltip } from "@mantine/core";
-import { IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand } from "@tabler/icons-react";
+import { IconLayoutSidebarRight } from "@tabler/icons-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useChatContext } from "@/app/chat/_context/chat-context";
 import { useMessages } from "@/app/chat/_hooks/use-messages";
+import { useFilePersonCheck } from "@/app/chat/_hooks/use-file-person-check";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { Messages } from "@/app/chat/_components/messages";
 import { InputBar } from "@/app/chat/_components/input-bar";
@@ -17,7 +18,7 @@ import { useRightSidebar } from "@/app/chat/_context/right-sidebar-context";
 // ── Chat content (client) ─────────────────────────────────────────────────────
 
 export function ChatContent() {
-    const { sessionId } = useChatContext();
+    const { sessionId, onSelectSession } = useChatContext();
     const { user } = useAuth();
     const uploadFile = useUploadFileMutation();
 
@@ -42,6 +43,48 @@ export function ChatContent() {
 
     // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
     const [input, setInput] = useState("");
+
+    // ── Pending send — used after a profile switch to auto-send in the new session ──
+    const [pendingSend, setPendingSend] = useState<{
+        text: string;
+        files?: FileList;
+    } | null>(null);
+    // Tracks the new session ID we're navigating to so we only fire once
+    const pendingSessionRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (pendingSend && pendingSessionRef.current === sessionId) {
+            const { text, files } = pendingSend;
+            pendingSessionRef.current = null;
+            setPendingSend(null);
+            if (files) {
+                Array.from(files).forEach((f) =>
+                    uploadFile.mutate({ sessionId, file: f }),
+                );
+            }
+            void sendMessage({ text, files });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId, pendingSend]);
+
+    // ── Person-check hook ─────────────────────────────────────────────────────
+    const { checkAndSend } = useFilePersonCheck({
+        onProceedNormal: (text, files) => {
+            if (files) {
+                Array.from(files).forEach((f) =>
+                    uploadFile.mutate({ sessionId, file: f }),
+                );
+            }
+            void sendMessage({ text, files });
+        },
+        onProceedAsNewProfile: (text, files, newSessionId) => {
+            // Store the pending send, then navigate to the new session.
+            // The effect above will fire once sessionId updates and auto-send.
+            pendingSessionRef.current = newSessionId;
+            setPendingSend({ text, files });
+            onSelectSession(newSessionId);
+        },
+    });
 
     // Auto-submit a pre-filled message from the ?message= param (e.g. "Create diet plan" shortcut).
     const autoSentRef = useRef(false);
@@ -101,7 +144,7 @@ export function ChatContent() {
                                 onClick={toggleRight}
                                 style={{ position: "absolute", right: 16, top: -44, zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}
                             >
-                                {rightOpened ? <IconLayoutSidebarRightCollapse size={18} /> : <IconLayoutSidebarRightExpand size={18} />}
+                                <IconLayoutSidebarRight size={18} stroke={1.5} />
                             </ActionIcon>
                         </Tooltip>
                     </Box>
@@ -116,13 +159,9 @@ export function ChatContent() {
                     messages={messages}
                     status={status}
                     onSend={(text, files) => {
-                        // Upload each file to the sessions API so it appears in the Files tab.
-                        if (files) {
-                            Array.from(files).forEach((f) =>
-                                uploadFile.mutate({ sessionId, file: f }),
-                            );
-                        }
-                        void sendMessage({ text, files });
+                        // Gate every file send through the person-check flow.
+                        // If no files (or no visual files), it proceeds immediately.
+                        void checkAndSend(text, files);
                     }}
                     onAnswerFreeText={handleAnswer}
                 />

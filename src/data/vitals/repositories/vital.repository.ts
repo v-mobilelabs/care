@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toVitalDto,
   type VitalDocument,
@@ -27,6 +28,11 @@ export const vitalRepository = {
       createdAt: now,
     };
 
+    if (data.sex !== undefined) doc.sex = data.sex;
+    if (data.waistCm !== undefined) doc.waistCm = data.waistCm;
+    if (data.hipCm !== undefined) doc.hipCm = data.hipCm;
+    if (data.neckCm !== undefined) doc.neckCm = data.neckCm;
+    if (data.activityLevel !== undefined) doc.activityLevel = data.activityLevel;
     if (data.systolicBp !== undefined) doc.systolicBp = data.systolicBp;
     if (data.diastolicBp !== undefined) doc.diastolicBp = data.diastolicBp;
     if (data.restingHr !== undefined) doc.restingHr = data.restingHr;
@@ -38,7 +44,7 @@ export const vitalRepository = {
     if (data.note !== undefined) doc.note = data.note;
 
     const ref = vitalsCol(userId, dependentId).doc();
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toVitalDto(ref.id, doc);
   },
 

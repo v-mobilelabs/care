@@ -3,8 +3,13 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import type { FileDocument, FileDto } from "../models/file.model";
-import { toFileDto } from "../models/file.model";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
+import type {
+  FileDocument,
+  FileDto,
+  StorageMetricsDto,
+} from "../models/file.model";
+import { toFileDto, USER_STORAGE_LIMIT_BYTES } from "../models/file.model";
 
 const firebaseService = FirebaseService.getInstance();
 const db = firebaseService.getDb();
@@ -12,19 +17,27 @@ const bucket = firebaseService.getBucket();
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
-const filesCol = (userId: string, sessionId: string) =>
-  db.collection(`users/${userId}/sessions/${sessionId}/files`);
+const filesCol = (userId: string, profileId: string, sessionId: string) =>
+  db.collection(
+    `users/${userId}/profiles/${profileId}/sessions/${sessionId}/files`,
+  );
 
-const fileDoc = (userId: string, sessionId: string, fileId: string) =>
-  filesCol(userId, sessionId).doc(fileId);
+const fileDoc = (
+  userId: string,
+  profileId: string,
+  sessionId: string,
+  fileId: string,
+) => filesCol(userId, profileId, sessionId).doc(fileId);
 
 /** GCS object path for a file */
 const storagePath = (
   userId: string,
+  profileId: string,
   sessionId: string,
   fileId: string,
   name: string,
-) => `users/${userId}/sessions/${sessionId}/files/${fileId}/${name}`;
+) =>
+  `users/${userId}/profiles/${profileId}/sessions/${sessionId}/files/${fileId}/${name}`;
 
 /** Signed URL expiry — 1 hour */
 const SIGNED_URL_EXPIRY_MS = 60 * 60 * 1000;
@@ -38,15 +51,22 @@ export const fileRepository = {
    */
   async upload(
     userId: string,
+    profileId: string,
     sessionId: string,
     data: Pick<FileDocument, "name" | "mimeType" | "size"> & {
       buffer: Buffer;
     },
   ): Promise<FileDto> {
     // 1. Reserve a Firestore doc ID so we can embed it in the storage path.
-    const ref = filesCol(userId, sessionId).doc();
+    const ref = filesCol(userId, profileId, sessionId).doc();
     const fileId = ref.id;
-    const gcsPath = storagePath(userId, sessionId, fileId, data.name);
+    const gcsPath = storagePath(
+      userId,
+      profileId,
+      sessionId,
+      fileId,
+      data.name,
+    );
 
     // 2. Upload to Cloud Storage.
     const gcsFile = bucket.file(gcsPath);
@@ -72,16 +92,17 @@ export const fileRepository = {
       downloadUrl,
       createdAt: Timestamp.now(),
     };
-    await ref.set(doc);
+    await ref.set(stripUndefined(doc));
     return toFileDto(fileId, doc);
   },
 
   async findByIdRaw(
     userId: string,
+    profileId: string,
     sessionId: string,
     fileId: string,
   ): Promise<FileDto | null> {
-    const snap = await fileDoc(userId, sessionId, fileId).get();
+    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
     if (!snap.exists) return null;
     return toFileDto(snap.id, snap.data() as FileDocument);
   },
@@ -105,10 +126,11 @@ export const fileRepository = {
 
   async findById(
     userId: string,
+    profileId: string,
     sessionId: string,
     fileId: string,
   ): Promise<FileDto | null> {
-    const snap = await fileDoc(userId, sessionId, fileId).get();
+    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
     if (!snap.exists) return null;
     const doc = snap.data() as FileDocument;
 
@@ -123,8 +145,12 @@ export const fileRepository = {
     return toFileDto(snap.id, { ...doc, downloadUrl: freshUrl });
   },
 
-  async list(userId: string, sessionId: string): Promise<FileDto[]> {
-    const snap = await filesCol(userId, sessionId)
+  async list(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+  ): Promise<FileDto[]> {
+    const snap = await filesCol(userId, profileId, sessionId)
       .orderBy("createdAt", "asc")
       .get();
     return snap.docs.map((d: QueryDocumentSnapshot) =>
@@ -144,13 +170,30 @@ export const fileRepository = {
     );
   },
 
+  /** Same as listAllForUser but without orderBy — avoids the composite index requirement. */
+  async listAllForUserUnordered(userId: string): Promise<FileDto[]> {
+    const snap = await db
+      .collectionGroup("files")
+      .where("userId", "==", userId)
+      .get();
+    const docs = snap.docs.map((d: QueryDocumentSnapshot) =>
+      toFileDto(d.id, d.data() as FileDocument),
+    );
+    // Sort client-side so we don't require the composite index to be deployed
+    return docs.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  },
+
   /** Delete GCS object and Firestore metadata. */
   async delete(
     userId: string,
+    profileId: string,
     sessionId: string,
     fileId: string,
   ): Promise<void> {
-    const snap = await fileDoc(userId, sessionId, fileId).get();
+    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
     if (!snap.exists) return;
     const doc = snap.data() as FileDocument;
 
@@ -164,21 +207,57 @@ export const fileRepository = {
     await snap.ref.delete();
   },
 
+  /**
+   * Aggregate total storage used by a user across all sessions.
+   * Returns `usedBytes`, `fileCount`, and the per-user `limitBytes`.
+   */
+  async getStorageMetrics(userId: string): Promise<StorageMetricsDto> {
+    try {
+      const snap = await db
+        .collectionGroup("files")
+        .where("userId", "==", userId)
+        .get();
+      const usedBytes = snap.docs.reduce(
+        (sum, d) => sum + ((d.data() as Pick<FileDocument, "size">).size ?? 0),
+        0,
+      );
+      return {
+        usedBytes,
+        fileCount: snap.size,
+        limitBytes: USER_STORAGE_LIMIT_BYTES,
+      };
+    } catch (err) {
+      // Firestore collection-group index may not be deployed yet.
+      // Return zeroed metrics so the API returns 200 instead of 500.
+      console.error("[fileRepository.getStorageMetrics] query failed:", err);
+      return {
+        usedBytes: 0,
+        fileCount: 0,
+        limitBytes: USER_STORAGE_LIMIT_BYTES,
+      };
+    }
+  },
+
   /** Patch arbitrary fields on an existing file document (e.g. extractedData). */
   async patch(
     userId: string,
+    profileId: string,
     sessionId: string,
     fileId: string,
     data: Partial<Pick<FileDocument, "extractedData">>,
   ): Promise<void> {
-    await fileDoc(userId, sessionId, fileId).update(
+    await fileDoc(userId, profileId, sessionId, fileId).update(
       data as Record<string, unknown>,
     );
   },
 
   /** Delete all files for a session (used when deleting the session). */
-  async deleteAll(userId: string, sessionId: string): Promise<void> {
-    const snap = await filesCol(userId, sessionId).get();
+  async deleteAll(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const snap = await filesCol(userId, profileId, sessionId).get();
     const batch = db.batch();
 
     await Promise.all(

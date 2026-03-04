@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   DAILY_CREDITS,
   todayUTC,
@@ -31,7 +32,7 @@ export const creditRepository = {
         date: today,
         updatedAt: Timestamp.now(),
       };
-      await ref.set(doc);
+      await ref.set(stripUndefined(doc));
       return {
         remaining: DAILY_CREDITS,
         total: DAILY_CREDITS,

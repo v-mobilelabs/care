@@ -28,7 +28,7 @@ export default async function ChatPage({
                 queryKey: chatKeys.messages(sessionId),
                 queryFn: () =>
                     new ListMessagesUseCase().execute(
-                        ListMessagesUseCase.validate({ userId: user.uid, sessionId }),
+                        ListMessagesUseCase.validate({ userId: user.uid, profileId: user.uid, sessionId }),
                     ),
             }),
             queryClient.prefetchQuery({

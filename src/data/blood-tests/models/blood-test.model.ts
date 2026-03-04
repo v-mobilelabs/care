@@ -111,9 +111,11 @@ export type BloodTestExtraction = z.infer<typeof BloodTestExtractionSchema>;
 
 export const ExtractBloodTestInputSchema = z.object({
   userId: z.string().min(1),
+  profileId: z.string().min(1),
   fileId: z.string().min(1),
   /** Virtual session ID used for file storage. Defaults to the blood-tests session. */
   sessionId: z.string().min(1),
+  /** Optional: scopes blood test records to a dependent sub-collection. */
   dependentId: z.string().optional(),
 });
 export type ExtractBloodTestInput = z.infer<typeof ExtractBloodTestInputSchema>;

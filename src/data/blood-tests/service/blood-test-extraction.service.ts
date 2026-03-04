@@ -30,6 +30,7 @@ export class BloodTestExtractionService {
     // 1. Resolve file metadata
     const file = await this.files.getRaw({
       userId: input.userId,
+      profileId: input.profileId,
       sessionId: input.sessionId,
       fileId: input.fileId,
     });

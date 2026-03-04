@@ -20,7 +20,6 @@ import {
     Tabs,
     Text,
     ThemeIcon,
-    Title,
     UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -40,20 +39,24 @@ import {
     IconCopy,
     IconDental,
     IconDentalBroken,
+    IconDroplet,
     IconFlask,
     IconFlame,
-    IconListCheck,
+    IconHeartbeat,
     IconMessageQuestion,
+    IconMoodSad,
+    IconMoodSmile,
     IconNotes,
     IconQuestionMark,
     IconSalad,
     IconScale,
     IconShieldCheck,
     IconStethoscope,
+    IconThermometer,
     IconX,
 } from "@tabler/icons-react";
 import { useMantineColorScheme } from "@mantine/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isToolUIPart } from "ai";
 import type { UIMessagePart, UIDataTypes, UITools } from "ai";
 import {
@@ -63,7 +66,7 @@ import {
 import type {
     ConditionInput, PrescriptionInput, MedicineInput, ProcedureInput,
     AppointmentInput, ProviderInput, AssessmentInput, AskQuestionInput,
-    NextStepsInput, DosDontsInput, DietPlanInput, SoapNoteInput,
+    NextStepsInput, DietPlanInput, SoapNoteInput,
     DentalChartInput, DentalCondition, DentalFinding,
     SuggestActionsInput, SuggestActionItem,
 } from "@/app/chat/_types";
@@ -77,6 +80,7 @@ export function ConditionCard({ data, onLearnMore }: Readonly<{ data: ConditionI
     const sevColor = SEVERITY_COLOR[data.severity];
     const sevLevel: Record<string, number> = { mild: 1, moderate: 2, severe: 3, critical: 4 };
     const filled = sevLevel[data.severity] ?? 1;
+    const [opened, { toggle }] = useDisclosure(false);
 
     const statusConfig = {
         suspected: { color: "orange" as const, Icon: IconQuestionMark, label: "Suspected" },
@@ -87,100 +91,132 @@ export function ConditionCard({ data, onLearnMore }: Readonly<{ data: ConditionI
     const StatusIcon = st.Icon;
 
     return (
-        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: `4px solid var(--mantine-color-${sevColor}-5)` }}>
-            {/* ── Header — tinted by severity ── */}
-            <Box
-                px="md" pt="md" pb="sm"
-                style={{ background: `light-dark(var(--mantine-color-${sevColor}-0), rgba(0,0,0,0.2))` }}
+        <Paper
+            withBorder
+            radius="lg"
+            p={0}
+            style={{ overflow: "hidden", borderLeft: `4px solid var(--mantine-color-${sevColor}-5)` }}
+        >
+            {/* ── Compact header row — always visible ── */}
+            <UnstyledButton
+                onClick={toggle}
+                style={{ width: "100%", display: "block" }}
+                aria-expanded={opened}
             >
-                <Stack gap={8}>
-                    {/* Icon + label row */}
-                    <Group gap="xs" wrap="nowrap" align="center">
-                        <ThemeIcon size={36} radius="md" color={sevColor} variant="filled" style={{ flexShrink: 0 }}>
-                            <IconStethoscope size={18} />
+                <Box
+                    px="md" py="sm"
+                    style={{ background: `light-dark(var(--mantine-color-${sevColor}-0), rgba(0,0,0,0.2))` }}
+                >
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color={sevColor} variant="filled" style={{ flexShrink: 0 }}>
+                            <IconStethoscope size={16} />
                         </ThemeIcon>
-                        <Text size="xs" c="dimmed" fw={500}>Condition Identified</Text>
-                    </Group>
 
-                    {/* Condition name — always full width, never squished by badges */}
-                    <Box>
-                        <Text fw={800} size="lg" style={{ lineHeight: 1.25, wordBreak: "break-word" }}>{data.name}</Text>
-                        {data.icd10 && (
+                        {/* Name + ICD10 */}
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Condition</Text>
                             <Text
-                                size="xs" c="dimmed" ff="monospace" mt={3}
-                                style={{ display: "inline-block", border: "1px solid var(--mantine-color-gray-4)", borderRadius: 4, padding: "1px 6px" }}
+                                fw={700}
+                                size="sm"
+                                style={{ lineHeight: 1.3, wordBreak: "break-word" }}
                             >
-                                {data.icd10}
+                                {data.name}
                             </Text>
-                        )}
-                    </Box>
+                            {data.icd10 && (
+                                <Text size="xs" c="dimmed" ff="monospace">{data.icd10}</Text>
+                            )}
+                        </Box>
 
-                    {/* Badges — always below name, wrap freely */}
-                    <Group gap={6} wrap="wrap">
-                        <Badge color={sevColor} size="md" tt="capitalize" variant="filled">{data.severity}</Badge>
-                        <Badge color={st.color} size="md" tt="capitalize" variant="light" leftSection={<StatusIcon size={11} />}>{st.label}</Badge>
-                    </Group>
-                </Stack>
-            </Box>
-
-            {/* ── Body ── */}
-            <Box px="md" py="sm">
-                <Stack gap="sm">
-                    {/* Severity meter — fluid segments fill available width */}
-                    <Group gap={6} align="center" wrap="nowrap">
-                        <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Severity</Text>
-                        <Group gap={4} wrap="nowrap" style={{ flex: 1 }}>
-                            {[1, 2, 3, 4].map((n) => (
-                                <Box
-                                    key={n}
-                                    style={{
-                                        flex: 1, height: 6, borderRadius: 3,
-                                        background: n <= filled
-                                            ? `var(--mantine-color-${sevColor}-${4 + n})`
-                                            : "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                                    }}
-                                />
-                            ))}
+                        {/* Badges + chevron */}
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            <Badge color={sevColor} size="xs" tt="capitalize" variant="filled">{data.severity}</Badge>
+                            <Badge color={st.color} size="xs" tt="capitalize" variant="light"
+                                leftSection={<StatusIcon size={9} />}
+                            >
+                                {st.label}
+                            </Badge>
+                            <ThemeIcon
+                                size={20} radius="xl" color="gray" variant="subtle"
+                                style={{
+                                    transition: "transform 200ms ease",
+                                    transform: opened ? "rotate(180deg)" : "rotate(0deg)",
+                                }}
+                            >
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
                         </Group>
-                        <Text size="xs" c={`${sevColor}.6`} fw={600} tt="capitalize" style={{ flexShrink: 0 }}>{data.severity}</Text>
                     </Group>
+                </Box>
+            </UnstyledButton>
 
-                    <Divider />
-
-                    <Text size="sm" c="dimmed" style={{ lineHeight: 1.55 }}>{data.description}</Text>
-
-                    {data.symptoms.length > 0 && (
-                        <Box>
-                            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={6} style={{ letterSpacing: "0.5px" }}>
-                                Key Symptoms
-                            </Text>
-                            <Group gap={6} wrap="wrap">
-                                {data.symptoms.map((s) => (
-                                    <Badge key={s} size="sm" variant="light" color={sevColor} leftSection={<IconCheck size={9} />}>
-                                        {s}
-                                    </Badge>
+            {/* ── Expandable body ── */}
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="sm">
+                        {/* Severity meter */}
+                        <Group gap={6} align="center" wrap="nowrap">
+                            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>Severity</Text>
+                            <Group gap={4} wrap="nowrap" style={{ flex: 1 }}>
+                                {[1, 2, 3, 4].map((n) => (
+                                    <Box
+                                        key={n}
+                                        style={{
+                                            flex: 1, height: 5, borderRadius: 3,
+                                            background: n <= filled
+                                                ? `var(--mantine-color-${sevColor}-${4 + n})`
+                                                : "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
+                                        }}
+                                    />
                                 ))}
                             </Group>
-                        </Box>
-                    )}
+                            <Text size="xs" c={`${sevColor}.6`} fw={600} tt="capitalize" style={{ flexShrink: 0 }}>
+                                {data.severity}
+                            </Text>
+                        </Group>
 
-                    {onLearnMore && (
-                        <>
-                            <Divider />
-                            <Button
-                                size="sm"
-                                variant="subtle"
-                                color="primary"
-                                leftSection={<IconMessageQuestion size={15} />}
-                                onClick={() => onLearnMore(`Tell me more about ${data.name} — what causes it, how it progresses, and what I should know as a patient.`)}
-                                style={{ alignSelf: "flex-start" }}
-                            >
-                                Ask about {data.name}
-                            </Button>
-                        </>
-                    )}
-                </Stack>
-            </Box>
+                        <Divider />
+
+                        <Text size="sm" c="dimmed" style={{ lineHeight: 1.55 }}>
+                            {data.description}
+                        </Text>
+
+                        {data.symptoms.length > 0 && (
+                            <Box>
+                                <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={6}
+                                    style={{ letterSpacing: "0.5px" }}
+                                >
+                                    Key Symptoms
+                                </Text>
+                                <Group gap={6} wrap="wrap">
+                                    {data.symptoms.map((s) => (
+                                        <Badge key={s} size="sm" variant="light" color={sevColor}
+                                            leftSection={<IconCheck size={9} />}
+                                        >
+                                            {s}
+                                        </Badge>
+                                    ))}
+                                </Group>
+                            </Box>
+                        )}
+
+                        {onLearnMore && (
+                            <>
+                                <Divider />
+                                <Button
+                                    size="xs"
+                                    variant="subtle"
+                                    color="primary"
+                                    leftSection={<IconMessageQuestion size={13} />}
+                                    onClick={() => onLearnMore(`Tell me more about ${data.name} — what causes it, how it progresses, and what I should know as a patient.`)}
+                                    style={{ alignSelf: "flex-start" }}
+                                >
+                                    Ask about {data.name}
+                                </Button>
+                            </>
+                        )}
+                    </Stack>
+                </Box>
+            </Collapse>
         </Paper>
     );
 }
@@ -190,6 +226,7 @@ export function ConditionCard({ data, onLearnMore }: Readonly<{ data: ConditionI
 export function PrescriptionCard({ data }: Readonly<{ data: PrescriptionInput }>) {
     const addMedication = useAddMedicationMutation();
     const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+    const [opened, { toggle }] = useDisclosure(false);
 
     function handleSaveMed(name: string, dosage: string, frequency: string, duration: string) {
         const key = `${name}:${dosage}`;
@@ -206,61 +243,75 @@ export function PrescriptionCard({ data }: Readonly<{ data: PrescriptionInput }>
     }
 
     return (
-        <Paper withBorder radius="lg" p="md">
-            <Stack gap="sm">
-                <Group justify="space-between" wrap="wrap" gap="xs">
-                    <Group gap="xs">
-                        <ThemeIcon size={28} radius="md" color="violet" variant="light"><IconClipboardHeart size={15} /></ThemeIcon>
-                        <Box>
-                            <Text fw={700} size="sm">{data.title}</Text>
-                            <Text size="xs" c="dimmed">For: {data.condition}</Text>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-violet-5)" }}>
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
+                <Box px="md" py="sm" style={{ background: "light-dark(var(--mantine-color-violet-0), rgba(0,0,0,0.2))" }}>
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color="violet" variant="filled" style={{ flexShrink: 0 }}>
+                            <IconClipboardHeart size={16} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Prescription</Text>
+                            <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{data.title}</Text>
+                            <Text size="xs" c="dimmed">{data.condition}</Text>
                         </Box>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            <Badge size="xs" color="violet" variant="light">{data.medications.length} med{data.medications.length !== 1 ? "s" : ""}</Badge>
+                            {data.urgent && <Badge color="red" size="xs" variant="filled">Urgent</Badge>}
+                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
+                        </Group>
                     </Group>
-                    {data.urgent && <Badge color="red" size="sm">Urgent</Badge>}
-                </Group>
-                <Box style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                    <Table verticalSpacing="xs" fz="sm" withTableBorder withColumnBorders style={{ minWidth: 380 }}>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>Medication</Table.Th>
-                                <Table.Th>Dosage</Table.Th>
-                                <Table.Th>Frequency</Table.Th>
-                                <Table.Th>Duration</Table.Th>
-                                <Table.Th></Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {data.medications.map((m) => {
-                                const key = `${m.name}:${m.dosage}`;
-                                const saved = savedIds.has(key);
-                                return (
-                                    <Table.Tr key={key}>
-                                        <Table.Td>
-                                            <Group gap={6}><IconCapsule size={13} /><Text size="sm" fw={500}>{m.name}</Text><Badge size="xs" variant="dot" color="gray">{m.form}</Badge></Group>
-                                        </Table.Td>
-                                        <Table.Td>{m.dosage}</Table.Td>
-                                        <Table.Td>{m.frequency}</Table.Td>
-                                        <Table.Td>{m.duration}</Table.Td>
-                                        <Table.Td>
-                                            <ActionIcon
-                                                size={22}
-                                                variant={saved ? "filled" : "subtle"}
-                                                color={saved ? "teal" : "gray"}
-                                                onClick={() => handleSaveMed(m.name, m.dosage, m.frequency, m.duration)}
-                                                disabled={saved || addMedication.isPending}
-                                                title={saved ? "Saved to my medications" : "Save to my medications"}
-                                            >
-                                                {saved ? <IconBookmarkFilled size={12} /> : <IconBookmark size={12} />}
-                                            </ActionIcon>
-                                        </Table.Td>
-                                    </Table.Tr>
-                                );
-                            })}
-                        </Table.Tbody>
-                    </Table>
-                    {data.notes && <Text size="xs" c="dimmed">📝 {data.notes}</Text>}
                 </Box>
-            </Stack>
+            </UnstyledButton>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Box style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                        <Table verticalSpacing="xs" fz="sm" withTableBorder withColumnBorders style={{ minWidth: 380 }}>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th>Medication</Table.Th>
+                                    <Table.Th>Dosage</Table.Th>
+                                    <Table.Th>Frequency</Table.Th>
+                                    <Table.Th>Duration</Table.Th>
+                                    <Table.Th></Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {data.medications.map((m) => {
+                                    const key = `${m.name}:${m.dosage}`;
+                                    const saved = savedIds.has(key);
+                                    return (
+                                        <Table.Tr key={key}>
+                                            <Table.Td>
+                                                <Group gap={6}><IconCapsule size={13} /><Text size="sm" fw={500}>{m.name}</Text><Badge size="xs" variant="dot" color="gray">{m.form}</Badge></Group>
+                                            </Table.Td>
+                                            <Table.Td>{m.dosage}</Table.Td>
+                                            <Table.Td>{m.frequency}</Table.Td>
+                                            <Table.Td>{m.duration}</Table.Td>
+                                            <Table.Td>
+                                                <ActionIcon
+                                                    size={22}
+                                                    variant={saved ? "filled" : "subtle"}
+                                                    color={saved ? "teal" : "gray"}
+                                                    onClick={() => handleSaveMed(m.name, m.dosage, m.frequency, m.duration)}
+                                                    disabled={saved || addMedication.isPending}
+                                                    title={saved ? "Saved to my medications" : "Save to my medications"}
+                                                >
+                                                    {saved ? <IconBookmarkFilled size={12} /> : <IconBookmark size={12} />}
+                                                </ActionIcon>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
+                            </Table.Tbody>
+                        </Table>
+                        {data.notes && <Text size="xs" c="dimmed" mt={6}>📝 {data.notes}</Text>}
+                    </Box>
+                </Box>
+            </Collapse>
         </Paper>
     );
 }
@@ -284,38 +335,63 @@ export function MedicineCard({ data }: Readonly<{ data: MedicineInput }>) {
         );
     }
 
+    const [opened, { toggle }] = useDisclosure(false);
+
     return (
-        <Paper withBorder radius="lg" p="md">
-            <Group justify="space-between" align="flex-start" wrap="nowrap">
-                <Group gap="xs" align="flex-start">
-                    <ThemeIcon size={28} radius="md" color="teal" variant="light" mt={2}><IconCapsule size={15} /></ThemeIcon>
-                    <Box>
-                        <Group gap={6}>
-                            <Text fw={700} size="sm">{data.name}</Text>
-                            <Badge size="xs" color="teal" variant="light">{data.category}</Badge>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-teal-5)" }}>
+            <Box
+                px="md" py="sm"
+                style={{ background: "light-dark(var(--mantine-color-teal-0), rgba(0,0,0,0.2))", cursor: "pointer" }}
+                onClick={toggle}
+                aria-expanded={opened}
+            >
+                <Group gap="sm" wrap="nowrap" align="center">
+                    <ThemeIcon size={32} radius="md" color="teal" variant="filled" style={{ flexShrink: 0 }}>
+                        <IconCapsule size={16} />
+                    </ThemeIcon>
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Medication</Text>
+                        <Group gap={6} wrap="nowrap">
+                            <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{data.name}</Text>
+                            <Badge size="xs" color="teal" variant="light" style={{ flexShrink: 0 }}>{data.category}</Badge>
                         </Group>
-                        <Text size="xs" c="dimmed" mt={2}>{data.indication}</Text>
-                        <Text size="xs" mt={4}>{data.dosage} · {data.frequency}{data.duration ? ` · ${data.duration}` : ""}</Text>
+                    </Box>
+                    <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                        <ActionIcon
+                            size={26}
+                            variant={saved ? "filled" : "subtle"}
+                            color={saved ? "teal" : "gray"}
+                            onClick={(e) => { e.stopPropagation(); handleSave(); }}
+                            disabled={saved || addMedication.isPending}
+                            loading={addMedication.isPending}
+                            title={saved ? "Saved" : "Save to medications"}
+                        >
+                            {saved ? <IconBookmarkFilled size={13} /> : <IconBookmark size={13} />}
+                        </ActionIcon>
+                        <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                            style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                            <IconChevronDown size={13} />
+                        </ThemeIcon>
+                    </Group>
+                </Group>
+            </Box>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="xs">
+                        <Text size="xs" c="dimmed" lh={1.5}>{data.indication}</Text>
+                        <Group gap={6} wrap="wrap">
+                            <Badge size="sm" color="teal" variant="outline">{data.dosage}</Badge>
+                            <Badge size="sm" color="gray" variant="outline">{data.frequency}</Badge>
+                            {data.duration && <Badge size="sm" color="gray" variant="outline">{data.duration}</Badge>}
+                        </Group>
                         {data.warnings && data.warnings.length > 0 && (
-                            <Group gap={4} mt={4}>
-                                {data.warnings.map((w) => <Badge key={w} size="xs" color="orange" variant="outline">⚠ {w}</Badge>)}
+                            <Group gap={4} wrap="wrap">
+                                {data.warnings.map((w) => <Badge key={w} size="xs" color="orange" variant="light">⚠ {w}</Badge>)}
                             </Group>
                         )}
-                    </Box>
-                </Group>
-                <ActionIcon
-                    size={28}
-                    variant={saved ? "filled" : "subtle"}
-                    color={saved ? "teal" : "gray"}
-                    onClick={handleSave}
-                    disabled={saved || addMedication.isPending}
-                    loading={addMedication.isPending}
-                    title={saved ? "Saved to my medications" : "Save to my medications"}
-                    style={{ flexShrink: 0 }}
-                >
-                    {saved ? <IconBookmarkFilled size={15} /> : <IconBookmark size={15} />}
-                </ActionIcon>
-            </Group>
+                    </Stack>
+                </Box>
+            </Collapse>
         </Paper>
     );
 }
@@ -324,29 +400,44 @@ export function MedicineCard({ data }: Readonly<{ data: MedicineInput }>) {
 
 export function ProcedureCard({ data }: Readonly<{ data: ProcedureInput }>) {
     const pc = PRIORITY_COLOR[data.priority];
+    const [opened, { toggle }] = useDisclosure(false);
     return (
-        <Paper withBorder radius="lg" p="md" style={{ borderLeft: `4px solid var(--mantine-color-${pc}-5)` }}>
-            <Stack gap="xs">
-                <Group justify="space-between" wrap="wrap" gap="xs">
-                    <Group gap="xs">
-                        <ThemeIcon size={28} radius="md" color="blue" variant="light"><IconFlask size={15} /></ThemeIcon>
-                        <Text fw={700} size="sm">Procedure / Test Ordered</Text>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: `4px solid var(--mantine-color-${pc}-5)` }}>
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
+                <Box px="md" py="sm" style={{ background: `light-dark(var(--mantine-color-${pc}-0), rgba(0,0,0,0.2))` }}>
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color="blue" variant="filled" style={{ flexShrink: 0 }}>
+                            <IconFlask size={16} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Procedure / Test</Text>
+                            <Group gap={6} wrap="nowrap">
+                                <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{data.name}</Text>
+                                <Badge size="xs" variant="dot" color="gray" tt="capitalize" style={{ flexShrink: 0 }}>{data.type}</Badge>
+                            </Group>
+                        </Box>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            <Badge color={pc} size="xs" tt="capitalize" variant="filled">{data.priority}</Badge>
+                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
+                        </Group>
                     </Group>
-                    <Badge color={pc} size="sm" tt="capitalize">{data.priority}</Badge>
-                </Group>
-                <Box pl={36}>
-                    <Group gap={6} align="baseline">
-                        <Text fw={600}>{data.name}</Text>
-                        <Badge size="xs" variant="dot" color="gray" tt="capitalize">{data.type}</Badge>
-                    </Group>
-                    <Text size="sm" c="dimmed" mt={2}>{data.indication}</Text>
-                    {data.preparation && (
-                        <Alert color="yellow" variant="light" mt={6} p="xs" radius="md">
-                            <Text size="xs">📋 Prep: {data.preparation}</Text>
-                        </Alert>
-                    )}
                 </Box>
-            </Stack>
+            </UnstyledButton>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="xs">
+                        <Text size="sm" c="dimmed" lh={1.55}>{data.indication}</Text>
+                        {data.preparation && (
+                            <Alert color="yellow" variant="light" p="xs" radius="md" icon={<IconAlertTriangle size={13} />}>
+                                <Text size="xs"><strong>Prep:</strong> {data.preparation}</Text>
+                            </Alert>
+                        )}
+                    </Stack>
+                </Box>
+            </Collapse>
         </Paper>
     );
 }
@@ -354,23 +445,38 @@ export function ProcedureCard({ data }: Readonly<{ data: ProcedureInput }>) {
 // ── Appointment Card ───────────────────────────────────────────────────────────
 
 export function AppointmentCard({ data }: Readonly<{ data: AppointmentInput }>) {
+    const [opened, { toggle }] = useDisclosure(false);
     return (
-        <Paper withBorder radius="lg" p="md">
-            <Stack gap="xs">
-                <Group justify="space-between" wrap="wrap" gap="xs">
-                    <Group gap="xs">
-                        <ThemeIcon size={28} radius="md" color="indigo" variant="light"><IconCalendar size={15} /></ThemeIcon>
-                        <Text fw={700} size="sm">Appointment Recommended</Text>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-indigo-5)" }}>
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
+                <Box px="md" py="sm" style={{ background: "light-dark(var(--mantine-color-indigo-0), rgba(0,0,0,0.2))" }}>
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color="indigo" variant="filled" style={{ flexShrink: 0 }}>
+                            <IconCalendar size={16} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Appointment</Text>
+                            <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{data.specialty}</Text>
+                        </Box>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            <Badge color="indigo" size="xs" variant="filled" tt="capitalize">{data.visitType}</Badge>
+                            <Badge color="orange" size="xs" variant="light">{data.urgency}</Badge>
+                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
+                        </Group>
                     </Group>
-                    <Badge color="indigo" size="sm" variant="light">{data.visitType}</Badge>
-                </Group>
-                <Box pl={36}>
-                    <Text fw={600}>{data.specialty}</Text>
-                    <Text size="sm" c="dimmed" mt={2}>{data.reason}</Text>
-                    <Group gap={6} mt={6}><Badge size="sm" color="orange" variant="light">🕐 {data.urgency}</Badge></Group>
-                    {data.notes && <Text size="xs" c="dimmed" mt={4}>📝 {data.notes}</Text>}
                 </Box>
-            </Stack>
+            </UnstyledButton>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="xs">
+                        <Text size="sm" c="dimmed" lh={1.55}>{data.reason}</Text>
+                        {data.notes && <Text size="xs" c="dimmed">📝 {data.notes}</Text>}
+                    </Stack>
+                </Box>
+            </Collapse>
         </Paper>
     );
 }
@@ -385,10 +491,13 @@ export function ProviderCard({ data }: Readonly<{ data: ProviderInput }>) {
                 <ThemeIcon size={28} radius="md" color="cyan" variant="light" mt={2}><IconStethoscope size={15} /></ThemeIcon>
                 <Box style={{ flex: 1 }}>
                     <Group justify="space-between" wrap="nowrap">
-                        <Group gap={6}>
-                            <Text fw={700} size="sm">{data.role}</Text>
-                            {data.specialty && <Badge size="xs" variant="dot" color="gray">{data.specialty}</Badge>}
-                        </Group>
+                        <Box>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Specialist</Text>
+                            <Group gap={6}>
+                                <Text fw={700} size="sm">{data.role}</Text>
+                                {data.specialty && <Badge size="xs" variant="dot" color="gray">{data.specialty}</Badge>}
+                            </Group>
+                        </Box>
                         <Badge color={uc} size="sm" tt="capitalize">{data.urgency}</Badge>
                     </Group>
                     <Text size="sm" c="dimmed" mt={2}>{data.reason}</Text>
@@ -403,34 +512,86 @@ export function ProviderCard({ data }: Readonly<{ data: ProviderInput }>) {
 
 export function AssessmentCompleteCard({ data }: Readonly<{ data: AssessmentInput }>) {
     const rc = RISK_COLOR[data.riskLevel];
+    const [opened, { toggle }] = useDisclosure(false);
     return (
-        <Paper withBorder radius="xl" p="xl" style={{ background: `light-dark(var(--mantine-color-${rc}-0), rgba(0,0,0,0.2))`, borderColor: `var(--mantine-color-${rc}-4)` }}>
-            <Stack gap="md">
-                <Group justify="space-between" wrap="wrap" gap="xs">
-                    <Group gap="sm">
-                        <ThemeIcon size={40} radius="xl" color={rc} variant="filled"><IconShieldCheck size={22} /></ThemeIcon>
-                        <Box>
-                            <Title order={5}>Assessment Complete</Title>
-                            {data.primaryDiagnosis && <Text size="sm" c="dimmed">Primary: {data.primaryDiagnosis}</Text>}
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: `4px solid var(--mantine-color-${rc}-5)` }}>
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
+                <Box px="md" py="sm" style={{ background: `light-dark(var(--mantine-color-${rc}-0), rgba(0,0,0,0.2))` }}>
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color={rc} variant="filled" style={{ flexShrink: 0 }}>
+                            <IconShieldCheck size={16} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Assessment</Text>
+                            <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>
+                                {data.primaryDiagnosis ?? "Complete"}
+                            </Text>
                         </Box>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            <Badge color={rc} size="xs" variant="filled" tt="uppercase">{data.riskLevel} risk</Badge>
+                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
+                        </Group>
                     </Group>
-                    <Badge color={rc} size="lg" radius="lg" tt="uppercase">{data.riskLevel} risk</Badge>
-                </Group>
-                <Divider />
-                <Text size="sm">{data.summary}</Text>
-                {data.immediateActions.length > 0 && (
-                    <Box>
-                        <Text size="sm" fw={600} mb={6}>Immediate Steps:</Text>
-                        <List size="sm" spacing="xs" icon={<ThemeIcon size={18} radius="xl" color={rc} variant="light"><IconCircleCheck size={11} /></ThemeIcon>}>
-                            {data.immediateActions.map((action) => <List.Item key={action}>{action}</List.Item>)}
-                        </List>
-                    </Box>
-                )}
-                <Divider />
-                <Text size="xs" c="dimmed">{data.disclaimer}</Text>
-            </Stack>
+                </Box>
+            </UnstyledButton>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="sm">
+                        <Text size="sm" lh={1.55}>{data.summary}</Text>
+                        {data.immediateActions.length > 0 && (
+                            <Box>
+                                <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.5px" }} mb={6}>Immediate Steps</Text>
+                                <List size="sm" spacing={4}
+                                    icon={<ThemeIcon size={16} radius="xl" color={rc} variant="light"><IconCircleCheck size={10} /></ThemeIcon>}>
+                                    {data.immediateActions.map((action) => <List.Item key={action}>{action}</List.Item>)}
+                                </List>
+                            </Box>
+                        )}
+                        <Divider />
+                        <Text size="xs" c="dimmed" lh={1.5}>{data.disclaimer}</Text>
+                    </Stack>
+                </Box>
+            </Collapse>
         </Paper>
     );
+}
+
+// ── Option icon mapping ──────────────────────────────────────────────────────
+
+function getTemperatureIcon(t: string): ReactNode | null {
+    if (t.startsWith("normal")) return <IconThermometer size={14} />;
+    if (t.startsWith("low-grade")) return <IconThermometer size={14} />;
+    if (t.startsWith("high fever")) return <IconFlame size={14} />;
+    if (t.startsWith("very high")) return <IconAlertTriangle size={14} />;
+    if (/haven.?t measured|haven.?t checked|not measured|didn.?t check/.test(t)) return <IconQuestionMark size={14} />;
+    return null;
+}
+
+function getPainIcon(t: string): ReactNode | null {
+    if (t.startsWith("sharp")) return <IconAlertTriangle size={14} />;
+    if (t.startsWith("dull")) return <IconScale size={14} />;
+    if (t.startsWith("burning")) return <IconFlame size={14} />;
+    if (t.startsWith("throbbing")) return <IconHeartbeat size={14} />;
+    if (t.startsWith("cramping")) return <IconDroplet size={14} />;
+    if (t.startsWith("pressure")) return <IconHeartbeat size={14} />;
+    return null;
+}
+
+function getSeverityIcon(t: string): ReactNode | null {
+    if (t === "mild") return <IconMoodSmile size={14} />;
+    if (t === "moderate") return <IconScale size={14} />;
+    if (t === "severe") return <IconMoodSad size={14} />;
+    if (t.startsWith("sudden")) return <IconAlertTriangle size={14} />;
+    if (t.startsWith("gradual") || t.startsWith("chronic")) return <IconClock size={14} />;
+    return null;
+}
+
+function getOptionIcon(opt: string): ReactNode | null {
+    const t = opt.toLowerCase();
+    return getTemperatureIcon(t) ?? getPainIcon(t) ?? getSeverityIcon(t);
 }
 
 // ── Question Card ─────────────────────────────────────────────────────────────
@@ -474,31 +635,9 @@ export function QuestionCard({ data, toolCallId, isAnswered, isLoading, onAnswer
                 {data.type === "single_choice" && data.options && (
                     <Chip.Group>
                         <Group gap="xs" wrap="wrap">
-                            {data.options.map((opt) => (
-                                <Chip
-                                    key={opt}
-                                    value={opt}
-                                    color="primary"
-                                    variant="outline"
-                                    size="md"
-                                    radius="xl"
-                                    disabled={disabled}
-                                    checked={false}
-                                    onChange={() => { if (!disabled) onAnswer(toolCallId, opt); }}
-                                    styles={{ label: { cursor: disabled ? "default" : "pointer", fontWeight: 500 } }}
-                                >
-                                    {opt}
-                                </Chip>
-                            ))}
-                        </Group>
-                    </Chip.Group>
-                )}
-
-                {data.type === "multi_choice" && data.options && (
-                    <Stack gap="sm">
-                        <Chip.Group multiple value={multiSelected} onChange={disabled ? undefined : setMultiSelected}>
-                            <Group gap="xs" wrap="wrap">
-                                {data.options.map((opt) => (
+                            {data.options.map((opt) => {
+                                const icon = getOptionIcon(opt);
+                                return (
                                     <Chip
                                         key={opt}
                                         value={opt}
@@ -507,11 +646,39 @@ export function QuestionCard({ data, toolCallId, isAnswered, isLoading, onAnswer
                                         size="md"
                                         radius="xl"
                                         disabled={disabled}
+                                        checked={false}
+                                        onChange={() => { if (!disabled) onAnswer(toolCallId, opt); }}
                                         styles={{ label: { cursor: disabled ? "default" : "pointer", fontWeight: 500 } }}
                                     >
-                                        {opt}
+                                        {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
                                     </Chip>
-                                ))}
+                                );
+                            })}
+                        </Group>
+                    </Chip.Group>
+                )}
+
+                {data.type === "multi_choice" && data.options && (
+                    <Stack gap="sm">
+                        <Chip.Group multiple value={multiSelected} onChange={disabled ? undefined : setMultiSelected}>
+                            <Group gap="xs" wrap="wrap">
+                                {data.options.map((opt) => {
+                                    const icon = getOptionIcon(opt);
+                                    return (
+                                        <Chip
+                                            key={opt}
+                                            value={opt}
+                                            color="primary"
+                                            variant="outline"
+                                            size="md"
+                                            radius="xl"
+                                            disabled={disabled}
+                                            styles={{ label: { cursor: disabled ? "default" : "pointer", fontWeight: 500 } }}
+                                        >
+                                            {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
+                                        </Chip>
+                                    );
+                                })}
                             </Group>
                         </Chip.Group>
                         {!disabled && (
@@ -576,7 +743,10 @@ export function NextStepsCard({ data }: Readonly<{ data: NextStepsInput }>) {
                 <Stack gap="sm">
                     <Group gap="xs">
                         <ThemeIcon size={28} radius="md" color="primary" variant="light"><IconChecklist size={15} /></ThemeIcon>
-                        <Box><Text fw={700} size="sm">What to Do Next</Text><Text size="xs" c="dimmed">{data.condition}</Text></Box>
+                        <Box>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Next Steps</Text>
+                            <Text fw={700} size="sm">{data.condition}</Text>
+                        </Box>
                     </Group>
 
                     {/* Right Now — always visible */}
@@ -634,49 +804,6 @@ export function NextStepsCard({ data }: Readonly<{ data: NextStepsInput }>) {
                     <IconChevronDown size={13} color="var(--mantine-color-dimmed)" style={{ transform: moreOpen ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }} />
                 </UnstyledButton>
             )}
-        </Paper>
-    );
-}
-
-// ── Dos & Don'ts Card ─────────────────────────────────────────────────────────
-
-export function DosDontsCard({ data }: Readonly<{ data: DosDontsInput }>) {
-    return (
-        <Paper withBorder radius="lg" p="md" style={{ borderLeft: "4px solid var(--mantine-color-teal-5)" }}>
-            <Stack gap="sm">
-                <Group gap="xs">
-                    <ThemeIcon size={28} radius="md" color="teal" variant="light"><IconListCheck size={15} /></ThemeIcon>
-                    <Box><Text fw={700} size="sm">Do's &amp; Don'ts</Text><Text size="xs" c="dimmed">{data.condition}</Text></Box>
-                </Group>
-                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md" pl={36}>
-                    {data.dos.length > 0 && (
-                        <Stack gap={6}>
-                            <Text size="xs" fw={700} c="teal" tt="uppercase" style={{ letterSpacing: "0.5px" }}>Do</Text>
-                            {data.dos.map((d, i) => (
-                                <Box key={i}>
-                                    <Group gap={6} wrap="nowrap" align="flex-start">
-                                        <IconCheck size={13} color="var(--mantine-color-teal-6)" style={{ marginTop: 2, flexShrink: 0 }} />
-                                        <Box><Text size="sm" fw={500}>{d.action}</Text><Text size="xs" c="dimmed">{d.reason}</Text></Box>
-                                    </Group>
-                                </Box>
-                            ))}
-                        </Stack>
-                    )}
-                    {data.donts.length > 0 && (
-                        <Stack gap={6}>
-                            <Text size="xs" fw={700} c="red" tt="uppercase" style={{ letterSpacing: "0.5px" }}>Don't</Text>
-                            {data.donts.map((d, i) => (
-                                <Box key={i}>
-                                    <Group gap={6} wrap="nowrap" align="flex-start">
-                                        <IconX size={13} color="var(--mantine-color-red-6)" style={{ marginTop: 2, flexShrink: 0 }} />
-                                        <Box><Text size="sm" fw={500}>{d.action}</Text><Text size="xs" c="dimmed">{d.reason}</Text></Box>
-                                    </Group>
-                                </Box>
-                            ))}
-                        </Stack>
-                    )}
-                </SimpleGrid>
-            </Stack>
         </Paper>
     );
 }
@@ -771,9 +898,9 @@ export function DietPlanCard({ data }: Readonly<{ data: DietPlanInput }>) {
                             <IconSalad size={22} />
                         </ThemeIcon>
                         <Box style={{ minWidth: 0 }}>
-                            <Text fw={700} size="sm" lh={1.2}>Professional Diet Plan</Text>
-                            <Text size="xs" c="dimmed" mb={6}>{data.condition}</Text>
-                            <Group gap={6} wrap="wrap">
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Diet Plan</Text>
+                            <Text fw={700} size="sm" lh={1.2}>{data.condition}</Text>
+                            <Group gap={6} wrap="wrap" mt={4}>
                                 {data.weeklyWeightLossEstimate && (
                                     <Badge size="xs" color="green" variant="filled" radius="sm" leftSection={<IconScale size={10} />}>
                                         {data.weeklyWeightLossEstimate}
@@ -983,8 +1110,8 @@ export function SoapNoteCard({ data }: Readonly<{ data: SoapNoteInput }>) {
                     <Group gap="xs" wrap="nowrap" align="center" style={{ flex: 1, minWidth: 0 }}>
                         <ThemeIcon size={28} radius="md" color="violet" variant="light" style={{ flexShrink: 0 }}><IconNotes size={15} /></ThemeIcon>
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={700} size="sm">Clinical Summary</Text>
-                            <Text size="xs" c="dimmed">{data.condition} · for your records</Text>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Clinical Note</Text>
+                            <Text fw={700} size="sm">{data.condition}</Text>
                         </Box>
                     </Group>
                     <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
@@ -1185,8 +1312,8 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                     <Group gap="xs">
                         <ThemeIcon size={28} radius="md" color="cyan" variant="light"><IconDental size={15} /></ThemeIcon>
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={700} size="sm">OPG Dental Chart</Text>
-                            <Text size="xs" c="dimmed">{data.summary}</Text>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Dental Chart</Text>
+                            <Text fw={700} size="sm">{data.summary}</Text>
                         </Box>
                     </Group>
                     {abnormal.length > 0 && <Badge color="orange" size="sm">{abnormal.length} finding{abnormal.length > 1 ? "s" : ""}</Badge>}
@@ -1316,8 +1443,8 @@ export function SuggestActionsCard({
                         <IconChecklist size={15} />
                     </ThemeIcon>
                     <Box>
-                        <Text fw={700} size="sm">What would you like to explore?</Text>
-                        <Text size="xs" c="dimmed">{data.condition} — tap an option below</Text>
+                        <Text fw={700} size="sm">{data.condition}</Text>
+                        <Text size="xs" c="dimmed">What would you like to do next?</Text>
                     </Box>
                 </Group>
                 <Group gap={8} wrap="wrap" pl={36}>
@@ -1415,9 +1542,6 @@ export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLea
 
     const nextSteps = extractToolInput<NextStepsInput>(part, "nextSteps");
     if (nextSteps) return <NextStepsCard data={nextSteps} />;
-
-    const dosDonts = extractToolInput<DosDontsInput>(part, "dosDonts");
-    if (dosDonts) return <DosDontsCard data={dosDonts} />;
 
     const dietPlan = extractToolInput<DietPlanInput>(part, "dietPlan");
     if (dietPlan) return <DietPlanCard data={dietPlan} />;

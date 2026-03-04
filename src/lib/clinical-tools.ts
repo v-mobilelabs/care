@@ -2,6 +2,7 @@ import { tool, zodSchema } from "ai";
 import { z } from "zod";
 import { CreateSoapNoteUseCase } from "@/data/soap-notes";
 import { CreateAssessmentUseCase } from "@/data/assessments";
+import { CreateVitalUseCase } from "@/data/vitals";
 
 // Each tool has an execute() that returns a simple acknowledgement.
 // This is required so the model receives a tool result and continues
@@ -248,7 +249,7 @@ export const completeAssessmentTool = tool({
 // ── Ask Question (interactive UI) ────────────────────────────────────────────
 export const askQuestionTool = tool({
   description:
-    "Ask the patient a structured clinical follow-up question. Use this for ALL follow-up questions — it renders interactive UI (Yes/No buttons, chips, or a slider) instead of plain text. Choose the type that best fits the question. PREFER single_choice or multi_choice over free_text wherever possible — only use free_text when the answer cannot be covered by a finite option list. Rules: asking about age → single_choice with options ['Under 18', '18–29', '30–44', '45–59', '60–74', '75 or older']; asking about health goals → single_choice with goal options; asking about symptoms → multi_choice with options; asking about pain level or severity → scale; asking about location/country → free_text.",
+    "Ask the patient a structured clinical follow-up question. Use this for ALL follow-up questions — it renders interactive UI (Yes/No buttons, chips, or a slider) instead of plain text. Choose the type that best fits the question. PREFER single_choice or multi_choice over free_text wherever possible — only use free_text when the answer cannot be covered by a finite option list. Rules: asking about age → single_choice with options ['Under 18', '18–29', '30–44', '45–59', '60–74', '75 or older']; asking about health goals → single_choice with goal options; asking about symptoms → multi_choice with options; asking about pain level or severity → scale; asking about location/country → free_text. STANDARDISED OPTION SETS — always use these exact labels when asking about these topics: temperature → ['Normal (below 37.5°C)', 'Low-grade fever (37.5–38.5°C)', 'High fever (38.5–40°C)', 'Very high (above 40°C)', 'Haven't measured']; pain character → ['Sharp / stabbing', 'Dull / aching', 'Burning', 'Throbbing / pulsating', 'Cramping', 'Pressure / tightness']; severity → ['Mild', 'Moderate', 'Severe']; onset → ['Sudden (minutes to hours)', 'Gradual (days)', 'Chronic / ongoing (weeks or more)'].",
   inputSchema: zodSchema(
     z.object({
       question: z.string().describe("The clinical question to ask the patient"),
@@ -308,42 +309,13 @@ export const nextStepsTool = tool({
   execute: async ({ condition }) => ({ recorded: true, condition }),
 });
 
-// ── Do's and Don'ts ───────────────────────────────────────────────────────────
-export const dosDontsTool = tool({
-  description:
-    "Provide condition-specific lifestyle do's and don'ts. Only call this when the user explicitly requests it (e.g. taps the \"Do's & Don'ts\" chip or asks for it). Do NOT auto-fire after recordCondition.",
-  inputSchema: zodSchema(
-    z.object({
-      condition: z.string().describe("The identified condition"),
-      dos: z
-        .array(
-          z.object({
-            action: z.string().describe("What the patient should do"),
-            reason: z
-              .string()
-              .describe("Brief plain-language reason why it helps"),
-          }),
-        )
-        .describe("Helpful actions and habits"),
-      donts: z
-        .array(
-          z.object({
-            action: z.string().describe("What the patient should avoid"),
-            reason: z
-              .string()
-              .describe("Brief plain-language reason why it's harmful"),
-          }),
-        )
-        .describe("Things to avoid"),
-    }),
-  ),
-  execute: async ({ condition }) => ({ recorded: true, condition }),
-});
-
 // ── Suggest Actions ───────────────────────────────────────────────────────────
 export const suggestActionsTool = tool({
   description:
-    "Call this tool immediately after the user responds to the Health Records yes/no question (Step 1.5). Present 3–4 action chips the patient can tap to choose what to explore next. Always include a 'Continue assessment' chip. This gates nextSteps/dosDonts/dietPlan — those must NOT be called until the user explicitly requests them via a chip or direct ask.",
+    "Present action chips to let the user choose what to do next. Call this in TWO scenarios:\n\n" +
+    "SCENARIO A — Condition identified from a symptom/text (call immediately after the user responds to the Health Records yes/no question, Step 1.5). Present exactly 4 chips in this fixed order: (1) label 'Medications' → message 'What medications are recommended for [condition]?', (2) label 'Suggest tests' → message 'What tests should I get for [condition]?', (3) label 'Diet advice' → message 'What diet should I follow for [condition]?', (4) label 'Continue assessment' → message 'Continue the assessment for [condition]'.\n\n" +
+    "SCENARIO B — Condition identified from an uploaded test report / lab result / imaging (call immediately after recordCondition and soapNote, instead of auto-firing all tools). Present exactly 4 chips in this fixed order: (1) label 'Medications' → message 'What medications are recommended for [condition]?', (2) label 'Diet plan' → message 'What diet should I follow for [condition]?', (3) label 'Book appointment' → message 'I need an appointment recommendation for [condition]', (4) label 'Full analysis' → message 'Give me the full analysis of my [condition] test results'.\n\n" +
+    "In both scenarios: nextSteps, dietPlan, createPrescription, addMedicine, bookAppointment, orderProcedure, and completeAssessment must NOT be called unless the user explicitly selects the relevant chip or asks in their own words.",
   inputSchema: zodSchema(
     z.object({
       condition: z.string().describe("The identified condition name"),
@@ -360,9 +332,10 @@ export const suggestActionsTool = tool({
               ),
           }),
         )
-        .min(2)
-        .max(4)
-        .describe("2–4 suggested next actions relevant to this condition"),
+        .length(4)
+        .describe(
+          "Exactly 4 chips: Medications, Suggest tests, Diet advice, Continue assessment",
+        ),
     }),
   ),
   execute: async ({ condition }) => ({ shown: true, condition }),
@@ -685,11 +658,402 @@ export const auditCTool = tool({
 
 // ── Factory — binds soapNote execution to a specific user+session ────────────
 
+// ── Risk Score ────────────────────────────────────────────────────────────────
+export const riskScoreTool = tool({
+  description:
+    "Display a validated clinical risk score as a formatted card. Call this when a " +
+    "risk calculation is clinically relevant: HEART score for chest pain, Framingham " +
+    "CVD 10-year risk after reviewing a lipid panel (patient ≥30 yrs), BMI classification " +
+    "when height and weight are both known, CKD staging when eGFR or creatinine is " +
+    "available, FRAX fracture risk for osteoporosis. Compute the score first using the " +
+    "validated algorithm, then call this tool.",
+  inputSchema: zodSchema(
+    z.object({
+      name: z
+        .enum([
+          "HEART",
+          "Framingham CVD",
+          "BMI",
+          "CKD Stage",
+          "FRAX",
+          "Charlson CCI",
+          "AUDIT",
+          "IPSS",
+          "NYHA",
+          "GOLD",
+        ])
+        .describe("Risk score or staging system name"),
+      score: z
+        .union([z.number(), z.string()])
+        .describe(
+          "Computed numeric score or stage label (e.g. 7, 'Stage 3a', '28.4%')",
+        ),
+      riskCategory: z
+        .enum(["low", "moderate", "high", "very_high", "emergency"])
+        .describe("Risk category derived from the score"),
+      interpretation: z
+        .string()
+        .describe(
+          "Plain-language interpretation of what the score means for this patient",
+        ),
+      components: z
+        .array(
+          z.object({
+            label: z
+              .string()
+              .describe("Score component name (e.g. 'History', 'ECG', 'Age')"),
+            value: z
+              .union([z.string(), z.number()])
+              .describe("Patient's value for this component"),
+            points: z
+              .number()
+              .optional()
+              .describe("Points contributed to the total score"),
+          }),
+        )
+        .optional()
+        .describe("Individual scoring components broken down for transparency"),
+      guideline: z
+        .string()
+        .describe(
+          "Guideline or source (e.g. 'AHA/ACC 2019', 'KDIGO 2024', 'WHO')",
+        ),
+      recommendation: z
+        .string()
+        .describe(
+          "Guideline-recommended next step based on this score category",
+        ),
+    }),
+  ),
+  execute: async ({ name, score, riskCategory }) => ({
+    recorded: true,
+    riskScore: name,
+    score,
+    riskCategory,
+  }),
+});
+
+// ── Drug Interaction Alert ─────────────────────────────────────────────────────
+export const drugInteractionTool = tool({
+  description:
+    "Flag clinically significant drug-drug or drug-condition interactions. Call this " +
+    "immediately after createPrescription or addMedicine when the patient has existing " +
+    "active medications in PATIENT HEALTH HISTORY. Only call if at least one interaction " +
+    "is identified — do NOT call just to confirm 'no interactions found'.",
+  inputSchema: zodSchema(
+    z.object({
+      interactions: z
+        .array(
+          z.object({
+            drug1: z.string().describe("First drug or substance"),
+            drug2: z
+              .string()
+              .describe(
+                "Second drug, substance, or condition interacting with drug1",
+              ),
+            severity: z
+              .enum(["minor", "moderate", "major", "contraindicated"])
+              .describe("Clinical severity of the interaction"),
+            mechanism: z
+              .string()
+              .describe(
+                "Brief pharmacokinetic or pharmacodynamic mechanism (1 sentence)",
+              ),
+            clinicalEffect: z
+              .string()
+              .describe("What the patient might experience (plain language)"),
+            management: z
+              .string()
+              .describe(
+                "What to do — monitor, separate doses, use alternative, avoid entirely",
+              ),
+          }),
+        )
+        .min(1)
+        .describe("All identified clinically significant interactions"),
+      summary: z
+        .string()
+        .describe(
+          "1–2 sentence plain-language summary of the most important interaction(s)",
+        ),
+      requiresPhysicianReview: z
+        .boolean()
+        .describe("True if any interaction is major or contraindicated"),
+    }),
+  ),
+  execute: async ({ interactions, requiresPhysicianReview }) => ({
+    recorded: true,
+    interactionCount: interactions.length,
+    requiresPhysicianReview,
+  }),
+});
+
+// ── Vaccination Review ─────────────────────────────────────────────────────────
+export const vaccinationReviewTool = tool({
+  description:
+    "Review the patient's immunisation status and flag gaps or overdue vaccines. " +
+    "Call this when: (a) the user asks about vaccines/immunisations, (b) a condition " +
+    "is identified that changes vaccination requirements (diabetes, asthma, COPD, " +
+    "immunosuppression, CKD, asplenia), (c) the user is preparing for travel. " +
+    "Base recommendations on WHO + ACIP schedules adjusted for age, country, and conditions.",
+  inputSchema: zodSchema(
+    z.object({
+      ageGroup: z
+        .string()
+        .describe(
+          "Patient age group (e.g. 'Adult 19–49', 'Child under 5', 'Older adult 65+')",
+        ),
+      recommended: z
+        .array(
+          z.object({
+            vaccine: z
+              .string()
+              .describe(
+                "Vaccine name (e.g. 'Influenza', 'Pneumococcal PCV15', 'HPV')",
+              ),
+            indication: z
+              .string()
+              .describe(
+                "Why it is recommended for this patient (age, condition, travel, etc.)",
+              ),
+            schedule: z
+              .string()
+              .describe(
+                "Dosing schedule (e.g. 'Annual', '2-dose series 6 months apart')",
+              ),
+            urgency: z
+              .enum(["routine", "recommended", "high_priority"])
+              .describe("Priority level for this patient"),
+          }),
+        )
+        .describe("Vaccines that should be discussed or administered"),
+      upToDate: z
+        .array(z.string())
+        .optional()
+        .describe("Vaccines the patient is already current on, if known"),
+      travelVaccines: z
+        .array(
+          z.object({
+            vaccine: z.string(),
+            destination: z.string(),
+            minimumLeadTime: z
+              .string()
+              .optional()
+              .describe(
+                "How far in advance to get vaccinated (e.g. '4–6 weeks before travel')",
+              ),
+          }),
+        )
+        .optional()
+        .describe("Additional vaccines recommended for travel destinations"),
+      notes: z
+        .string()
+        .describe(
+          "Key considerations — contraindications, live vaccine precautions, etc.",
+        ),
+    }),
+  ),
+  execute: async ({ recommended }) => ({
+    recorded: true,
+    vaccineCount: recommended.length,
+  }),
+});
+
+// ── Symptom Timeline ──────────────────────────────────────────────────────────
+export const symptomTimelineTool = tool({
+  description:
+    "Log and display a visual timeline of symptom episodes for recurring or episodic " +
+    "conditions (migraines, GERD, asthma, joint flares, mood episodes, seizures). " +
+    "Call when the patient has described ≥2 episodes with enough timing or trigger detail. " +
+    "The pattern field should summarise what the timeline reveals — e.g. " +
+    "'Episodes cluster every 3–4 weeks, often triggered by stress and poor sleep'.",
+  inputSchema: zodSchema(
+    z.object({
+      condition: z.string().describe("The recurring condition being tracked"),
+      events: z
+        .array(
+          z.object({
+            date: z
+              .string()
+              .describe(
+                "Date or timeframe of the episode (ISO-8601 or descriptive, e.g. 'last Tuesday', '3 weeks ago')",
+              ),
+            symptom: z
+              .string()
+              .describe("Primary symptom experienced during this episode"),
+            severity: z
+              .enum(["mild", "moderate", "severe"])
+              .describe("Severity of this episode"),
+            duration: z
+              .string()
+              .optional()
+              .describe(
+                "How long the episode lasted (e.g. '4 hours', '2 days')",
+              ),
+            triggers: z
+              .array(z.string())
+              .optional()
+              .describe("Known or suspected triggers for this episode"),
+            notes: z
+              .string()
+              .optional()
+              .describe("Additional context the patient provided"),
+          }),
+        )
+        .min(2)
+        .describe(
+          "Chronological list of symptom episodes — minimum 2 required",
+        ),
+      pattern: z
+        .string()
+        .describe(
+          "Plain-language summary of the pattern, frequency, and any identified triggers",
+        ),
+      commonTriggers: z
+        .array(z.string())
+        .optional()
+        .describe("Triggers that appear across multiple episodes"),
+      clinicalSignificance: z
+        .string()
+        .describe(
+          "What this pattern means clinically and what it suggests for management",
+        ),
+    }),
+  ),
+  execute: async ({ condition, events }) => ({
+    recorded: true,
+    condition,
+    episodeCount: events.length,
+  }),
+});
+
 export function createClinicalTools(ctx: {
   userId: string;
   sessionId: string;
   dependentId?: string;
 }) {
+  const logVitalsTool = tool({
+    description:
+      "Silently save vital sign measurements into the patient's Health Records. " +
+      "Call this whenever the patient mentions or a report contains measurable vitals: " +
+      "blood pressure, heart rate, blood glucose, oxygen saturation (SpO2), body temperature, " +
+      "or respiratory rate. Extract values immediately — do NOT ask permission first. " +
+      "Conversions: blood glucose mg/dL → mmol/L divide by 18; temperature °F → °C = (F−32)×5÷9. " +
+      "Note the measurement context in the 'note' field (e.g. 'fasting', 'after exercise', 'at rest'). " +
+      "This is a background save — do NOT announce it in text; continue directly with the clinical assessment.",
+    inputSchema: zodSchema(
+      z.object({
+        sex: z
+          .enum(["male", "female"])
+          .optional()
+          .describe("Biological sex"),
+        waistCm: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Waist circumference in cm"),
+        hipCm: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Hip circumference in cm"),
+        neckCm: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Neck circumference in cm"),
+        activityLevel: z
+          .enum(["sedentary", "light", "moderate", "active", "very_active"])
+          .optional()
+          .describe("Physical activity level"),
+        systolicBp: z
+          .number()
+          .int()
+          .min(50)
+          .max(300)
+          .optional()
+          .describe("Systolic BP in mmHg"),
+        diastolicBp: z
+          .number()
+          .int()
+          .min(20)
+          .max(200)
+          .optional()
+          .describe("Diastolic BP in mmHg"),
+        restingHr: z
+          .number()
+          .int()
+          .min(20)
+          .max(300)
+          .optional()
+          .describe("Heart rate in bpm"),
+        spo2: z
+          .number()
+          .min(50)
+          .max(100)
+          .optional()
+          .describe("Oxygen saturation in %"),
+        temperatureC: z
+          .number()
+          .min(30)
+          .max(45)
+          .optional()
+          .describe("Body temperature in °C"),
+        respiratoryRate: z
+          .number()
+          .int()
+          .min(4)
+          .max(60)
+          .optional()
+          .describe("Respiratory rate in breaths/min"),
+        glucoseMmol: z
+          .number()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("Blood glucose in mmol/L"),
+        note: z
+          .string()
+          .optional()
+          .describe(
+            "Measurement context (e.g. 'fasting', 'post-meal', 'resting')",
+          ),
+        measuredAt: z
+          .string()
+          .optional()
+          .describe("ISO-8601 datetime of measurement; omit to default to now"),
+      }),
+    ),
+    execute: async (input) => {
+      void (async () => {
+        try {
+          await new CreateVitalUseCase(ctx.dependentId).execute(
+            CreateVitalUseCase.validate({
+              userId: ctx.userId,
+              sex: input.sex,
+              waistCm: input.waistCm,
+              hipCm: input.hipCm,
+              neckCm: input.neckCm,
+              activityLevel: input.activityLevel,
+              systolicBp: input.systolicBp,
+              diastolicBp: input.diastolicBp,
+              restingHr: input.restingHr,
+              spo2: input.spo2,
+              temperatureC: input.temperatureC,
+              respiratoryRate: input.respiratoryRate,
+              glucoseMmol: input.glucoseMmol,
+              note: input.note,
+              measuredAt: input.measuredAt,
+            }),
+          );
+        } catch {
+          // Non-fatal — don't interrupt the stream
+        }
+      })();
+      return { saved: true };
+    },
+  });
+
   const soapNoteTool = tool({
     description:
       "Generate a structured SOAP note (Subjective, Objective, Assessment, Plan) summarising the clinical encounter. Only call this when the user explicitly requests it (e.g. taps the 'Clinical Summary' chip or asks for a clinical note). Do NOT auto-fire.",
@@ -826,7 +1190,6 @@ export function createClinicalTools(ctx: {
     completeAssessment: completeAssessmentTool,
     askQuestion: askQuestionTool,
     nextSteps: nextStepsTool,
-    dosDonts: dosDontsTool,
     dietPlan: dietPlanTool,
     soapNote: soapNoteTool,
     dentalChart: dentalChartTool,
@@ -834,5 +1197,10 @@ export function createClinicalTools(ctx: {
     phq9: phq9Tool,
     gad7: gad7Tool,
     auditC: auditCTool,
+    logVitals: logVitalsTool,
+    riskScore: riskScoreTool,
+    drugInteraction: drugInteractionTool,
+    vaccinationReview: vaccinationReviewTool,
+    symptomTimeline: symptomTimelineTool,
   } as const;
 }

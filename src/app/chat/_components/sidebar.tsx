@@ -3,15 +3,18 @@ import {
     ActionIcon,
     AppShell,
     Box,
+    Divider,
     Group,
     NavLink,
     ScrollArea,
     Select,
+    SimpleGrid,
     Skeleton,
     Stack,
     Text,
     ThemeIcon,
     Tooltip,
+    UnstyledButton,
     useComputedColorScheme,
     useMantineColorScheme,
 } from "@mantine/core";
@@ -21,6 +24,7 @@ import {
     IconChevronDown,
     IconClipboardHeart,
     IconClipboardList,
+    IconGauge,
     IconHeartbeat,
     IconFolder,
     IconHistory,
@@ -37,13 +41,16 @@ import {
     IconX,
 } from "@tabler/icons-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
     useSessionsQuery,
     useDeleteSessionMutation,
     useDependentsQuery,
 } from "@/app/chat/_query";
 import { useActiveProfile } from "@/app/chat/_context/active-profile-context";
+import { version } from "../../../../package.json";
+
+
 
 interface SidebarProps {
     sessionId: string;
@@ -51,6 +58,61 @@ interface SidebarProps {
     onSelectSession: (id: string) => void;
     onCloseMobile: () => void;
 }
+
+const navItemStyle = { borderRadius: 8, paddingTop: 8, paddingBottom: 8 };
+
+interface NavGridItemProps {
+    icon: React.ReactNode;
+    label: string;
+    active: boolean;
+    onClick: () => void;
+}
+
+function NavGridItem({ icon, label, active, onClick }: Readonly<NavGridItemProps>) {
+    const [hovered, setHovered] = useState(false);
+    return (
+        <UnstyledButton
+            onClick={onClick}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4,
+                padding: "8px 4px",
+                borderRadius: 10,
+                textAlign: "center",
+                background: active
+                    ? "light-dark(var(--mantine-color-primary-0), rgba(99,102,241,0.15))"
+                    : hovered
+                        ? "light-dark(var(--mantine-color-gray-1), rgba(255,255,255,0.06))"
+                        : "transparent",
+                color: active
+                    ? "var(--mantine-color-primary-6)"
+                    : hovered
+                        ? "light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-2))"
+                        : "var(--mantine-color-dimmed)",
+                transform: hovered && !active ? "translateY(-1px)" : "none",
+                transition: "background 150ms ease, color 150ms ease, transform 150ms ease",
+            }}
+        >
+            {icon}
+            <Text size="10px" fw={active ? 600 : 400} lh={1.2} style={{ wordBreak: "break-word" }}>
+                {label}
+            </Text>
+        </UnstyledButton>
+    );
+}
+const sectionLabelStyle: React.CSSProperties = {
+    textTransform: "uppercase",
+    letterSpacing: "0.6px",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--mantine-color-dimmed)",
+    padding: "4px 8px 2px",
+};
 
 export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }: Readonly<SidebarProps>) {
     const { data: sessions = [], isLoading: sessionsLoading } = useSessionsQuery();
@@ -67,24 +129,36 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
         { value: "__self__", label: "My Profile", icon: <IconUser size={16} /> },
         ...dependents.map((d) => ({
             value: d.id,
-            label: `${d.firstName}${d.lastName ? ` ${d.lastName}` : ""}`,
+            label: [d.firstName, d.lastName].filter(Boolean).join(" "),
             icon: <IconUsers size={16} />,
         })),
     ];
 
+    function nav(href: string) {
+        startNavTransition(() => { router.push(href); });
+        onCloseMobile();
+    }
+
     function handleDelete(id: string, e: React.MouseEvent) {
         e.stopPropagation();
+
+        function onDeleteSuccess() {
+            if (id !== sessionId) return;
+            const next = sessions.find((s) => s.id !== id);
+            if (next) {
+                onSelectSession(next.id);
+            } else {
+                onNewChat();
+            }
+        }
+
         modals.openConfirmModal({
-            title: "Delete assessment?",
+            title: "Delete session?",
             children: <Text size="sm">This will permanently remove this session from your history. This cannot be undone.</Text>,
             labels: { confirm: "Delete", cancel: "Cancel" },
             confirmProps: { color: "red" },
             onConfirm: () => {
-                deleteSession.mutate(id, {
-                    onSuccess: () => {
-                        if (id === sessionId) onNewChat();
-                    },
-                });
+                deleteSession.mutate(id, { onSuccess: onDeleteSuccess });
             },
         });
     }
@@ -99,7 +173,7 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                 overflow: "hidden",
             }}
         >
-            {/* Brand + New Chat */}
+            {/* Brand */}
             <Box
                 px="md"
                 pt="md"
@@ -131,6 +205,7 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                     </ActionIcon>
                 </Group>
             </Box>
+
             {/* Profile switcher */}
             <Box
                 px="md"
@@ -148,7 +223,6 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                         const id = v === "__self__" ? undefined : (v ?? undefined);
                         const label = profileOptions.find((o) => o.value === (v ?? "__self__"))?.label ?? "My Profile";
                         switchProfile(id, label);
-                        // Start a fresh session so the new chat is tagged with the correct profile.
                         onNewChat();
                     }}
                     data={profileOptions.map(({ value, label }) => ({ value, label }))}
@@ -158,176 +232,191 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                     aria-label="Switch profile"
                 />
             </Box>
-            {/* History label */}
-            <Box px="md" pt="sm" pb={4} style={{ flexShrink: 0 }}>
-                <Text
-                    size="sm"
-                    c="dimmed"
-                    fw={600}
-                    style={{ textTransform: "uppercase", letterSpacing: "0.6px" }}
-                >
-                    History
-                </Text>
-            </Box>
 
-            {/* Session list */}
-            <ScrollArea style={{ flex: 1 }} px={6}>
-                {(() => {
-                    if (sessionsLoading) {
+            {/* Session history — grows to fill all available space, scrolls independently */}
+            <Box
+                px={6}
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), rgba(255,255,255,0.06))",
+                }}
+            >
+                <Box px={2} pt="sm" pb={4} style={{ flexShrink: 0 }}>
+                    <Text style={sectionLabelStyle}>History</Text>
+                </Box>
+                <ScrollArea style={{ flex: 1 }}>
+                    {(() => {
+                        if (sessionsLoading) {
+                            return (
+                                <Stack gap={4} pt={4} pb="sm" px={2}>
+                                    {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e"].map((k) => (
+                                        <Skeleton key={k} height={36} radius="md" />
+                                    ))}
+                                </Stack>
+                            );
+                        }
+                        if (sessions.length === 0) {
+                            return (
+                                <Box pb="sm" style={{ textAlign: "center" }}>
+                                    <Text size="sm" c="dimmed">No previous sessions</Text>
+                                </Box>
+                            );
+                        }
                         return (
-                            <Stack gap={4} pt={4} pb="md" px={4}>
-                                {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e"].map((k) => (
-                                    <Skeleton key={k} height={38} radius="md" />
+                            <Stack gap={3} pb="sm">
+                                {sessions.map((s) => (
+                                    <Group
+                                        key={s.id}
+                                        gap={0}
+                                        wrap="nowrap"
+                                        style={{
+                                            borderRadius: 8,
+                                            position: "relative",
+                                            transition: "opacity 150ms ease",
+                                            opacity: deleteSession.isPending && deleteSession.variables === s.id ? 0.4 : 1,
+                                        }}
+                                    >
+                                        <Box style={{ flex: 1, minWidth: 0 }}>
+                                            <NavLink
+                                                label={
+                                                    <Text size="sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {s.title}
+                                                    </Text>
+                                                }
+                                                leftSection={<IconMessage size={16} />}
+                                                active={s.id === sessionId}
+                                                onClick={() => { onSelectSession(s.id); onCloseMobile(); }}
+                                                style={navItemStyle}
+                                            />
+                                        </Box>
+                                        <ActionIcon
+                                            size={30}
+                                            variant="subtle"
+                                            color="gray"
+                                            style={{ flexShrink: 0, margin: "0 2px" }}
+                                            onClick={(e) => handleDelete(s.id, e)}
+                                            title="Delete session"
+                                            disabled={deleteSession.isPending}
+                                            loading={deleteSession.isPending && deleteSession.variables === s.id}
+                                        >
+                                            <IconTrash size={14} />
+                                        </ActionIcon>
+                                    </Group>
                                 ))}
                             </Stack>
                         );
-                    }
-                    if (sessions.length === 0) {
-                        return (
-                            <Box py="xl" style={{ textAlign: "center" }}>
-                                <Text size="sm" c="dimmed">No previous sessions</Text>
-                            </Box>
-                        );
-                    }
-                    return (
-                        <Stack gap={3} pb="md">
-                            {sessions.map((s) => (
-                                <Group
-                                    key={s.id}
-                                    gap={0}
-                                    wrap="nowrap"
-                                    style={{
-                                        borderRadius: 8,
-                                        position: "relative",
-                                        transition: "opacity 150ms ease",
-                                        opacity: deleteSession.isPending && deleteSession.variables === s.id ? 0.4 : 1,
-                                    }}
-                                >
-                                    <Box style={{ flex: 1, minWidth: 0 }}>
-                                        <NavLink
-                                            label={
-                                                <Text size="sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                    {s.title}
-                                                </Text>
-                                            }
-                                            leftSection={<IconMessage size={16} />}
-                                            active={s.id === sessionId}
-                                            onClick={() => { onSelectSession(s.id); onCloseMobile(); }}
-                                            style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
-                                        />
-                                    </Box>
-                                    <ActionIcon
-                                        size={30}
-                                        variant="subtle"
-                                        color="gray"
-                                        style={{ flexShrink: 0, margin: "0 2px" }}
-                                        onClick={(e) => handleDelete(s.id, e)}
-                                        title="Delete session"
-                                        disabled={deleteSession.isPending}
-                                        loading={deleteSession.isPending && deleteSession.variables === s.id}
-                                    >
-                                        <IconTrash size={14} />
-                                    </ActionIcon>
-                                </Group>
-                            ))}
-                        </Stack>
-                    );
-                })()}
-            </ScrollArea>
+                    })()}
+                </ScrollArea>
+            </Box>
 
-            {/* Bottom nav */}
-            <Box
-                px={6}
-                py="xs"
-                style={{
-                    flexShrink: 0,
-                    borderTop: "1px solid light-dark(var(--mantine-color-gray-2), rgba(255,255,255,0.06))",
-                }}
-            >
-                <Stack gap={2}>
-                    <NavLink
-                        label={<Text size="sm">Search History</Text>}
-                        leftSection={<IconHistory size={16} />}
-                        active={pathname === "/chat/history"}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/history"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
-                    />
-                    <NavLink
-                        label={<Text size="sm">My Assessments</Text>}
-                        leftSection={<IconClipboardHeart size={16} />}
+            {/* Static nav — 3-col icon grid, always fully visible */}
+            <Box px={6} py="xs" style={{ flexShrink: 0 }}>
+
+                {/* ── Health group ── */}
+                <Box px={2} pt={4} pb={2}>
+                    <Text style={sectionLabelStyle}>Health</Text>
+                </Box>
+                <SimpleGrid cols={3} spacing={4} pb={4}>
+                    <NavGridItem
+                        icon={<IconClipboardHeart size={18} />}
+                        label="Assessments"
                         active={pathname.startsWith("/chat/assessments")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/assessments"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/assessments")}
                     />
-                    <NavLink
-                        label={<Text size="sm">Health Records</Text>}
-                        leftSection={<IconHeartbeat size={16} />}
+                    <NavGridItem
+                        icon={<IconHeartbeat size={18} />}
+                        label="Health Records"
                         active={pathname.startsWith("/chat/health-records")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/health-records"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/health-records")}
                     />
-                    <NavLink label={<Text size="sm">My Doctors</Text>}
-                        leftSection={<IconStethoscope size={16} />}
-                        active={pathname.startsWith("/chat/doctors")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/doctors"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
-                    />
-                    <NavLink label={<Text size="sm">My Medications</Text>}
-                        leftSection={<IconCapsule size={16} />}
-                        active={pathname.startsWith("/chat/medications")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/medications"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
-                    />
-                    <NavLink
-                        label={<Text size="sm">Prescriptions</Text>}
-                        leftSection={<IconClipboardList size={16} />}
-                        active={pathname.startsWith("/chat/prescriptions")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/prescriptions"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
-                    />
-                    <NavLink
-                        label={<Text size="sm">Diet Plans</Text>}
-                        leftSection={<IconSalad size={16} />}
+                    <NavGridItem
+                        icon={<IconSalad size={18} />}
+                        label="Diet Plans"
                         active={pathname.startsWith("/chat/diet-plans")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/diet-plans"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/diet-plans")}
                     />
-                    <NavLink
-                        label={<Text size="sm">My Files</Text>}
-                        leftSection={<IconFolder size={16} />}
+                </SimpleGrid>
+
+                <Divider my="xs" />
+
+                {/* ── Clinical group ── */}
+                <Box px={2} pt={4} pb={2}>
+                    <Text style={sectionLabelStyle}>Clinical</Text>
+                </Box>
+                <SimpleGrid cols={3} spacing={4} pb={4}>
+                    <NavGridItem
+                        icon={<IconStethoscope size={18} />}
+                        label="My Doctors"
+                        active={pathname.startsWith("/chat/doctors")}
+                        onClick={() => nav("/chat/doctors")}
+                    />
+                    <NavGridItem
+                        icon={<IconCapsule size={18} />}
+                        label="Medications"
+                        active={pathname.startsWith("/chat/medications")}
+                        onClick={() => nav("/chat/medications")}
+                    />
+                    <NavGridItem
+                        icon={<IconClipboardList size={18} />}
+                        label="Prescriptions"
+                        active={pathname.startsWith("/chat/prescriptions")}
+                        onClick={() => nav("/chat/prescriptions")}
+                    />
+                </SimpleGrid>
+
+                <Divider my="xs" />
+
+                {/* ── Account group ── */}
+                <Box px={2} pt={4} pb={2}>
+                    <Text style={sectionLabelStyle}>Account</Text>
+                </Box>
+                <SimpleGrid cols={3} spacing={4}>
+                    <NavGridItem
+                        icon={<IconHistory size={18} />}
+                        label="History"
+                        active={pathname === "/chat/history"}
+                        onClick={() => nav("/chat/history")}
+                    />
+                    <NavGridItem
+                        icon={<IconFolder size={18} />}
+                        label="My Files"
                         active={pathname === "/chat/files"}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/files"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/files")}
                     />
-                    <NavLink
-                        label={<Text size="sm">Insurance</Text>}
-                        leftSection={<IconShield size={16} />}
+                    <NavGridItem
+                        icon={<IconShield size={18} />}
+                        label="Insurance"
                         active={pathname.startsWith("/chat/insurance")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/insurance"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/insurance")}
                     />
-                    <NavLink
-                        label={<Text size="sm">Family Members</Text>}
-                        leftSection={<IconUsers size={16} />}
+                    <NavGridItem
+                        icon={<IconUsers size={18} />}
+                        label="Family"
                         active={pathname.startsWith("/chat/family-members")}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/family-members"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/family-members")}
                     />
-                    <NavLink
-                        label={<Text size="sm">Profile</Text>}
-                        leftSection={<IconUser size={16} />}
+                    <NavGridItem
+                        icon={<IconUser size={18} />}
+                        label="Profile"
                         active={pathname === "/chat/profile"}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/profile"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/profile")}
                     />
-                    <NavLink
-                        label={<Text size="sm">FAQ & Help</Text>}
-                        leftSection={<IconQuestionMark size={16} />}
+                    <NavGridItem
+                        icon={<IconGauge size={18} />}
+                        label="Usage"
+                        active={pathname === "/chat/usage"}
+                        onClick={() => nav("/chat/usage")}
+                    />
+                    <NavGridItem
+                        icon={<IconQuestionMark size={18} />}
+                        label="FAQ & Help"
                         active={pathname === "/chat/faq"}
-                        onClick={() => { startNavTransition(() => { router.push("/chat/faq"); }); onCloseMobile(); }}
-                        style={{ borderRadius: 8, paddingTop: 8, paddingBottom: 8 }}
+                        onClick={() => nav("/chat/faq")}
                     />
-                </Stack>
+                </SimpleGrid>
             </Box>
 
             {/* Footer: color scheme toggle + copyright */}
@@ -342,6 +431,8 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                 <Group justify="space-between" align="center">
                     <Text size="xs" c="dimmed" lh={1.4}>
                         © 2026 CosmoOps Pvt Ltd
+                        <br />
+                        v{version}
                     </Text>
                     <Tooltip
                         label={computedColorScheme === "dark" ? "Light mode" : "Dark mode"}
