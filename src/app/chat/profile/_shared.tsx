@@ -6,6 +6,7 @@
 import {
     Box,
     Button,
+    Divider,
     Group,
     NumberInput,
     Select,
@@ -122,16 +123,36 @@ export function SectionHeader({
 
 // ── DependentForm ─────────────────────────────────────────────────────────────
 
+const SEX_DATA = [
+    { value: "male", label: "Male" },
+    { value: "female", label: "Female" },
+];
+
+const ACTIVITY_LEVEL_DATA = [
+    { value: "sedentary", label: "Sedentary — little or no exercise" },
+    { value: "light", label: "Light — 1–3 days / week" },
+    { value: "moderate", label: "Moderate — 3–5 days / week" },
+    { value: "active", label: "Active — 6–7 days / week" },
+    { value: "very_active", label: "Very Active — hard exercise daily" },
+];
+
 interface DependentFormValues {
     firstName: string;
     lastName: string;
     relationship: Relationship | "";
     dateOfBirth: Date | null;
+    sex: string;
     height: number | undefined;
     weight: number | undefined;
+    waistCm: number | undefined;
+    neckCm: number | undefined;
+    hipCm: number | undefined;
+    activityLevel: string;
     country: string;
     city: string;
 }
+
+type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
 
 export function DependentForm({
     existing,
@@ -140,7 +161,10 @@ export function DependentForm({
     existing?: DependentRecord;
     onSave: (data: {
         firstName: string; lastName: string; relationship: Relationship;
-        dateOfBirth?: string; height?: number; weight?: number;
+        dateOfBirth?: string; sex?: "male" | "female";
+        height?: number; weight?: number;
+        waistCm?: number; neckCm?: number; hipCm?: number;
+        activityLevel?: ActivityLevel;
         country?: string; city?: string;
     }) => void;
 }>) {
@@ -150,8 +174,13 @@ export function DependentForm({
             lastName: existing?.lastName ?? "",
             relationship: existing?.relationship ?? "",
             dateOfBirth: isoToDate(existing?.dateOfBirth),
+            sex: existing?.sex ?? "",
             height: existing?.height,
             weight: existing?.weight,
+            waistCm: existing?.waistCm,
+            neckCm: existing?.neckCm,
+            hipCm: existing?.hipCm,
+            activityLevel: existing?.activityLevel ?? "",
             country: existing?.country ?? "",
             city: existing?.city ?? "",
         },
@@ -167,8 +196,13 @@ export function DependentForm({
             lastName: v.lastName.trim(),
             relationship: v.relationship as Relationship,
             dateOfBirth: dateToIso(v.dateOfBirth),
+            sex: (v.sex as "male" | "female") || undefined,
             height: v.height,
             weight: v.weight,
+            waistCm: v.waistCm,
+            neckCm: v.neckCm,
+            hipCm: v.hipCm,
+            activityLevel: v.activityLevel ? v.activityLevel as ActivityLevel : undefined,
             country: v.country || undefined,
             city: v.city || undefined,
         }))}>
@@ -185,20 +219,43 @@ export function DependentForm({
                     data={RELATIONSHIP_OPTIONS}
                     {...form.getInputProps("relationship")}
                 />
-                <DateInput
-                    size="sm"
-                    label="Date of birth"
-                    placeholder="DD/MM/YYYY"
-                    valueFormat="DD/MM/YYYY"
-                    dateParser={parseDMY}
-                    maxDate={new Date()}
-                    clearable
-                    {...form.getInputProps("dateOfBirth")}
-                />
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <DateInput
+                        size="sm"
+                        label="Date of birth"
+                        placeholder="DD/MM/YYYY"
+                        valueFormat="DD/MM/YYYY"
+                        dateParser={parseDMY}
+                        maxDate={new Date()}
+                        clearable
+                        {...form.getInputProps("dateOfBirth")}
+                    />
+                    <Select
+                        size="sm"
+                        label="Biological sex"
+                        placeholder="Select sex"
+                        data={SEX_DATA}
+                        clearable
+                        {...form.getInputProps("sex")}
+                    />
+                </SimpleGrid>
+                <Divider label="Physical measurements" labelPosition="left" />
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                     <NumberInput size="sm" label="Height (cm)" placeholder="170" min={50} max={300} {...form.getInputProps("height")} />
                     <NumberInput size="sm" label="Weight (kg)" placeholder="70" min={10} max={500} decimalScale={1} {...form.getInputProps("weight")} />
+                    <NumberInput size="sm" label="Waist (cm)" placeholder="80" min={30} max={250} decimalScale={1} {...form.getInputProps("waistCm")} />
+                    <NumberInput size="sm" label="Neck (cm)" placeholder="35" min={20} max={80} decimalScale={1} {...form.getInputProps("neckCm")} />
+                    <NumberInput size="sm" label="Hip (cm)" placeholder="95" min={50} max={250} decimalScale={1} {...form.getInputProps("hipCm")} />
                 </SimpleGrid>
+                <Select
+                    size="sm"
+                    label="Activity level"
+                    placeholder="Select activity level"
+                    data={ACTIVITY_LEVEL_DATA}
+                    clearable
+                    {...form.getInputProps("activityLevel")}
+                />
+                <Divider label="Location" labelPosition="left" />
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                     <Select size="sm" label="Country" placeholder="Select country" searchable data={COUNTRIES} {...form.getInputProps("country")} />
                     <TextInput size="sm" label="City" placeholder="Chennai" {...form.getInputProps("city")} />

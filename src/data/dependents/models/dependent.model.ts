@@ -24,10 +24,23 @@ export interface DependentDocument {
   lastName: string;
   relationship: Relationship;
   dateOfBirth?: string; // ISO date "YYYY-MM-DD"
+  /** Biological sex — used for BMR / IBW / body-fat calculations */
+  sex?: "male" | "female";
   /** Height in cm */
   height?: number;
   /** Weight in kg */
   weight?: number;
+  /** Waist circumference in cm */
+  waistCm?: number;
+  /** Neck circumference in cm */
+  neckCm?: number;
+  /** Hip circumference in cm */
+  hipCm?: number;
+  /**
+   * Physical activity multiplier for TDEE = BMR × factor:
+   *   sedentary 1.2 | light 1.375 | moderate 1.55 | active 1.725 | very_active 1.9
+   */
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
   createdAt: Timestamp;
@@ -43,8 +56,13 @@ export interface DependentDto {
   lastName: string;
   relationship: Relationship;
   dateOfBirth?: string;
+  sex?: "male" | "female";
   height?: number;
   weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
   createdAt: string;
@@ -64,8 +82,13 @@ export function toDependentDto(
     lastName: doc.lastName,
     relationship: doc.relationship,
     dateOfBirth: doc.dateOfBirth,
+    sex: doc.sex,
     height: doc.height,
     weight: doc.weight,
+    waistCm: doc.waistCm,
+    neckCm: doc.neckCm,
+    hipCm: doc.hipCm,
+    activityLevel: doc.activityLevel,
     country: doc.country,
     city: doc.city,
     createdAt: doc.createdAt.toDate().toISOString(),
@@ -83,8 +106,15 @@ export const CreateDependentSchema = z.object({
   lastName: z.string().max(50).default(""),
   relationship: RelationshipSchema,
   dateOfBirth: z.string().optional(),
+  sex: z.enum(["male", "female"]).optional(),
   height: z.number().positive().optional(),
   weight: z.number().positive().optional(),
+  waistCm: z.number().positive().optional(),
+  neckCm: z.number().positive().optional(),
+  hipCm: z.number().positive().optional(),
+  activityLevel: z
+    .enum(["sedentary", "light", "moderate", "active", "very_active"])
+    .optional(),
   country: z.string().optional(),
   city: z.string().optional(),
 });
@@ -98,8 +128,15 @@ export const UpdateDependentSchema = z.object({
   lastName: z.string().max(50).optional(),
   relationship: RelationshipSchema.optional(),
   dateOfBirth: z.string().optional(),
+  sex: z.enum(["male", "female"]).optional(),
   height: z.number().positive().optional(),
   weight: z.number().positive().optional(),
+  waistCm: z.number().positive().optional(),
+  neckCm: z.number().positive().optional(),
+  hipCm: z.number().positive().optional(),
+  activityLevel: z
+    .enum(["sedentary", "light", "moderate", "active", "very_active"])
+    .optional(),
   country: z.string().optional(),
   city: z.string().optional(),
 });

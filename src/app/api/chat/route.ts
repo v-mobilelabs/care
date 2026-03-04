@@ -6,7 +6,12 @@ import { WithContext } from "@/lib/api/with-context";
 import { extractFirstText } from "@/lib/chat/helpers";
 import { AddMessageUseCase } from "@/data/sessions";
 import { GetSystemPromptUseCase } from "@/data/prompts";
-import { GetUserSnapshotUseCase, type UserSnapshotDto } from "@/data/profile";
+import {
+  GetUserSnapshotUseCase,
+  getMissingProfileFields,
+  getMissingDependentFields,
+  type UserSnapshotDto,
+} from "@/data/profile";
 import { aiService } from "@/lib/ai/ai.service";
 
 export const maxDuration = 60;
@@ -81,10 +86,44 @@ export const POST = WithContext(
       );
     const priorContextNote = userSnapshot.context;
 
+    // ── 4. Profile onboarding guard — injected FIRST so the model cannot ────────
+    //     skip it in favour of the clinical system prompt.
+    const missingFields = dependentId
+      ? getMissingDependentFields(userSnapshot)
+      : getMissingProfileFields(userSnapshot);
+    const onboardingPrePrompt =
+      missingFields.length > 0
+        ? [
+            "## ⚠️ MANDATORY PROFILE ONBOARDING — READ BEFORE ANYTHING ELSE",
+            "",
+            "The patient's profile is INCOMPLETE. The following required fields are missing:",
+            missingFields.map((f) => `  • ${f.label}`).join("\n"),
+            "",
+            "You MUST follow these steps BEFORE doing anything else, including starting any health assessment:",
+            "  1. Send a warm greeting and explain you need a few quick details to personalise care.",
+            "  2. Use the `askQuestion` tool to collect each missing field ONE AT A TIME in this order:",
+            ...missingFields.map((f) => `     - ${f.label}: ${f.askHint}`),
+            "  3. After ALL fields are collected, call `updateProfile` with all values in a single call.",
+            "  4. Only then proceed with the user's original request.",
+            "",
+            "🚫 DO NOT start a health assessment, condition record, or symptom analysis.",
+            "🚫 DO NOT call recordCondition, createPrescription, dietPlan, soapNote, completeAssessment, or any clinical tool.",
+            "🚫 DO NOT respond to the user's health question until `updateProfile` has succeeded.",
+            "",
+            "The clinical system instructions below are SUSPENDED until the profile is complete.",
+            "─────────────────────────────────────────────────────────────────────────────────────────",
+            "",
+          ].join("\n")
+        : "";
+
     try {
       const result = await aiService.stream({
         userId: user.uid,
-        system: systemPrompt + attachmentNote + priorContextNote,
+        system:
+          onboardingPrePrompt +
+          systemPrompt +
+          attachmentNote +
+          priorContextNote,
         messages: await convertToModelMessages(messages),
         tools: createClinicalTools({
           userId: user.uid,

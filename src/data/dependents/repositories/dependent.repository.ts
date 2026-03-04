@@ -31,8 +31,14 @@ export const dependentRepository = {
       updatedAt: now,
     };
     if (input.dateOfBirth !== undefined) doc.dateOfBirth = input.dateOfBirth;
+    if (input.sex !== undefined) doc.sex = input.sex;
     if (input.height !== undefined) doc.height = input.height;
     if (input.weight !== undefined) doc.weight = input.weight;
+    if (input.waistCm !== undefined) doc.waistCm = input.waistCm;
+    if (input.neckCm !== undefined) doc.neckCm = input.neckCm;
+    if (input.hipCm !== undefined) doc.hipCm = input.hipCm;
+    if (input.activityLevel !== undefined)
+      doc.activityLevel = input.activityLevel;
     if (input.country !== undefined) doc.country = input.country;
     if (input.city !== undefined) doc.city = input.city;
 
@@ -61,8 +67,14 @@ export const dependentRepository = {
     if (input.relationship !== undefined)
       update.relationship = input.relationship;
     if (input.dateOfBirth !== undefined) update.dateOfBirth = input.dateOfBirth;
+    if (input.sex !== undefined) update.sex = input.sex;
     if (input.height !== undefined) update.height = input.height;
     if (input.weight !== undefined) update.weight = input.weight;
+    if (input.waistCm !== undefined) update.waistCm = input.waistCm;
+    if (input.neckCm !== undefined) update.neckCm = input.neckCm;
+    if (input.hipCm !== undefined) update.hipCm = input.hipCm;
+    if (input.activityLevel !== undefined)
+      update.activityLevel = input.activityLevel;
     if (input.country !== undefined) update.country = input.country;
     if (input.city !== undefined) update.city = input.city;
 

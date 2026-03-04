@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
-import { IconCheck, IconEdit, IconPlus, IconTrash, IconUser, IconUsers } from "@tabler/icons-react";
+import { IconCheck, IconEdit, IconMapPin, IconPlus, IconTrash, IconUser, IconUsers } from "@tabler/icons-react";
 
 import { colors } from "@/ui/tokens";
 import {
@@ -26,6 +26,8 @@ import {
     type DependentRecord,
 } from "@/app/chat/_query";
 import { DependentForm, SectionHeader } from "../_shared";
+import { HealthInfoForm } from "./health-info";
+import { LocationForm } from "./location-info";
 
 // ── Dependent detail view (shown when a dependent is active) ──────────────────
 
@@ -78,11 +80,67 @@ export function DependentProfileContent({ dep }: Readonly<{ dep: DependentRecord
 
                             <Paper withBorder radius="lg" p="xl">
                                 <Stack gap="md">
-                                    <Text fw={600} size="sm">Health information</Text>
+                                    <SectionHeader
+                                        icon={<IconUser size={16} />}
+                                        title="Physical Details"
+                                        subtitle="Body metrics used to personalise AI assessments"
+                                    />
                                     <Divider />
-                                    <DependentForm
+                                    <HealthInfoForm
                                         key={dep.id}
-                                        existing={dep}
+                                        initial={{
+                                            dateOfBirth: dep.dateOfBirth ?? "",
+                                            sex: dep.sex ?? "",
+                                            height: dep.height,
+                                            weight: dep.weight,
+                                            activityLevel: dep.activityLevel ?? "",
+                                            waistCm: dep.waistCm,
+                                            neckCm: dep.neckCm,
+                                            hipCm: dep.hipCm,
+                                        }}
+                                        onSave={(data) => {
+                                            updateDependent.mutate(
+                                                {
+                                                    dependentId: dep.id,
+                                                    dateOfBirth: data.dateOfBirth,
+                                                    sex: (data.sex as "male" | "female") || undefined,
+                                                    height: data.height,
+                                                    weight: data.weight,
+                                                    activityLevel: (data.activityLevel as DependentRecord["activityLevel"]) || undefined,
+                                                    waistCm: data.waistCm,
+                                                    neckCm: data.neckCm,
+                                                    hipCm: data.hipCm,
+                                                },
+                                                {
+                                                    onSuccess: () =>
+                                                        notifications.show({
+                                                            title: "Saved",
+                                                            message: "Physical details updated.",
+                                                            color: colors.success,
+                                                            icon: <IconCheck size={16} />,
+                                                        }),
+                                                },
+                                            );
+                                        }}
+                                        saving={updateDependent.isPending}
+                                    />
+                                </Stack>
+                            </Paper>
+
+                            <Paper withBorder radius="lg" p="xl">
+                                <Stack gap="md">
+                                    <SectionHeader
+                                        icon={<IconMapPin size={16} />}
+                                        title="Location"
+                                        subtitle="Country and city used to localise recommendations"
+                                    />
+                                    <Divider />
+                                    <LocationForm
+                                        key={`${dep.id}-loc`}
+                                        initial={{
+                                            country: dep.country ?? "",
+                                            city: dep.city ?? "",
+                                        }}
                                         onSave={(data) => {
                                             updateDependent.mutate(
                                                 { dependentId: dep.id, ...data },
@@ -90,13 +148,14 @@ export function DependentProfileContent({ dep }: Readonly<{ dep: DependentRecord
                                                     onSuccess: () =>
                                                         notifications.show({
                                                             title: "Saved",
-                                                            message: "Profile updated.",
+                                                            message: "Location updated.",
                                                             color: colors.success,
                                                             icon: <IconCheck size={16} />,
                                                         }),
                                                 },
                                             );
                                         }}
+                                        saving={updateDependent.isPending}
                                     />
                                 </Stack>
                             </Paper>

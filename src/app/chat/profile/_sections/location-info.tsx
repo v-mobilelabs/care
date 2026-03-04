@@ -1,0 +1,109 @@
+"use client";
+import {
+    Button,
+    Divider,
+    Group,
+    Paper,
+    Select,
+    SimpleGrid,
+    Stack,
+    TextInput,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import { IconCheck, IconMapPin } from "@tabler/icons-react";
+
+import { colors } from "@/ui/tokens";
+import type { ProfileRecord } from "@/app/chat/_query";
+import { COUNTRIES, SectionHeader } from "../_shared";
+
+// ── Form ──────────────────────────────────────────────────────────────────────
+
+export interface LocationValues {
+    country: string;
+    city: string;
+}
+
+interface FormProps {
+    initial: LocationValues;
+    onSave: (data: LocationValues) => void;
+    saving: boolean;
+}
+
+export function LocationForm({ initial, onSave, saving }: Readonly<FormProps>) {
+    const form = useForm<LocationValues>({ initialValues: initial });
+
+    return (
+        <form onSubmit={form.onSubmit(onSave)}>
+            <Stack gap="md">
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <Select
+                        size="sm"
+                        label="Country"
+                        placeholder="Select country"
+                        searchable
+                        clearable
+                        data={COUNTRIES}
+                        {...form.getInputProps("country")}
+                    />
+                    <TextInput
+                        size="sm"
+                        label="City"
+                        placeholder="Chennai"
+                        {...form.getInputProps("city")}
+                    />
+                </SimpleGrid>
+
+                <Group justify="flex-end" mt={4}>
+                    <Button type="submit" color="primary" loading={saving} leftSection={<IconCheck size={16} />}>
+                        Save
+                    </Button>
+                </Group>
+            </Stack>
+        </form>
+    );
+}
+
+// ── Section ───────────────────────────────────────────────────────────────────
+
+interface SectionProps {
+    healthProfile: ProfileRecord | undefined;
+    upsertProfile: {
+        mutate: (data: Partial<ProfileRecord>, options?: { onSuccess?: () => void }) => void;
+        isPending: boolean;
+    };
+}
+
+export function LocationInfoSection({ healthProfile, upsertProfile }: Readonly<SectionProps>) {
+    return (
+        <Paper withBorder radius="lg" p="xl">
+            <Stack gap="md">
+                <SectionHeader
+                    icon={<IconMapPin size={16} />}
+                    title="Location"
+                    subtitle="Your country and city, used to localise recommendations and AI context"
+                />
+                <Divider />
+                <LocationForm
+                    key={healthProfile ? "loaded" : "loading"}
+                    initial={{
+                        country: healthProfile?.country ?? "",
+                        city: healthProfile?.city ?? "",
+                    }}
+                    onSave={(data) => {
+                        upsertProfile.mutate(data, {
+                            onSuccess: () =>
+                                notifications.show({
+                                    title: "Saved",
+                                    message: "Location updated.",
+                                    color: colors.success,
+                                    icon: <IconCheck size={16} />,
+                                }),
+                        });
+                    }}
+                    saving={upsertProfile.isPending}
+                />
+            </Stack>
+        </Paper>
+    );
+}

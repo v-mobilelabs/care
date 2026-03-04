@@ -1075,8 +1075,13 @@ export function useDeleteAssessmentMutation() {
 export interface ProfileRecord {
   userId: string;
   dateOfBirth?: string;
+  sex?: "male" | "female";
   height?: number;
   weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
   /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
@@ -1088,8 +1093,13 @@ export interface ProfileRecord {
 
 export interface UpsertProfilePayload {
   dateOfBirth?: string;
+  sex?: "male" | "female";
   height?: number;
   weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
   /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
@@ -1154,8 +1164,13 @@ export interface DependentRecord {
   lastName: string;
   relationship: Relationship;
   dateOfBirth?: string;
+  sex?: "male" | "female";
   height?: number;
   weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
   createdAt: string;
@@ -1167,8 +1182,13 @@ export interface CreateDependentPayload {
   lastName?: string;
   relationship: Relationship;
   dateOfBirth?: string;
+  sex?: "male" | "female";
   height?: number;
   weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
 }

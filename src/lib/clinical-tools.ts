@@ -3,6 +3,8 @@ import { z } from "zod";
 import { CreateSoapNoteUseCase } from "@/data/soap-notes";
 import { CreateAssessmentUseCase } from "@/data/assessments";
 import { CreateVitalUseCase } from "@/data/vitals";
+import { profileRepository } from "@/data/profile";
+import { dependentRepository } from "@/data/dependents";
 
 // Each tool has an execute() that returns a simple acknowledgement.
 // This is required so the model receives a tool result and continues
@@ -943,10 +945,7 @@ export function createClinicalTools(ctx: {
       "This is a background save — do NOT announce it in text; continue directly with the clinical assessment.",
     inputSchema: zodSchema(
       z.object({
-        sex: z
-          .enum(["male", "female"])
-          .optional()
-          .describe("Biological sex"),
+        sex: z.enum(["male", "female"]).optional().describe("Biological sex"),
         waistCm: z
           .number()
           .positive()
@@ -1179,6 +1178,68 @@ export function createClinicalTools(ctx: {
     },
   });
 
+  // ── Update Profile ──────────────────────────────────────────────────────────────
+  // Used exclusively by the profile onboarding flow to persist values the
+  // AI collected from the user via `askQuestion`.
+
+  const updateProfileTool = tool({
+    description:
+      "Save patient profile fields collected during the onboarding questionnaire. " +
+      "Call this tool ONCE after you have collected ALL missing required fields via `askQuestion`. " +
+      "Do NOT call it field by field — batch all collected values into a single call. " +
+      "Only call this tool when you have at least one field to save. " +
+      "After saving, confirm to the user that their profile is complete and proceed with their original request.",
+    inputSchema: zodSchema(
+      z.object({
+        dateOfBirth: z
+          .string()
+          .optional()
+          .describe("ISO date string YYYY-MM-DD parsed from the user's answer"),
+        sex: z
+          .enum(["male", "female"])
+          .optional()
+          .describe(
+            "Biological sex — map 'Male' → 'male', 'Female' → 'female'",
+          ),
+        height: z.number().positive().optional().describe("Height in cm"),
+        weight: z.number().positive().optional().describe("Weight in kg"),
+        activityLevel: z
+          .enum(["sedentary", "light", "moderate", "active", "very_active"])
+          .optional()
+          .describe(
+            "Map the user's choice: 'Sedentary…' → 'sedentary', 'Light…' → 'light', " +
+              "'Moderate…' → 'moderate', 'Active…' → 'active', 'Very Active…' → 'very_active'",
+          ),
+        country: z.string().optional().describe("Country name"),
+        city: z.string().optional().describe("City name"),
+      }),
+    ),
+    execute: async (input) => {
+      try {
+        if (ctx.dependentId) {
+          // Dependent profiles don't have `sex` or `activityLevel`; strip them.
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { sex, activityLevel, ...dependentFields } = input;
+          await dependentRepository.update({
+            ownerId: ctx.userId,
+            dependentId: ctx.dependentId,
+            ...dependentFields,
+          });
+        } else {
+          await profileRepository.upsert({ userId: ctx.userId, ...input });
+        }
+        return {
+          saved: true,
+          fields: Object.keys(input).filter(
+            (k) => input[k as keyof typeof input] !== undefined,
+          ),
+        };
+      } catch {
+        return { saved: false, fields: [] };
+      }
+    },
+  });
+
   return {
     recordCondition: recordConditionTool,
     suggestActions: suggestActionsTool,
@@ -1202,5 +1263,6 @@ export function createClinicalTools(ctx: {
     drugInteraction: drugInteractionTool,
     vaccinationReview: vaccinationReviewTool,
     symptomTimeline: symptomTimelineTool,
+    updateProfile: updateProfileTool,
   } as const;
 }
