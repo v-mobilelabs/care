@@ -157,6 +157,8 @@ type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_activ
 export function DependentForm({
     existing,
     onSave,
+    onCancel,
+    submitLabel,
 }: Readonly<{
     existing?: DependentRecord;
     onSave: (data: {
@@ -167,6 +169,8 @@ export function DependentForm({
         activityLevel?: ActivityLevel;
         country?: string; city?: string;
     }) => void;
+    onCancel?: () => void;
+    submitLabel?: string;
 }>) {
     const form = useForm<DependentFormValues>({
         initialValues: {
@@ -261,8 +265,13 @@ export function DependentForm({
                     <TextInput size="sm" label="City" placeholder="Chennai" {...form.getInputProps("city")} />
                 </SimpleGrid>
                 <Group justify="flex-end" mt={4}>
+                    {onCancel && (
+                        <Button variant="default" onClick={onCancel}>
+                            Cancel
+                        </Button>
+                    )}
                     <Button type="submit" color="primary" leftSection={<IconCheck size={16} />}>
-                        {existing ? "Save changes" : "Add family member"}
+                        {submitLabel ?? (existing ? "Save changes" : "Add family member")}
                     </Button>
                 </Group>
             </Stack>

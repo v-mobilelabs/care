@@ -4,7 +4,13 @@ import { useRouter } from "next/navigation";
 import { Center, Loader, Stack, Text, Button } from "@mantine/core";
 import { completeMagicLink } from "@/lib/firebase/magic-link";
 import { trackEvent } from "@/lib/analytics";
+import type { UserKind } from "@/lib/auth/jwt";
 
+/**
+ * Single verify handler for all user types.
+ * After creating the session, routes based on the `kind` the server auto-detected
+ * from the user's Firestore profile — no kind param needed in the URL.
+ */
 export function VerifyHandler() {
     const router = useRouter();
     const [error, setError] = useState<string | null>(null);
@@ -12,15 +18,16 @@ export function VerifyHandler() {
     useEffect(() => {
         async function verify() {
             try {
-                const idToken = await completeMagicLink(window.location.href);
+                const idToken = await completeMagicLink(globalThis.window.location.href);
                 const res = await fetch("/api/auth/session", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ idToken }),
                 });
                 if (!res.ok) throw new Error("Session creation failed");
-                trackEvent({ name: "login", params: { method: "magic_link" } });
-                router.replace("/chat");
+                const { kind } = (await res.json()) as { kind: UserKind };
+
+                await routeByKind(kind, router);
             } catch (e) {
                 setError(e instanceof Error ? e.message : "Sign-in failed");
             }
@@ -48,3 +55,23 @@ export function VerifyHandler() {
         </Center>
     );
 }
+
+async function routeByKind(
+    kind: UserKind,
+    router: ReturnType<typeof useRouter>,
+): Promise<void> {
+    if (kind === "doctor") {
+        const profileRes = await fetch("/api/doctors/me");
+        if (profileRes.ok) {
+            router.replace("/doctor/dashboard");
+        } else if (profileRes.status === 404) {
+            router.replace("/doctor/signup");
+        } else {
+            throw new Error("Could not check profile status.");
+        }
+    } else {
+        trackEvent({ name: "login", params: { method: "magic_link" } });
+        router.replace("/chat");
+    }
+}
+

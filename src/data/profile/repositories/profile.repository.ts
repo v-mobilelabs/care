@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { patientRepository } from "@/data/patients";
 import {
   toProfileDto,
   type ProfileDocument,
@@ -9,47 +10,53 @@ import {
 
 const db = FirebaseService.getInstance().getDb();
 
-/** Self-profile lives at users/{userId}/profiles/self */
-const selfProfileDoc = (userId: string) =>
-  db.collection("users").doc(userId).collection("profiles").doc("self");
+/** Base identity document lives at profiles/{userId} (top-level) */
+const baseProfileDoc = (userId: string) =>
+  db.collection("profiles").doc(userId);
 
 export const profileRepository = {
+  /**
+   * Returns the combined profile DTO: base identity from `profiles/{userId}`
+   * merged with patient health data from `patients/{userId}`.
+   */
   async get(userId: string): Promise<ProfileDto | null> {
-    const snap = await selfProfileDoc(userId).get();
-    if (!snap.exists) return null;
-    return toProfileDto(snap.data() as ProfileDocument);
+    const [baseSnap, patientDoc] = await Promise.all([
+      baseProfileDoc(userId).get(),
+      patientRepository.get(userId).catch(() => null),
+    ]);
+    if (!baseSnap.exists) return null;
+    return toProfileDto(baseSnap.data() as ProfileDocument, patientDoc);
   },
 
+  /**
+   * Upserts base identity fields in `profiles/{userId}` only.
+   * Patient health fields → PUT /api/patients/me (patientRepository)
+   * Doctor professional fields → PUT /api/doctors/me (doctorProfileRepository)
+   */
   async upsert(input: UpsertProfileInput): Promise<ProfileDto> {
-    const ref = selfProfileDoc(input.userId);
     const now = Timestamp.now();
-    const data: Omit<ProfileDocument, "createdAt"> = {
+
+    const baseData: Partial<ProfileDocument> & {
+      userId: string;
+      updatedAt: Timestamp;
+    } = {
       userId: input.userId,
+      kind: input.kind ?? "user",
       updatedAt: now,
     };
+    if (input.name !== undefined) baseData.name = input.name;
+    if (input.email !== undefined) baseData.email = input.email;
+    if (input.phone !== undefined) baseData.phone = input.phone;
+    if (input.photoUrl !== undefined) baseData.photoUrl = input.photoUrl;
+    if (input.city !== undefined) baseData.city = input.city;
+    if (input.country !== undefined) baseData.country = input.country;
 
-    // Only set defined fields
-    if (input.dateOfBirth !== undefined) data.dateOfBirth = input.dateOfBirth;
-    if (input.sex !== undefined) data.sex = input.sex;
-    if (input.height !== undefined) data.height = input.height;
-    if (input.weight !== undefined) data.weight = input.weight;
-    if (input.waistCm !== undefined) data.waistCm = input.waistCm;
-    if (input.neckCm !== undefined) data.neckCm = input.neckCm;
-    if (input.hipCm !== undefined) data.hipCm = input.hipCm;
-    if (input.activityLevel !== undefined)
-      data.activityLevel = input.activityLevel;
-    if (input.country !== undefined) data.country = input.country;
-    if (input.city !== undefined) data.city = input.city;
-    if (input.foodPreferences !== undefined)
-      data.foodPreferences = input.foodPreferences;
-    // consentedAt is write-once: only included when the caller explicitly provides it.
-    // merge:true ensures it will never overwrite an existing value when not present.
-    if (input.consentedAt !== undefined) {
-      data.consentedAt = Timestamp.fromDate(new Date(input.consentedAt));
-    }
+    await baseProfileDoc(input.userId).set(baseData, { merge: true });
 
-    await ref.set(data, { merge: true });
-    const snap = await ref.get();
-    return toProfileDto(snap.data() as ProfileDocument);
+    const [baseSnap, patientDoc] = await Promise.all([
+      baseProfileDoc(input.userId).get(),
+      patientRepository.get(input.userId).catch(() => null),
+    ]);
+    return toProfileDto(baseSnap.data() as ProfileDocument, patientDoc);
   },
 };

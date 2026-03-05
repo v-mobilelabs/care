@@ -1,6 +1,5 @@
 "use client";
 import {
-    Box,
     Button,
     Divider,
     Group,
@@ -12,12 +11,12 @@ import {
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconUser } from "@tabler/icons-react";
-import { getAuth, updateProfile } from "firebase/auth";
+import { updateProfile } from "firebase/auth";
 import { useState } from "react";
 
 import { useAuth } from "@/ui/providers/auth-provider";
-import { firebaseApp } from "@/lib/firebase/client";
 import { colors } from "@/ui/tokens";
+import { useProfileQuery, useUpdateIdentityMutation } from "@/app/chat/_query";
 import { SectionHeader } from "../_shared";
 
 function splitDisplayName(displayName: string | null) {
@@ -34,24 +33,24 @@ function validate(values: { firstName: string; lastName: string }) {
     return errors;
 }
 
-export function PersonalInfoSection() {
+function PersonalInfoForm({ name }: Readonly<{ name: string | null }>) {
     const { user } = useAuth();
     const [saving, setSaving] = useState(false);
+    const updateIdentity = useUpdateIdentityMutation();
 
-    const { firstName, lastName } = splitDisplayName(user?.displayName ?? null);
+    const { firstName, lastName } = splitDisplayName(name);
     const form = useForm({
         initialValues: { firstName, lastName },
         validate,
     });
 
     async function handleSave(values: { firstName: string; lastName: string }) {
-        const auth = getAuth(firebaseApp);
-        const currentUser = auth.currentUser;
-        if (!currentUser) return;
         setSaving(true);
         try {
             const displayName = [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(" ");
-            await updateProfile(currentUser, { displayName });
+            const promises: Promise<unknown>[] = [updateIdentity.mutateAsync({ name: displayName })];
+            if (user) promises.push(updateProfile(user, { displayName }));
+            await Promise.all(promises);
             notifications.show({
                 title: "Name updated",
                 message: "Your display name has been saved.",
@@ -81,6 +80,7 @@ export function PersonalInfoSection() {
                                 size="sm"
                                 label="First name"
                                 placeholder="Jane"
+                                required
                                 {...form.getInputProps("firstName")}
                             />
                             <TextInput
@@ -100,4 +100,13 @@ export function PersonalInfoSection() {
             </Stack>
         </Paper>
     );
+}
+
+export function PersonalInfoSection() {
+    const { data: profile } = useProfileQuery();
+    // Use db name as source of truth; fall back to null until loaded.
+    // The `key` prop re-mounts PersonalInfoForm once profile arrives so
+    // initialValues are set from the server-prefetched name, not a stale empty string.
+    const name = profile?.name ?? null;
+    return <PersonalInfoForm key={name ?? "loading"} name={name} />;
 }

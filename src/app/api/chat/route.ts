@@ -21,6 +21,11 @@ export const POST = WithContext(
     const body = (await req.json()) as {
       messages: UIMessage[];
       sessionId?: string;
+      // Signed download URLs for files the client just uploaded, keyed by
+      // mimeType. The client awaits each upload and sends the resulting URLs
+      // alongside the message so the server can embed proper { type:"file" }
+      // parts in Firestore instead of storing the raw binary blobs.
+      attachmentUrls?: Array<{ url: string; mediaType: string }>;
     };
     const { messages } = body;
 
@@ -39,6 +44,60 @@ export const POST = WithContext(
     const parts =
       lastUserMsg?.parts.filter((p) => p.type !== "tool-result") ?? [];
 
+    // Strip inline binary data (base64 file/image blobs) from parts before
+    // writing to Firestore. Firestore documents are limited to 1 MB, so storing
+    // a large dental X-ray or photo as base64 would exceed that limit. The
+    // client awaits each upload and sends the resulting signed URLs in
+    // `body.attachmentUrls`, so we can embed a proper { type:"file" } part
+    // referencing the GCS URL instead of a lossy text placeholder.
+    type RawPart = (typeof parts)[number] & Record<string, unknown>;
+
+    // Client-supplied signed URLs, grouped by mediaType for ordered matching.
+    const attachmentUrlsByType = new Map<
+      string,
+      Array<{ url: string; mediaType: string }>
+    >();
+    for (const a of body.attachmentUrls ?? []) {
+      const bucket = attachmentUrlsByType.get(a.mediaType) ?? [];
+      bucket.push(a);
+      attachmentUrlsByType.set(a.mediaType, bucket);
+    }
+    const consumedByType = new Map<string, number>();
+
+    const storableParts: RawPart[] = parts.map((p) => {
+      const rp = p as RawPart;
+      const t = rp.type as string;
+      // Strip inline binary blobs (base64 `data` field OR data-URI in `url`).
+      // Firestore documents are limited to 1 MB; large images exceed this.
+      const hasInlineData =
+        "data" in rp ||
+        (typeof rp.url === "string" && rp.url.startsWith("data:"));
+      if ((t === "file" || t === "image") && hasInlineData) {
+        const mediaType =
+          (rp.mediaType as string | undefined) ??
+          (rp.mimeType as string | undefined) ??
+          "";
+        // Find the next unused attachment URL matching this mimeType.
+        const bucket = attachmentUrlsByType.get(mediaType) ?? [];
+        const idx = consumedByType.get(mediaType) ?? 0;
+        const match = bucket[idx];
+        if (match) {
+          consumedByType.set(mediaType, idx + 1);
+          return {
+            type: "file",
+            url: match.url,
+            mediaType: match.mediaType,
+          } as RawPart;
+        }
+        // Fallback — only if no URL was provided for this attachment.
+        return {
+          type: "text",
+          text: `[Attached: ${mediaType || "file"}]`,
+        } as RawPart;
+      }
+      return rp;
+    });
+
     let sessionId: string;
 
     const saved = await new AddMessageUseCase().execute(
@@ -48,7 +107,10 @@ export const POST = WithContext(
         sessionId: body.sessionId,
         title,
         role: "user",
-        content: parts.length > 0 ? JSON.stringify(parts) : (firstText ?? ""),
+        content:
+          storableParts.length > 0
+            ? JSON.stringify(storableParts)
+            : (firstText ?? ""),
       }),
     );
     sessionId = saved.sessionId;

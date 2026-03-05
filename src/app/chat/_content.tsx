@@ -7,30 +7,33 @@ import { useEffect, useRef, useState } from "react";
 import { useChatContext } from "@/app/chat/_context/chat-context";
 import { useMessages } from "@/app/chat/_hooks/use-messages";
 import { useFilePersonCheck } from "@/app/chat/_hooks/use-file-person-check";
+import { enhanceXrayImage } from "@/app/chat/_hooks/use-opg-enhance";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { Messages } from "@/app/chat/_components/messages";
 import { InputBar } from "@/app/chat/_components/input-bar";
-import { useUploadFileMutation } from "@/app/chat/_query";
+import { useUploadFileMutation, useProfileQuery } from "@/app/chat/_query";
 import { RightSidebarPortal } from "@/app/chat/_components/right-sidebar-portal";
 import { SessionSidebar } from "@/app/chat/_components/session-sidebar";
 import { useRightSidebar } from "@/app/chat/_context/right-sidebar-context";
+import { useActiveProfile } from "@/app/chat/_context/active-profile-context";
+import { getInitials } from "@/lib/get-initials";
 
 // ── Chat content (client) ─────────────────────────────────────────────────────
 
 export function ChatContent() {
     const { sessionId, onSelectSession } = useChatContext();
     const { user } = useAuth();
+    const { activeDependentId } = useActiveProfile();
     const uploadFile = useUploadFileMutation();
+    const { data: profile } = useProfileQuery();
 
-    const userInitials = user?.displayName
-        ? user.displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-        : user?.email?.[0]?.toUpperCase() ?? undefined;
+    const userInitials = getInitials(profile?.name ?? user?.displayName, user?.email);
     const searchParams = useSearchParams();
     const router = useRouter();
 
     // ── Messages hook ─────────────────────────────────────────────────────────
     const {
-        messages, sendMessage, status, isLoading,
+        messages, sendMessage, setPendingAttachments, status, isLoading,
         answeredIds, pendingFreeTextId,
         phraseIdx, phraseFading,
         editingId, editingText, setEditingText,
@@ -43,6 +46,8 @@ export function ChatContent() {
 
     // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
     const [input, setInput] = useState("");
+    // True while file uploads are in-flight (before the AI stream starts).
+    const [isUploading, setIsUploading] = useState(false);
 
     // ── Pending send — used after a profile switch to auto-send in the new session ──
     const [pendingSend, setPendingSend] = useState<{
@@ -57,25 +62,49 @@ export function ChatContent() {
             const { text, files } = pendingSend;
             pendingSessionRef.current = null;
             setPendingSend(null);
-            if (files) {
-                Array.from(files).forEach((f) =>
-                    uploadFile.mutate({ sessionId, file: f }),
-                );
-            }
-            void sendMessage({ text, files });
+            void (async () => {
+                if (files && files.length > 0) {
+                    setIsUploading(true);
+                    const results = await Promise.all(
+                        Array.from(files).map(async (f) => {
+                            const enhanced = await enhanceXrayImage(f);
+                            return uploadFile.mutateAsync({ sessionId, file: enhanced, dependentId: activeDependentId });
+                        }),
+                    ).catch(() => []);
+                    setIsUploading(false);
+                    setPendingAttachments(
+                        results
+                            .filter((r) => r.downloadUrl)
+                            .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
+                    );
+                }
+                void sendMessage({ text, files });
+            })();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionId, pendingSend]);
 
     // ── Person-check hook ─────────────────────────────────────────────────────
-    const { checkAndSend } = useFilePersonCheck({
+    const { checkAndSend, isChecking } = useFilePersonCheck({
         onProceedNormal: (text, files) => {
-            if (files) {
-                Array.from(files).forEach((f) =>
-                    uploadFile.mutate({ sessionId, file: f }),
-                );
-            }
-            void sendMessage({ text, files });
+            void (async () => {
+                if (files && files.length > 0) {
+                    setIsUploading(true);
+                    const results = await Promise.all(
+                        Array.from(files).map(async (f) => {
+                            const enhanced = await enhanceXrayImage(f);
+                            return uploadFile.mutateAsync({ sessionId, file: enhanced, dependentId: activeDependentId });
+                        }),
+                    ).catch(() => []);
+                    setIsUploading(false);
+                    setPendingAttachments(
+                        results
+                            .filter((r) => r.downloadUrl)
+                            .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
+                    );
+                }
+                void sendMessage({ text, files });
+            })();
         },
         onProceedAsNewProfile: (text, files, newSessionId) => {
             // Store the pending send, then navigate to the new session.
@@ -111,8 +140,9 @@ export function ChatContent() {
                 <Messages
                     messages={messages}
                     isLoading={isLoading}
+                    preparingLabel={isChecking ? "Scanning file…" : isUploading ? "Enhancing & uploading…" : undefined}
                     chatStatus={status}
-                    userPhotoURL={user?.photoURL}
+                    userPhotoURL={profile?.photoUrl ?? user?.photoURL}
                     userInitials={userInitials}
                     answeredIds={answeredIds}
                     editingId={editingId}
@@ -155,6 +185,7 @@ export function ChatContent() {
                     input={input}
                     onInputChange={setInput}
                     isLoading={isLoading}
+                    isUploading={isUploading || isChecking}
                     pendingFreeTextId={pendingFreeTextId}
                     messages={messages}
                     status={status}

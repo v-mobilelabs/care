@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CreateSoapNoteUseCase } from "@/data/soap-notes";
 import { CreateAssessmentUseCase } from "@/data/assessments";
 import { CreateVitalUseCase } from "@/data/vitals";
+import { CreatePatientSummaryUseCase } from "@/data/patient-summary";
 import { profileRepository } from "@/data/profile";
 import { dependentRepository } from "@/data/dependents";
 
@@ -38,7 +39,7 @@ export const recordConditionTool = tool({
 // ── Prescription ──────────────────────────────────────────────────────────────
 export const createPrescriptionTool = tool({
   description:
-    "Create a prescription recommendation with one or more medications. Use after identifying a condition that warrants medication.",
+    "Create a prescription recommendation with one or more medications. Only call this when the user explicitly requests medication, a prescription, or drug recommendations (e.g. 'What medications should I take?', 'Give me a prescription', selects the Medications chip). Do NOT auto-fire after identifying a condition.",
   inputSchema: zodSchema(
     z.object({
       title: z.string().describe("Prescription title / indication"),
@@ -77,7 +78,7 @@ export const createPrescriptionTool = tool({
 // ── Medicine (single) ─────────────────────────────────────────────────────────
 export const addMedicineTool = tool({
   description:
-    "Recommend a single OTC or supplemental medicine for symptom relief.",
+    "Recommend a single OTC or supplemental medicine for symptom relief. Only call this when the user explicitly asks for medicine or supplement recommendations. Do NOT auto-fire after identifying a condition.",
   inputSchema: zodSchema(
     z.object({
       name: z.string(),
@@ -101,7 +102,7 @@ export const addMedicineTool = tool({
 // ── Procedure ─────────────────────────────────────────────────────────────────
 export const orderProcedureTool = tool({
   description:
-    "Order a diagnostic test or medical procedure (lab, imaging, biopsy, etc.).",
+    "Order a diagnostic test or medical procedure (lab, imaging, biopsy, etc.). Only call this when the user explicitly requests tests, investigations, or procedures (e.g. 'What tests should I get?', selects the Suggest tests chip). Do NOT auto-fire.",
   inputSchema: zodSchema(
     z.object({
       name: z.string().describe("Procedure or test name"),
@@ -134,7 +135,7 @@ export const orderProcedureTool = tool({
 // ── Appointment ───────────────────────────────────────────────────────────────
 export const bookAppointmentTool = tool({
   description:
-    "Book or recommend an appointment with a healthcare provider based on the assessment.",
+    "Book or recommend an appointment with a healthcare provider. Only call this when the user explicitly requests an appointment or the Book appointment chip is selected. Do NOT auto-fire after identifying a condition.",
   inputSchema: zodSchema(
     z.object({
       specialty: z
@@ -183,7 +184,7 @@ export const bookAppointmentTool = tool({
 // ── Provider ──────────────────────────────────────────────────────────────────
 export const recommendProviderTool = tool({
   description:
-    "Recommend a type of healthcare provider the patient should see.",
+    "Recommend a type of healthcare provider the patient should see. Only call this when the user explicitly asks who they should see or what kind of doctor to visit. Do NOT auto-fire.",
   inputSchema: zodSchema(
     z.object({
       role: z
@@ -222,7 +223,7 @@ export const recommendProviderTool = tool({
 // ── Complete Assessment ────────────────────────────────────────────────────────
 export const completeAssessmentTool = tool({
   description:
-    "Call this tool when the assessment is complete. Provide a comprehensive summary of findings.",
+    "Provide a comprehensive summary of findings. Only call this when the user explicitly requests a full analysis or complete assessment (e.g. selects the Full analysis chip, says 'Give me the full analysis', or asks for a complete summary). Do NOT auto-fire at the end of a conversation.",
   inputSchema: zodSchema(
     z.object({
       summary: z
@@ -472,7 +473,7 @@ export const dietPlanTool = tool({
 // ── Dental Chart ──────────────────────────────────────────────────────────────
 const dentalChartTool = tool({
   description:
-    "Render an annotated dental chart with per-tooth findings extracted from a dental X-ray or OPG image. ONLY call this tool when an actual dental image file (OPG/panoramic, periapical, bitewing, or intraoral photo) is physically attached to the current user message — never call it based on text alone or when no image is present. If the user mentions a dental X-ray but has not attached a file, do NOT call this tool; call askQuestion to request the upload instead.",
+    "Render an annotated dental chart with per-tooth findings extracted from a dental X-ray or OPG image. Call this tool in ANY of these situations: (1) A dental image file (OPG/panoramic, periapical, bitewing, or intraoral photo) is physically attached to the current user message — extract findings directly from the image. (2) The user explicitly asks for a visual chart, visual representation, or dental chart (e.g. 'make a visual representation', 'show me the chart', 'visualise this') and dental findings have already been described from an X-ray earlier in this conversation — reconstruct the findings from the prior analysis. (3) You have just described findings from an X-ray — always follow up by calling this tool to render the chart. Do NOT call this tool when no dental image has been seen and no findings have been discussed; instead call askQuestion to request the upload.\n\nRADIOGRAPHIC DETECTION GUIDE — use these radiographic signs to assign the correct condition:\n• restoration — the most important: ANY tooth with a geometrically shaped radiopaque (bright white / very high density) area in the crown or root. Amalgam fillings appear extremely bright/white with sharp borders; composite/glass ionomer fillings are slightly whiter than dentine with defined margins. Also flag inlays and onlays. This is one of the most common findings — look carefully at EVERY tooth for pre-existing fillings before calling it 'normal'. Posterior teeth especially often have mesio-occlusal (MO), disto-occlusal (DO), or MOD restorations.\n• crown — full-coverage metal cap visible as a radiopaque shell (U-shaped) over the entire crown; metal is much brighter than an amalgam filling.\n• caries — radiolucent (dark shadow) within enamel or dentine, classic locations: interproximal (between teeth), under existing restorations (secondary/recurrent caries), occlusal surface.\n• cavity — frank cavitation/structural breakdown visible as a radiolucent defect; a hole rather than a shadow.\n• root_canal — widened/opacified root canal(s), radiopaque obturation material (gutta-percha) visible within root; post may be visible.\n• periapical_lesion — well-defined or diffuse radiolucent halo at the root apex, loss of lamina dura at apex.\n• missing — tooth space with no erupted tooth present and no retained root.\n• impacted — unerupted tooth whose crown is fully or partially covered by bone or soft tissue, often at an angle.\n• bridge — multiple teeth connected by a continuous radiopaque structure; abutment teeth and pontic (false tooth) span a gap.\n• sinus — radiolucent structure (maxillary sinus floor) overlying or very close to upper molar root apices; domed or irregular sinus outline.\n• watch — suspicious area that does not yet meet the threshold for another condition: very early enamel caries, slight changes in radiodensity.\n• unerupted — tooth bud present within bone, crown fully formed, no eruption into arch yet.\n• normal — no detectable pathology or restorative material visible.",
   inputSchema: zodSchema(
     z.object({
       summary: z
@@ -491,18 +492,104 @@ const dentalChartTool = tool({
             .describe(
               "FDI tooth number. Upper right: 11–18, upper left: 21–28, lower left: 31–38, lower right: 41–48",
             ),
-          condition: z.enum([
-            "normal",
-            "caries",
-            "missing",
-            "crown",
-            "root_canal",
-            "impacted",
-            "periapical_lesion",
-            "watch",
-            "unerupted",
-            "bridge",
-          ]),
+          condition: z
+            .enum([
+              "normal",
+              "caries",
+              "cavity",
+              "restoration",
+              "sinus",
+              "missing",
+              "crown",
+              "root_canal",
+              "impacted",
+              "periapical_lesion",
+              "watch",
+              "unerupted",
+              "bridge",
+            ])
+            .describe(
+              "normal=no pathology/no filling; " +
+                "restoration=existing filling/inlay/onlay visible as bright-white radiopaque area with geometric borders (very common — check every tooth); " +
+                "caries=radiolucent (dark) shadow in enamel or dentine; " +
+                "cavity=frank structural cavitation/hole; " +
+                "crown=full-coverage metallic crown cap; " +
+                "root_canal=radiopaque obturation material in root canal; " +
+                "periapical_lesion=radiolucent halo at root apex; " +
+                "missing=absent tooth; " +
+                "impacted=unerupted angulated tooth within bone; " +
+                "bridge=two or more teeth joined by a fixed prosthetic span; " +
+                "sinus=maxillary sinus involvement at upper molar apices; " +
+                "watch=suspicious but sub-threshold finding; " +
+                "unerupted=tooth bud within bone not yet erupted",
+            ),
+          surfaces: z
+            .array(
+              z.enum([
+                "occlusal",
+                "mesial",
+                "distal",
+                "buccal",
+                "lingual",
+                "palatal",
+              ]),
+            )
+            .optional()
+            .describe(
+              "Affected tooth surfaces for cavity or restoration (e.g. mesio-occlusal)",
+            ),
+          measurements: z
+            .object({
+              boneLossFromCej: z
+                .number()
+                .optional()
+                .describe(
+                  "Radiographic bone loss in mm from the CEJ to the alveolar bone crest",
+                ),
+              probingDepth: z
+                .number()
+                .optional()
+                .describe("Periodontal pocket probing depth in mm"),
+              clinicalAttachmentLevel: z
+                .number()
+                .optional()
+                .describe(
+                  "Clinical attachment level in mm (recession + probing depth)",
+                ),
+              recession: z
+                .number()
+                .optional()
+                .describe("Gingival recession in mm from CEJ"),
+              furcation: z
+                .enum(["none", "I", "II", "III"])
+                .optional()
+                .describe("Furcation involvement grade for multi-root teeth"),
+              mobility: z
+                .number()
+                .int()
+                .min(0)
+                .max(3)
+                .optional()
+                .describe("Tooth mobility grade 0–3 (Miller classification)"),
+              priorBoneLossFromCej: z
+                .number()
+                .optional()
+                .describe(
+                  "Bone loss from CEJ at the prior visit in mm — enables temporal change overlay",
+                ),
+              priorProbingDepth: z
+                .number()
+                .optional()
+                .describe("Probing depth at the prior visit in mm"),
+              priorClinicalAttachmentLevel: z
+                .number()
+                .optional()
+                .describe("CAL at the prior visit in mm"),
+            })
+            .optional()
+            .describe(
+              "Calibrated measurements extracted from the radiograph. Include prior-visit values when the user provides a previous X-ray or chart for comparison.",
+            ),
           note: z
             .string()
             .optional()
@@ -510,6 +597,22 @@ const dentalChartTool = tool({
           severity: z.enum(["mild", "moderate", "severe"]).optional(),
         }),
       ),
+      periodontalSummary: z
+        .string()
+        .optional()
+        .describe(
+          "Overall periodontal staging and grading (e.g. Stage III Grade B generalised periodontitis). Include only when the image supports a periodontal diagnosis.",
+        ),
+      visitDate: z
+        .string()
+        .optional()
+        .describe("ISO 8601 date of the current radiograph (e.g. 2026-03-06)"),
+      priorVisitDate: z
+        .string()
+        .optional()
+        .describe(
+          "ISO 8601 date of the prior radiograph when the user provides a previous image for temporal comparison",
+        ),
     }),
   ),
   execute: async (input) => ({ recorded: true, ...input }),
@@ -1240,6 +1343,94 @@ export function createClinicalTools(ctx: {
     },
   });
 
+  // ── Generate Patient Summary ────────────────────────────────────────────────
+  // Compiles a comprehensive patient summary from all available health data
+  // gathered in the session and saves it to the patient-summaries collection.
+
+  const generatePatientSummaryTool = tool({
+    description:
+      "Generate and save a comprehensive patient summary that consolidates all the " +
+      "health information collected in this session. Call this when the user explicitly " +
+      "requests a patient summary, health overview, or full health report (e.g. 'Generate " +
+      "my summary', 'Give me a patient summary', selects the Patient Summary chip). " +
+      "Include all relevant clinical data: conditions, medications, vitals, allergies, " +
+      "risk factors, and recommendations gathered during the encounter.",
+    inputSchema: zodSchema(
+      z.object({
+        title: z
+          .string()
+          .describe(
+            "Short descriptive title for this summary (e.g. 'Patient Summary – March 2026')",
+          ),
+        narrative: z
+          .string()
+          .describe(
+            "Comprehensive 2–4 paragraph clinical narrative summarising the patient's " +
+              "health status, key findings, and overall clinical picture",
+          ),
+        chiefComplaints: z
+          .array(z.string())
+          .describe(
+            "Primary presenting complaints or symptoms reported by the patient",
+          ),
+        diagnoses: z
+          .array(
+            z.object({
+              name: z.string().describe("Condition or diagnosis name"),
+              icd10: z.string().optional().describe("ICD-10 code if known"),
+              status: z
+                .enum(["suspected", "probable", "confirmed"])
+                .describe("Diagnostic confidence level"),
+            }),
+          )
+          .describe("Active or recently identified diagnoses"),
+        medications: z
+          .array(
+            z.object({
+              name: z.string(),
+              dosage: z.string().optional(),
+              frequency: z.string().optional(),
+            }),
+          )
+          .describe("Current medications the patient is taking"),
+        vitals: z
+          .array(
+            z.object({
+              name: z.string().describe("Vital sign name"),
+              value: z.string().describe("Measured value"),
+              unit: z.string().optional().describe("Unit of measurement"),
+            }),
+          )
+          .describe("Vital signs recorded during the session"),
+        allergies: z.array(z.string()).describe("Known drug or food allergies"),
+        riskFactors: z
+          .array(z.string())
+          .describe("Identified clinical risk factors"),
+        recommendations: z
+          .array(z.string())
+          .describe(
+            "Clinical recommendations, follow-up steps, and lifestyle advice",
+          ),
+      }),
+    ),
+    execute: async (input) => {
+      void (async () => {
+        try {
+          await new CreatePatientSummaryUseCase(ctx.dependentId).execute(
+            CreatePatientSummaryUseCase.validate({
+              userId: ctx.userId,
+              sessionId: ctx.sessionId,
+              ...input,
+            }),
+          );
+        } catch {
+          // Non-fatal — don't interrupt the stream
+        }
+      })();
+      return { saved: true, title: input.title };
+    },
+  });
+
   return {
     recordCondition: recordConditionTool,
     suggestActions: suggestActionsTool,
@@ -1264,5 +1455,6 @@ export function createClinicalTools(ctx: {
     vaccinationReview: vaccinationReviewTool,
     symptomTimeline: symptomTimelineTool,
     updateProfile: updateProfileTool,
+    generatePatientSummary: generatePatientSummaryTool,
   } as const;
 }

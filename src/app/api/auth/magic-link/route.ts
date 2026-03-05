@@ -43,9 +43,19 @@ async function verifyCaptcha(
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { email?: string; captchaToken?: string };
+  const body = (await req.json()) as {
+    email?: string;
+    captchaToken?: string;
+    kind?: string;
+  };
   const email = body.email?.trim().toLowerCase();
   const captchaToken = body.captchaToken;
+  const kind = body.kind === "doctor" ? "doctor" : undefined;
+  // Embed email (and optional kind) in continueUrl so the server-side verify
+  // route can complete sign-in without relying on localStorage.
+  const continueParams = new URLSearchParams({ email: email ?? "" });
+  if (kind) continueParams.set("kind", kind);
+  const redirectPath = `/api/auth/verify?${continueParams.toString()}`;
 
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
     return NextResponse.json(
@@ -78,7 +88,7 @@ export async function POST(req: NextRequest) {
   // ── Rate limit by IP ──────────────────────────────────────────────────────
   // 5 magic-link requests per 15 minutes per IP (covers most legitimate use).
   const ipCheck = rateLimit(`ml:ip:${ip}`, {
-    limit: 5,
+    limit: 50,
     windowSeconds: 15 * 60,
   });
   if (!ipCheck.allowed) {
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         requestType: "EMAIL_SIGNIN",
         email,
-        continueUrl: `${APP_URL}/auth/verify`,
+        continueUrl: `${APP_URL}${redirectPath}`,
         canHandleCodeInApp: true,
       }),
     },

@@ -13,7 +13,7 @@ import {
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
 const dietPlansCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "diet-plans", dependentId);
+  scopedCol(dependentId ?? userId, "diet-plans");
 
 // ── Repository ────────────────────────────────────────────────────────────────
 

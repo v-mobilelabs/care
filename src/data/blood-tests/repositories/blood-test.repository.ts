@@ -13,7 +13,7 @@ import {
 // ── Collection helpers ────────────────────────────────────────────────────────
 
 const bloodTestsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "blood-tests", dependentId);
+  scopedCol(dependentId ?? userId, "blood-tests");
 
 const bloodTestDoc = (
   userId: string,

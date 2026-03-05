@@ -334,11 +334,13 @@ interface StatusIndicatorProps {
     chatStatus: ChatStatus;
     phraseIdx: number;
     phraseFading: boolean;
+    /** Fixed label to display instead of the cycling phrases (e.g. during upload). */
+    overrideLabel?: string;
 }
 
-export function StatusIndicator({ chatStatus, phraseIdx, phraseFading }: Readonly<StatusIndicatorProps>) {
+export function StatusIndicator({ chatStatus, phraseIdx, phraseFading, overrideLabel }: Readonly<StatusIndicatorProps>) {
     const phrases = chatStatus === "ready" ? THINKING_PHRASES : ANALYSING_PHRASES;
-    const label = phrases[phraseIdx % phrases.length];
+    const label = overrideLabel ?? phrases[phraseIdx % phrases.length];
     return (
         <Group gap={10} align="center">
             <Avatar size={30} radius="xl" color="primary" variant="light">
@@ -357,7 +359,7 @@ export function StatusIndicator({ chatStatus, phraseIdx, phraseFading }: Readonl
                     c="dimmed"
                     style={{
                         transition: "opacity 0.3s ease",
-                        opacity: phraseFading ? 0 : 1,
+                        opacity: phraseFading && !overrideLabel ? 0 : 1,
                         minWidth: 160,
                     }}
                 >

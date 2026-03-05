@@ -5,7 +5,7 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 export interface SessionDocument {
   userId: string;
-  /** Stored for reference; the authoritative scoping is the path:  users/{userId}/profiles/{profileId}/sessions */
+  /** Stored for reference; the authoritative scoping is the path: profiles/{profileId}/sessions */
   profileId: string;
   title: string;
   messageCount: number;
@@ -29,7 +29,7 @@ export interface SessionDto {
 
 export const CreateSessionSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  /** Firestore path segment: users/{userId}/profiles/{profileId}/sessions */
+  /** Firestore path segment: profiles/{profileId}/sessions */
   profileId: z.string().min(1, { message: "profileId is required" }),
   /** Optional explicit Firestore document ID (client-generated UUID). */
   id: z.string().uuid({ message: "id must be a valid UUID" }).optional(),

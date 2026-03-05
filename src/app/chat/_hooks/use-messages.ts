@@ -13,6 +13,7 @@ import {
   useInvalidateSessions,
   useInvalidateCredits,
   useInvalidateAssessments,
+  useInvalidatePatientSummaries,
   useAddConditionMutation,
 } from "@/app/chat/_query";
 import type { MessageRecord } from "@/app/chat/_query";
@@ -40,6 +41,7 @@ export function useMessages(sessionId: string) {
   const invalidateSessions = useInvalidateSessions();
   const invalidateCredits = useInvalidateCredits();
   const invalidateAssessments = useInvalidateAssessments();
+  const invalidatePatientSummaries = useInvalidatePatientSummaries();
   const { mutate: addCondition } = useAddConditionMutation();
   const hasHydrated = useRef(false);
 
@@ -58,6 +60,25 @@ export function useMessages(sessionId: string) {
   );
 
   // ── AI SDK chat ───────────────────────────────────────────────────────────
+  // Use refs for sessionId and activeDependentId so the DefaultChatTransport's
+  // body/headers callbacks always read the *current* values even after the
+  // session is replaced (new chat). Without refs, the static objects captured
+  // at first render would keep sending the original sessionId forever.
+  const sessionIdRef = useRef(sessionId);
+  const activeDependentIdRef = useRef(activeDependentId);
+  // Signed URLs of files the user just uploaded — included in the next
+  // request body so the server can substitute binary blobs with proper
+  // { type: "file", url, mediaType } parts before writing to Firestore.
+  const pendingAttachmentsRef = useRef<
+    Array<{ url: string; mediaType: string }>
+  >([]);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+  useEffect(() => {
+    activeDependentIdRef.current = activeDependentId;
+  }, [activeDependentId]);
+
   const {
     messages,
     setMessages,
@@ -70,8 +91,16 @@ export function useMessages(sessionId: string) {
   } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: { sessionId },
-      headers: activeDependentId ? { "x-dependent-id": activeDependentId } : {},
+      // body and headers are Resolvable — passing functions ensures they are
+      // called on every send(), picking up the latest ref values.
+      body: () => ({
+        sessionId: sessionIdRef.current,
+        attachmentUrls: pendingAttachmentsRef.current,
+      }),
+      headers: (): Record<string, string> =>
+        activeDependentIdRef.current
+          ? { "x-dependent-id": activeDependentIdRef.current }
+          : {},
     }),
     messages: INITIAL_MESSAGES,
   });
@@ -98,11 +127,15 @@ export function useMessages(sessionId: string) {
       invalidateSessions();
       invalidateCredits();
       invalidateAssessments();
+      invalidatePatientSummaries();
     }
     // Invalidate the sessions list as soon as a message is submitted so the
     // new session appears in the sidebar immediately without waiting for the
     // full AI response to finish streaming.
     if (status === "submitted") {
+      // Clear pending attachments — the request has been sent and the URLs
+      // are no longer needed.
+      pendingAttachmentsRef.current = [];
       invalidateSessions();
       trackEvent({
         name: "chat_message_sent",
@@ -231,10 +264,17 @@ export function useMessages(sessionId: string) {
     if (pendingFreeTextId) break;
   }
 
+  function setPendingAttachments(
+    urls: Array<{ url: string; mediaType: string }>,
+  ) {
+    pendingAttachmentsRef.current = urls;
+  }
+
   return {
     // Chat core
     messages,
     sendMessage,
+    setPendingAttachments,
     stop,
     regenerate,
     error,

@@ -286,6 +286,9 @@ export default function HomePage() {
               <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/chat")}>
                 Check My Symptoms
               </Button>
+              <Button variant="subtle" color="primary" radius="xl" leftSection={<IconStethoscope size={20} />} onClick={() => router.push("/auth/login?kind=doctor")}>
+                Doctor Sign In
+              </Button>
             </Group>
             <Group gap="xl" wrap="wrap" justify="center">
               {[

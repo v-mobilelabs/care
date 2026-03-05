@@ -17,11 +17,12 @@ import {
     IconShieldCheck,
 } from "@tabler/icons-react";
 import type { ProfileRecord } from "@/app/chat/_query";
-import type { User } from "firebase/auth";
 import { AvatarUpload } from "./avatar-upload";
 
 interface Props {
-    user: User | null;
+    photoURL: string | null;
+    email: string | null;
+    emailVerified: boolean;
     initials: string;
     healthProfile: ProfileRecord | undefined;
     isProfileLoaded: boolean;
@@ -29,7 +30,8 @@ interface Props {
     onAvatarUpdated?: (url: string) => void;
 }
 
-export function HeroCard({ user, initials, healthProfile, isProfileLoaded, bmi, onAvatarUpdated }: Readonly<Props>) {
+export function HeroCard({ photoURL, email, emailVerified, initials, healthProfile, isProfileLoaded, bmi, onAvatarUpdated }: Readonly<Props>) {
+
     return (
         <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
             {/* Gradient banner */}
@@ -42,7 +44,7 @@ export function HeroCard({ user, initials, healthProfile, isProfileLoaded, bmi, 
             <Box px="xl" pb="xl" style={{ position: "relative" }}>
                 {/* Clickable avatar overlapping banner */}
                 <AvatarUpload
-                    src={user?.photoURL}
+                    src={photoURL}
                     initials={initials}
                     onUpdated={onAvatarUpdated}
                 />
@@ -51,9 +53,9 @@ export function HeroCard({ user, initials, healthProfile, isProfileLoaded, bmi, 
                     <Box>
                         <Group gap={6} align="center">
                             <Text fw={700} size="md" lh={1.2}>
-                                {user?.displayName ?? "No name set"}
+                                {healthProfile?.name ?? "No name set"}
                             </Text>
-                            {user?.emailVerified && (
+                            {emailVerified && (
                                 <Tooltip label="Email verified" withArrow>
                                     <ThemeIcon size={17} radius="xl" color="success" variant="light">
                                         <IconShieldCheck size={10} />
@@ -61,7 +63,7 @@ export function HeroCard({ user, initials, healthProfile, isProfileLoaded, bmi, 
                                 </Tooltip>
                             )}
                         </Group>
-                        <Text size="xs" c="dimmed" mt={2}>{user?.email}</Text>
+                        <Text size="xs" c="dimmed" mt={2}>{email}</Text>
                     </Box>
 
                     {/* Health summary chips */}

@@ -18,7 +18,7 @@ const bucket = firebaseService.getBucket();
 const SIGNED_URL_EXPIRY_MS = 60 * 60 * 1000;
 
 const insuranceCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "insurance", dependentId);
+  scopedCol(dependentId ?? userId, "insurance");
 
 /** GCS object path for an insurance document */
 const storagePath = (

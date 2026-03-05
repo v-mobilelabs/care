@@ -10,8 +10,10 @@ import {
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { signOut } from "@/lib/auth/sign-out";
-import { useCreditsQuery } from "@/app/chat/_query";
-import { useChatContext } from "@/app/chat/_context/chat-context"
+import { useCreditsQuery, useProfileQuery } from "@/app/chat/_query";
+import { useChatContext } from "@/app/chat/_context/chat-context";
+import { getInitials } from "@/lib/get-initials";
+import { PresenceDot } from "@/lib/presence/presence-dot";
 
 interface ChatHeaderProps {
     mobileNavOpened: boolean;
@@ -29,6 +31,7 @@ export function ChatHeader({
     const { user } = useAuth();
     const router = useRouter();
     const { data: credits } = useCreditsQuery();
+    const { data: profile } = useProfileQuery();
     const { onNewChat } = useChatContext();
 
     async function handleSignOut() {
@@ -36,9 +39,9 @@ export function ChatHeader({
         router.replace("/auth/login");
     }
 
-    const initials = user?.displayName
-        ? user.displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-        : user?.email?.[0]?.toUpperCase() ?? "?";
+    const photoURL = profile?.photoUrl ?? user?.photoURL ?? null;
+    const displayName = profile?.name ?? user?.displayName ?? null;
+    const initials = getInitials(displayName, user?.email);
 
     return (
         <Box
@@ -88,23 +91,39 @@ export function ChatHeader({
                             </Tooltip>
                         );
                     })()}
+                    {/* ── Presence indicator pill ── */}
+                    {/* ── Presence indicator pill ── */}
+                    <Box
+                        style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "4px 10px",
+                            borderRadius: "var(--mantine-radius-xl)",
+                            border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))",
+                            background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
+                            cursor: "default",
+                            userSelect: "none",
+                        }}
+                    >
+                        <PresenceDot uid={user?.uid} size="sm" withLabel />
+                    </Box>
                     <Menu position="bottom-end" withArrow offset={8}>
                         <Menu.Target>
                             <Avatar
-                                src={user?.photoURL ?? undefined}
+                                src={photoURL ?? undefined}
                                 size={36}
                                 radius="xl"
                                 color="primary"
                                 style={{ cursor: "pointer" }}
                                 aria-label="User menu"
                             >
-                                {!user?.photoURL && initials}
+                                {!photoURL && initials}
                             </Avatar>
                         </Menu.Target>
                         <Menu.Dropdown miw={200}>
                             <Menu.Label>
-                                <Text size="xs" fw={600} truncate>{user?.displayName ?? user?.email ?? "Signed in"}</Text>
-                                {user?.displayName && <Text size="xs" c="dimmed" truncate>{user.email}</Text>}
+                                <Text size="xs" fw={600} truncate>{displayName ?? user?.email ?? "Signed in"}</Text>
+                                {displayName && <Text size="xs" c="dimmed" truncate>{user?.email}</Text>}
                             </Menu.Label>
                             <Menu.Divider />
                             <Menu.Item leftSection={<IconUser size={16} />} onClick={() => router.push("/chat/profile")}>Profile</Menu.Item>

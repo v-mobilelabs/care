@@ -1,0 +1,48 @@
+{
+  "rules": {
+    "presence": {
+      "$uid": {
+        // Any authenticated user can read any presence node.
+        // This lets patients see if a doctor is online, and vice versa.
+        ".read": "auth != null",
+
+        // Only the user themselves can write their own presence node.
+        // The Admin SDK (used in Cloud Functions) bypasses these rules.
+        ".write": "auth != null && auth.uid === $uid",
+
+        ".validate": "newData.hasChildren(['online', 'lastSeen', 'kind'])",
+
+        "online": { ".validate": "newData.isBoolean()" },
+        "lastSeen": { ".validate": "newData.isNumber()" },
+        "kind": {
+          ".validate": "newData.isString() && (newData.val() === 'user' || newData.val() === 'doctor')"
+        },
+
+        // Reject any extra fields.
+        "$other": { ".validate": false }
+      }
+    },
+
+    // ── On-demand video call signaling ────────────────────────────────────────
+    // Incoming call queue — only the target doctor can read their queue.
+    // Writes are performed exclusively by the Admin SDK (server-side API routes).
+    "call-requests": {
+      "$doctorId": {
+        ".read": "auth != null && auth.uid === $doctorId",
+        ".write": false
+      }
+    },
+
+    // Patient call state — only the patient themselves can read their state.
+    // Writes are performed exclusively by the Admin SDK (server-side API routes).
+    "call-state": {
+      "$patientId": {
+        ".read": "auth != null && auth.uid === $patientId",
+        ".write": false
+      }
+    },
+
+    // Deny all reads/writes to any other path.
+    "$other": { ".read": false, ".write": false }
+  }
+}

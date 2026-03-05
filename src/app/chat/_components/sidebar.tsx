@@ -29,15 +29,18 @@ import {
     IconFolder,
     IconHistory,
     IconMessage,
+    IconNotes,
     IconQuestionMark,
     IconSalad,
     IconShield,
     IconStethoscope,
     IconMoon,
+    IconPhone,
     IconSun,
     IconTrash,
     IconUser,
     IconUsers,
+    IconVideo,
     IconX,
 } from "@tabler/icons-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -338,6 +341,12 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                         active={pathname.startsWith("/chat/diet-plans")}
                         onClick={() => nav("/chat/diet-plans")}
                     />
+                    <NavGridItem
+                        icon={<IconNotes size={18} />}
+                        label="Pt. Summary"
+                        active={pathname.startsWith("/chat/patient-summary")}
+                        onClick={() => nav("/chat/patient-summary")}
+                    />
                 </SimpleGrid>
 
                 <Divider my="xs" />
@@ -364,6 +373,18 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                         label="Prescriptions"
                         active={pathname.startsWith("/chat/prescriptions")}
                         onClick={() => nav("/chat/prescriptions")}
+                    />
+                    <NavGridItem
+                        icon={<IconVideo size={18} />}
+                        label="See a Doctor"
+                        active={pathname.startsWith("/chat/connect")}
+                        onClick={() => nav("/chat/connect")}
+                    />
+                    <NavGridItem
+                        icon={<IconPhone size={18} />}
+                        label="Calls"
+                        active={pathname.startsWith("/chat/calls")}
+                        onClick={() => nav("/chat/calls")}
                     />
                 </SimpleGrid>
 

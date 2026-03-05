@@ -43,6 +43,7 @@ import {
     IconFlask,
     IconFlame,
     IconHeartbeat,
+    IconLungs,
     IconMessageQuestion,
     IconMoodSad,
     IconMoodSmile,
@@ -67,8 +68,8 @@ import type {
     ConditionInput, PrescriptionInput, MedicineInput, ProcedureInput,
     AppointmentInput, ProviderInput, AssessmentInput, AskQuestionInput,
     NextStepsInput, DietPlanInput, SoapNoteInput,
-    DentalChartInput, DentalCondition, DentalFinding,
-    SuggestActionsInput, SuggestActionItem,
+    DentalChartInput, DentalCondition, DentalFinding, DentalMeasurements,
+    SuggestActionsInput, SuggestActionItem, LogVitalsInput, PatientSummaryInput,
 } from "@/app/chat/_types";
 import { parseInline, MarkdownContent } from "@/app/chat/_components/markdown";
 import { useAddDietPlanMutation, useAddMedicationMutation, useDietPlansQuery } from "@/app/chat/_query";
@@ -1171,6 +1172,9 @@ export function SoapNoteCard({ data }: Readonly<{ data: SoapNoteInput }>) {
 const CONDITION_CFG: Record<DentalCondition, { fill: string; stroke: string; rootFill: string; label: string }> = {
     normal: { fill: "#dee2e6", stroke: "#adb5bd", rootFill: "#ced4da", label: "Normal" },
     caries: { fill: "#ff6b6b", stroke: "#e03131", rootFill: "#ffa8a8", label: "Decay" },
+    cavity: { fill: "#f5c57a", stroke: "#c8820a", rootFill: "#ffe0b2", label: "Cavity" },
+    restoration: { fill: "#dee2e6", stroke: "#adb5bd", rootFill: "#ced4da", label: "Restoration" },
+    sinus: { fill: "#a5d8ff", stroke: "#1971c2", rootFill: "#d0ebff", label: "Sinus" },
     missing: { fill: "#495057", stroke: "#343a40", rootFill: "#868e96", label: "Missing" },
     crown: { fill: "#ffd43b", stroke: "#f08c00", rootFill: "#ffe499", label: "Crown" },
     root_canal: { fill: "#74c0fc", stroke: "#1971c2", rootFill: "#a5d8ff", label: "Root Canal" },
@@ -1198,6 +1202,89 @@ const UL_Y = 14;
 const LL_Y = 196;
 const CHART_H = 210;
 
+/** px per mm of root length — ROOT_H (30px) represents ~15mm of root. */
+const ROOT_MM = 15;
+
+/** Hex fill colour for a bone-loss overlay keyed by severity in mm. */
+function boneLossColor(mm: number): string {
+    if (mm > 6) return "#f03e3e";
+    if (mm > 4) return "#ff922b";
+    if (mm > 2) return "#ffd43b";
+    return "#51cf66";
+}
+
+/** Mantine color name for bone-loss Badge (avoids nested ternaries in JSX). */
+function boneLossColorName(mm: number): string {
+    if (mm > 6) return "red";
+    if (mm > 4) return "orange";
+    if (mm > 2) return "yellow";
+    return "green";
+}
+
+/** Short label for furcation grade. */
+function furcGrade(f?: "none" | "I" | "II" | "III"): string {
+    if (f === "I") return "F1";
+    if (f === "II") return "F2";
+    if (f === "III") return "F3";
+    return "";
+}
+
+// ── Temporal analysis ─────────────────────────────────────────────────────────
+
+interface TemporalDelta { mm: number; label: string; colorName: string; }
+
+/** Compute signed change between a current and prior measurement. */
+function temporalDelta(current: number | undefined, prior: number | undefined): TemporalDelta | null {
+    if (current == null || prior == null) return null;
+    const mm = Math.round((current - prior) * 10) / 10;
+    if (mm > 0) return { mm, label: `+${mm}mm ↑`, colorName: "red" };
+    if (mm < 0) return { mm, label: `${mm}mm ↓`, colorName: "green" };
+    return { mm: 0, label: "0mm =", colorName: "gray" };
+}
+
+// ── FDA 510(k)-convention mm ruler ────────────────────────────────────────────
+
+/**
+ * Renders a calibrated millimetre depth ruler in the left margin of the SVG,
+ * following the radiographic measurement overlay conventions used by FDA
+ * 510(k)-cleared dental imaging software (e.g. Planmeca Romexis, Carestream).
+ */
+function renderMmRuler(dimColor: string): React.ReactElement {
+    const ticks = [2, 4, 6, 8, 10];
+    const barX = MX - 2;
+    const tickX = MX - 7;
+    return (
+        <g>
+            {/* mm label */}
+            <text x={tickX - 2} y={UC_BOT - 4} textAnchor="end" fontSize={5.5} fill={dimColor} fontFamily="system-ui" opacity={0.8}>mm</text>
+            {/* Upper arch ruler */}
+            <line x1={barX} y1={UC_BOT} x2={barX} y2={Math.min(UR_TIP - 2, UC_BOT + (10 / ROOT_MM) * ROOT_H)} stroke={dimColor} strokeWidth={0.6} opacity={0.6} />
+            {ticks.map(mm => {
+                const y = UC_BOT + (mm / ROOT_MM) * ROOT_H;
+                if (y > UR_TIP - 1) return null;
+                return (
+                    <g key={`ur${mm}`}>
+                        <line x1={tickX} y1={y} x2={barX} y2={y} stroke={dimColor} strokeWidth={0.6} opacity={0.6} />
+                        <text x={tickX - 2} y={y + 2.5} textAnchor="end" fontSize={6} fill={dimColor} fontFamily="monospace" opacity={0.75}>{mm}</text>
+                    </g>
+                );
+            })}
+            {/* Lower arch ruler */}
+            <line x1={barX} y1={LC_TOP} x2={barX} y2={Math.max(LR_TIP + 2, LC_TOP - (10 / ROOT_MM) * ROOT_H)} stroke={dimColor} strokeWidth={0.6} opacity={0.6} />
+            {ticks.map(mm => {
+                const y = LC_TOP - (mm / ROOT_MM) * ROOT_H;
+                if (y < LR_TIP + 1) return null;
+                return (
+                    <g key={`lr${mm}`}>
+                        <line x1={tickX} y1={y} x2={barX} y2={y} stroke={dimColor} strokeWidth={0.6} opacity={0.6} />
+                        <text x={tickX - 2} y={y + 2.5} textAnchor="end" fontSize={6} fill={dimColor} fontFamily="monospace" opacity={0.75}>{mm}</text>
+                    </g>
+                );
+            })}
+        </g>
+    );
+}
+
 interface ToothPos { fdi: number; x: number; w: number; }
 
 function buildArchX(fdis: number[]): ToothPos[] {
@@ -1219,12 +1306,25 @@ const CHART_W = ARCH_X_DATA[ARCH_X_DATA.length - 1]!.x + ARCH_X_DATA[ARCH_X_DATA
 
 function isMultiRootTooth(fdi: number): boolean { return (fdi % 10) >= 6; }
 
-function renderUpperTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition], cond: DentalCondition, isHov: boolean): React.ReactElement {
+function renderUpperTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition], cond: DentalCondition, isHov: boolean, measurements?: DentalMeasurements): React.ReactElement {
     const { fdi, x, w } = p;
     const multi = isMultiRootTooth(fdi);
     const miss = cond === "missing";
     const sw = isHov ? 2.5 : 1;
     const dash = cond === "impacted" || cond === "unerupted" ? "5 2" : undefined;
+    const baseForOverlay = cond === "restoration" || cond === "sinus";
+    const baseCfg = baseForOverlay ? CONDITION_CFG["normal"] : cfg;
+    // Bone loss from CEJ going downward into root zone
+    const blMm = measurements?.boneLossFromCej ?? 0;
+    const blPx = blMm > 0 ? Math.min((blMm / ROOT_MM) * ROOT_H, ROOT_H - 4) : 0;
+    const blColor = boneLossColor(blMm);
+    const boneY = UC_BOT + blPx;
+    // Prior-visit bone level for temporal overlay
+    const priorBlMm = measurements?.priorBoneLossFromCej ?? 0;
+    const priorBlPx = priorBlMm > 0 ? Math.min((priorBlMm / ROOT_MM) * ROOT_H, ROOT_H - 4) : 0;
+    const priorBoneY = UC_BOT + priorBlPx;
+    const showFurcation = multi && (measurements?.furcation ?? "none") !== "none";
+    const furcLabel = furcGrade(measurements?.furcation);
     return (
         <g key={fdi}>
             {miss ? (
@@ -1235,17 +1335,75 @@ function renderUpperTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition
                 </>
             ) : (
                 <>
+                    {/* Roots */}
                     {multi ? (
                         <>
-                            <polygon points={`${x + w * 0.13},${UC_BOT} ${x + w * 0.43},${UC_BOT} ${x + w * 0.28},${UR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
-                            <polygon points={`${x + w * 0.57},${UC_BOT} ${x + w * 0.87},${UC_BOT} ${x + w * 0.72},${UR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
+                            <polygon points={`${x + w * 0.13},${UC_BOT} ${x + w * 0.43},${UC_BOT} ${x + w * 0.28},${UR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
+                            <polygon points={`${x + w * 0.57},${UC_BOT} ${x + w * 0.87},${UC_BOT} ${x + w * 0.72},${UR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
                         </>
                     ) : (
-                        <polygon points={`${x + w * 0.25},${UC_BOT} ${x + w * 0.75},${UC_BOT} ${x + w * 0.5},${UR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
+                        <polygon points={`${x + w * 0.25},${UC_BOT} ${x + w * 0.75},${UC_BOT} ${x + w * 0.5},${UR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
                     )}
-                    <rect x={x} y={UC_TOP} width={w} height={CROWN_H} rx={4} fill={cfg.fill} stroke={cfg.stroke} strokeWidth={sw} strokeDasharray={dash} />
+                    {/* Crown body */}
+                    <rect x={x} y={UC_TOP} width={w} height={CROWN_H} rx={4} fill={baseCfg.fill} stroke={baseCfg.stroke} strokeWidth={sw} strokeDasharray={dash} />
+
+                    {/* Crown: cervical band + occlusal ridge for prosthetic crown */}
+                    {cond === "crown" && (
+                        <>
+                            <rect x={x} y={UC_BOT - 7} width={w} height={7} rx={0} fill={cfg.stroke} opacity={0.35} />
+                            <line x1={x + 3} y1={UC_TOP + 5} x2={x + w - 3} y2={UC_TOP + 5} stroke={cfg.stroke} strokeWidth={1} opacity={0.5} />
+                        </>
+                    )}
+
+                    {/* Cavity: brown occlusal pit spot on crown */}
+                    {cond === "cavity" && (
+                        <>
+                            <rect x={x} y={UC_TOP} width={w} height={CROWN_H} rx={4} fill={cfg.fill} stroke={cfg.stroke} strokeWidth={sw} />
+                            <ellipse cx={x + w * 0.5} cy={UC_BOT - 8} rx={w * 0.28} ry={5} fill="#8b5e3c" opacity={0.75} />
+                        </>
+                    )}
+
+                    {/* Restoration: amalgam/composite inset block */}
+                    {cond === "restoration" && (
+                        <rect
+                            x={x + w * 0.22} y={UC_TOP + 7}
+                            width={w * 0.56} height={CROWN_H - 14}
+                            rx={2}
+                            fill="#868e96" stroke="#495057" strokeWidth={0.8} opacity={0.85}
+                        />
+                    )}
+
+                    {/* Sinus: translucent dome above root tip (maxillary sinus proximity) */}
+                    {cond === "sinus" && (
+                        <ellipse
+                            cx={x + w * 0.5} cy={UR_TIP - 2}
+                            rx={w * 0.48} ry={9}
+                            fill="rgba(116,192,252,0.28)" stroke="#74c0fc" strokeWidth={1} strokeDasharray="3 2"
+                        />
+                    )}
+
+                    {/* Periapical lesion: red halo at root apex */}
                     {cond === "periapical_lesion" && (
                         <ellipse cx={x + w * 0.5} cy={UR_TIP} rx={7} ry={5} fill="rgba(240,62,62,0.3)" stroke="#c92a2a" strokeWidth={1} />
+                    )}
+
+                    {/* Bone loss from CEJ — semi-transparent shaded zone + solid bone level line + mm label */}
+                    {blMm > 0 && (
+                        <>
+                            <rect x={x + 1} y={UC_BOT} width={w - 2} height={blPx} fill={blColor} opacity={0.25} />
+                            <line x1={x} y1={boneY} x2={x + w} y2={boneY} stroke={blColor} strokeWidth={1.5} strokeDasharray="3 2" />
+                            <text x={x + w * 0.5} y={boneY + 6} textAnchor="middle" fontSize={6.5} fill={blColor} fontWeight="700" fontFamily="monospace">{blMm}mm</text>
+                        </>
+                    )}
+
+                    {/* Temporal: prior bone level — thin dashed cyan line */}
+                    {priorBlMm > 0 && (
+                        <line x1={x} y1={priorBoneY} x2={x + w} y2={priorBoneY} stroke="#74c0fc" strokeWidth={0.8} strokeDasharray="2 2" opacity={0.7} />
+                    )}
+
+                    {/* Furcation indicator in the inter-radicular space */}
+                    {showFurcation && (
+                        <text x={x + w * 0.5} y={UC_BOT + 11} textAnchor="middle" fontSize={7} fill="#7048e8" fontWeight="700" fontFamily="system-ui">{furcLabel}</text>
                     )}
                 </>
             )}
@@ -1255,12 +1413,25 @@ function renderUpperTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition
     );
 }
 
-function renderLowerTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition], cond: DentalCondition, isHov: boolean): React.ReactElement {
+function renderLowerTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition], cond: DentalCondition, isHov: boolean, measurements?: DentalMeasurements): React.ReactElement {
     const { fdi, x, w } = p;
     const multi = isMultiRootTooth(fdi);
     const miss = cond === "missing";
     const sw = isHov ? 2.5 : 1;
     const dash = cond === "impacted" || cond === "unerupted" ? "5 2" : undefined;
+    const baseForOverlay = cond === "restoration" || cond === "sinus";
+    const baseCfg = baseForOverlay ? CONDITION_CFG["normal"] : cfg;
+    // Bone loss from CEJ going upward into root zone (roots are above crown for lower teeth)
+    const blMm = measurements?.boneLossFromCej ?? 0;
+    const blPx = blMm > 0 ? Math.min((blMm / ROOT_MM) * ROOT_H, ROOT_H - 4) : 0;
+    const blColor = boneLossColor(blMm);
+    const boneY = LC_TOP - blPx;
+    // Prior-visit bone level for temporal overlay
+    const priorBlMm = measurements?.priorBoneLossFromCej ?? 0;
+    const priorBlPx = priorBlMm > 0 ? Math.min((priorBlMm / ROOT_MM) * ROOT_H, ROOT_H - 4) : 0;
+    const priorBoneY = LC_TOP - priorBlPx;
+    const showFurcation = multi && (measurements?.furcation ?? "none") !== "none";
+    const furcLabel = furcGrade(measurements?.furcation);
     return (
         <g key={fdi}>
             {miss ? (
@@ -1271,17 +1442,75 @@ function renderLowerTooth(p: ToothPos, cfg: typeof CONDITION_CFG[DentalCondition
                 </>
             ) : (
                 <>
+                    {/* Roots */}
                     {multi ? (
                         <>
-                            <polygon points={`${x + w * 0.13},${LC_TOP} ${x + w * 0.43},${LC_TOP} ${x + w * 0.28},${LR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
-                            <polygon points={`${x + w * 0.57},${LC_TOP} ${x + w * 0.87},${LC_TOP} ${x + w * 0.72},${LR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
+                            <polygon points={`${x + w * 0.13},${LC_TOP} ${x + w * 0.43},${LC_TOP} ${x + w * 0.28},${LR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
+                            <polygon points={`${x + w * 0.57},${LC_TOP} ${x + w * 0.87},${LC_TOP} ${x + w * 0.72},${LR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
                         </>
                     ) : (
-                        <polygon points={`${x + w * 0.25},${LC_TOP} ${x + w * 0.75},${LC_TOP} ${x + w * 0.5},${LR_TIP}`} fill={cfg.rootFill} stroke={cfg.stroke} strokeWidth={0.8} />
+                        <polygon points={`${x + w * 0.25},${LC_TOP} ${x + w * 0.75},${LC_TOP} ${x + w * 0.5},${LR_TIP}`} fill={baseCfg.rootFill} stroke={baseCfg.stroke} strokeWidth={0.8} />
                     )}
-                    <rect x={x} y={LC_TOP} width={w} height={CROWN_H} rx={4} fill={cfg.fill} stroke={cfg.stroke} strokeWidth={sw} strokeDasharray={dash} />
+                    {/* Crown body */}
+                    <rect x={x} y={LC_TOP} width={w} height={CROWN_H} rx={4} fill={baseCfg.fill} stroke={baseCfg.stroke} strokeWidth={sw} strokeDasharray={dash} />
+
+                    {/* Crown: cervical band + occlusal ridge */}
+                    {cond === "crown" && (
+                        <>
+                            <rect x={x} y={LC_TOP} width={w} height={7} rx={0} fill={cfg.stroke} opacity={0.35} />
+                            <line x1={x + 3} y1={LC_BOT - 5} x2={x + w - 3} y2={LC_BOT - 5} stroke={cfg.stroke} strokeWidth={1} opacity={0.5} />
+                        </>
+                    )}
+
+                    {/* Cavity: brown occlusal pit on crown */}
+                    {cond === "cavity" && (
+                        <>
+                            <rect x={x} y={LC_TOP} width={w} height={CROWN_H} rx={4} fill={cfg.fill} stroke={cfg.stroke} strokeWidth={sw} />
+                            <ellipse cx={x + w * 0.5} cy={LC_TOP + 8} rx={w * 0.28} ry={5} fill="#8b5e3c" opacity={0.75} />
+                        </>
+                    )}
+
+                    {/* Restoration: amalgam/composite inset block */}
+                    {cond === "restoration" && (
+                        <rect
+                            x={x + w * 0.22} y={LC_TOP + 7}
+                            width={w * 0.56} height={CROWN_H - 14}
+                            rx={2}
+                            fill="#868e96" stroke="#495057" strokeWidth={0.8} opacity={0.85}
+                        />
+                    )}
+
+                    {/* Sinus: not clinically applicable to mandibular teeth — render as watch marker */}
+                    {cond === "sinus" && (
+                        <ellipse
+                            cx={x + w * 0.5} cy={LR_TIP + 2}
+                            rx={w * 0.48} ry={8}
+                            fill="rgba(116,192,252,0.28)" stroke="#74c0fc" strokeWidth={1} strokeDasharray="3 2"
+                        />
+                    )}
+
+                    {/* Periapical lesion: red halo at root apex */}
                     {cond === "periapical_lesion" && (
                         <ellipse cx={x + w * 0.5} cy={LR_TIP} rx={7} ry={5} fill="rgba(240,62,62,0.3)" stroke="#c92a2a" strokeWidth={1} />
+                    )}
+
+                    {/* Bone loss from CEJ — shaded zone + bone level line (upward direction) + mm label */}
+                    {blMm > 0 && (
+                        <>
+                            <rect x={x + 1} y={boneY} width={w - 2} height={blPx} fill={blColor} opacity={0.25} />
+                            <line x1={x} y1={boneY} x2={x + w} y2={boneY} stroke={blColor} strokeWidth={1.5} strokeDasharray="3 2" />
+                            <text x={x + w * 0.5} y={boneY - 2} textAnchor="middle" fontSize={6.5} fill={blColor} fontWeight="700" fontFamily="monospace">{blMm}mm</text>
+                        </>
+                    )}
+
+                    {/* Temporal: prior bone level — thin dashed cyan line */}
+                    {priorBlMm > 0 && (
+                        <line x1={x} y1={priorBoneY} x2={x + w} y2={priorBoneY} stroke="#74c0fc" strokeWidth={0.8} strokeDasharray="2 2" opacity={0.7} />
+                    )}
+
+                    {/* Furcation indicator */}
+                    {showFurcation && (
+                        <text x={x + w * 0.5} y={LC_TOP - 3} textAnchor="middle" fontSize={7} fill="#7048e8" fontWeight="700" fontFamily="system-ui">{furcLabel}</text>
                     )}
                 </>
             )}
@@ -1314,10 +1543,32 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                         <Box style={{ flex: 1, minWidth: 0 }}>
                             <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Dental Chart</Text>
                             <Text fw={700} size="sm">{data.summary}</Text>
+                            {(data.visitDate ?? data.priorVisitDate) && (
+                                <Group gap={5} wrap="nowrap" mt={2}>
+                                    {data.visitDate && <Text size="xs" c="dimmed">{new Date(data.visitDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</Text>}
+                                    {data.priorVisitDate && (
+                                        <>
+                                            <Text size="xs" c="dimmed">vs.</Text>
+                                            <Text size="xs" c="dimmed">{new Date(data.priorVisitDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</Text>
+                                            <Badge size="xs" color="blue" variant="dot">Temporal</Badge>
+                                        </>
+                                    )}
+                                </Group>
+                            )}
                         </Box>
                     </Group>
                     {abnormal.length > 0 && <Badge color="orange" size="sm">{abnormal.length} finding{abnormal.length > 1 ? "s" : ""}</Badge>}
                 </Group>
+
+                {/* Periodontal staging — shown immediately below header */}
+                {data.periodontalSummary && (
+                    <Paper radius="md" p="xs" style={{ background: "light-dark(var(--mantine-color-red-0), rgba(250,82,82,0.08))", border: "1px solid var(--mantine-color-red-3)" }}>
+                        <Group gap={6} wrap="nowrap" align="flex-start">
+                            <IconDental size={13} color="var(--mantine-color-red-6)" style={{ marginTop: 1, flexShrink: 0 }} />
+                            <Text size="xs"><span style={{ fontWeight: 700 }}>Periodontal: </span>{data.periodontalSummary}</Text>
+                        </Group>
+                    </Paper>
+                )}
 
                 {/* SVG chart — responsive via viewBox, scrollable fallback below 320px */}
                 <Box
@@ -1337,6 +1588,17 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                         <line x1={MX} y1={MID_Y} x2={CHART_W - MX} y2={MID_Y} stroke={lineColor} strokeWidth={0.5} />
                         <text x={MX - 6} y={MID_Y - 5} textAnchor="end" fontSize={8} fill={dimColor} fontFamily="system-ui">U</text>
                         <text x={MX - 6} y={MID_Y + 12} textAnchor="end" fontSize={8} fill={dimColor} fontFamily="system-ui">L</text>
+
+                        {/* ── FDA 510(k)-convention reference overlays ── */}
+                        {/* CEJ reference lines — blue dashed horizontal */}
+                        <line x1={MX} y1={UC_BOT} x2={CHART_W - MX} y2={UC_BOT} stroke="#1971c2" strokeWidth={0.8} strokeDasharray="3 2" opacity={0.4} />
+                        <line x1={MX} y1={LC_TOP} x2={CHART_W - MX} y2={LC_TOP} stroke="#1971c2" strokeWidth={0.8} strokeDasharray="3 2" opacity={0.4} />
+                        {/* Healthy alveolar bone baseline (≤1.5 mm from CEJ = normal) */}
+                        <line x1={MX} y1={UC_BOT + 3} x2={CHART_W - MX} y2={UC_BOT + 3} stroke="#51cf66" strokeWidth={0.6} strokeDasharray="5 4" opacity={0.3} />
+                        <line x1={MX} y1={LC_TOP - 3} x2={CHART_W - MX} y2={LC_TOP - 3} stroke="#51cf66" strokeWidth={0.6} strokeDasharray="5 4" opacity={0.3} />
+                        {/* Calibrated mm depth ruler */}
+                        {renderMmRuler(dimColor)}
+
                         {ARCH_X_DATA.map(p => {
                             const finding = findingMap.get(p.fdi);
                             const cond: DentalCondition = finding?.condition ?? "normal";
@@ -1344,7 +1606,7 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                             const isHov = hoveredFdi === p.fdi;
                             return (
                                 <g key={p.fdi} style={{ cursor: "pointer" }} onMouseEnter={() => setHoveredFdi(p.fdi)} onMouseLeave={() => setHoveredFdi(null)} onClick={() => setHoveredFdi(p.fdi === hoveredFdi ? null : p.fdi)}>
-                                    {renderUpperTooth(p, cfg, cond, isHov)}
+                                    {renderUpperTooth(p, cfg, cond, isHov, finding?.measurements)}
                                     <text x={p.x + p.w / 2} y={UL_Y} textAnchor="middle" fontSize={9} fill={isHov ? "#1971c2" : labelColor} fontWeight={isHov ? "700" : "400"} fontFamily="system-ui">{p.fdi}</text>
                                 </g>
                             );
@@ -1356,13 +1618,69 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                             const isHov = hoveredFdi === p.fdi;
                             return (
                                 <g key={p.fdi} style={{ cursor: "pointer" }} onMouseEnter={() => setHoveredFdi(p.fdi)} onMouseLeave={() => setHoveredFdi(null)} onClick={() => setHoveredFdi(p.fdi === hoveredFdi ? null : p.fdi)}>
-                                    {renderLowerTooth(p, cfg, cond, isHov)}
+                                    {renderLowerTooth(p, cfg, cond, isHov, finding?.measurements)}
                                     <text x={p.x + p.w / 2} y={LL_Y} textAnchor="middle" fontSize={9} fill={isHov ? "#1971c2" : labelColor} fontWeight={isHov ? "700" : "400"} fontFamily="system-ui">{p.fdi}</text>
                                 </g>
                             );
                         })}
                     </svg>
                 </Box>
+
+                {/* ── Calibrated Measurements Strip ── */}
+                {(() => {
+                    type MetricKey = keyof Pick<DentalMeasurements, "boneLossFromCej" | "probingDepth" | "clinicalAttachmentLevel" | "recession" | "mobility">;
+                    const metrics: { key: MetricKey; label: string; unit: string; colorFn: (v: number) => string }[] = [
+                        { key: "boneLossFromCej", label: "BL (mm)", unit: "mm", colorFn: boneLossColorName },
+                        { key: "probingDepth", label: "PD (mm)", unit: "mm", colorFn: (v) => v >= 6 ? "red" : v >= 4 ? "orange" : "teal" },
+                        { key: "clinicalAttachmentLevel", label: "CAL (mm)", unit: "mm", colorFn: (v) => v >= 5 ? "red" : v >= 3 ? "orange" : "green" },
+                        { key: "recession", label: "Rec (mm)", unit: "mm", colorFn: (v) => v >= 3 ? "orange" : "gray" },
+                        { key: "mobility", label: "Mob", unit: "", colorFn: (v) => v >= 3 ? "red" : v >= 2 ? "orange" : "yellow" },
+                    ];
+                    const measuredFindings = data.findings.filter(f =>
+                        f.measurements && metrics.some(m => f.measurements![m.key] != null)
+                    ).sort((a, b) => a.tooth - b.tooth);
+                    if (measuredFindings.length === 0) return null;
+                    const activeMetrics = metrics.filter(m => measuredFindings.some(f => f.measurements![m.key] != null));
+                    return (
+                        <Box>
+                            <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.5px", marginBottom: 4 }}>Calibrated Measurements</Text>
+                            <Box style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: measuredFindings.length * 44 + 64 }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ textAlign: "left", padding: "2px 8px 4px 0", fontSize: 10, color: dimColor, fontWeight: 700, whiteSpace: "nowrap", borderBottom: `1px solid ${lineColor}` }}>Tooth</th>
+                                            {measuredFindings.map(f => (
+                                                <th key={f.tooth} style={{ textAlign: "center", padding: "2px 3px 4px", fontSize: 10, fontWeight: 700, color: labelColor, whiteSpace: "nowrap", borderBottom: `1px solid ${lineColor}` }}>{f.tooth}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {activeMetrics.map((m, ri) => (
+                                            <tr key={m.key} style={{ background: ri % 2 === 0 ? "transparent" : "light-dark(rgba(0,0,0,0.03),rgba(255,255,255,0.03))" }}>
+                                                <td style={{ padding: "3px 8px 3px 0", fontSize: 10, fontWeight: 700, color: dimColor, whiteSpace: "nowrap" }}>{m.label}</td>
+                                                {measuredFindings.map(f => {
+                                                    const raw = f.measurements![m.key];
+                                                    const val = raw as number | undefined;
+                                                    return (
+                                                        <td key={f.tooth} style={{ textAlign: "center", padding: "3px 3px" }}>
+                                                            {val != null ? (
+                                                                <Badge size="xs" color={m.colorFn(val)} variant="light" style={{ minWidth: 30, fontSize: 9, fontFamily: "monospace" }}>
+                                                                    {val}{m.unit}
+                                                                </Badge>
+                                                            ) : (
+                                                                <Text size="xs" c="dimmed" ta="center">—</Text>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </Box>
+                        </Box>
+                    );
+                })()}
 
                 {/* Tooth detail panel — always occupies space to prevent layout jump */}
                 <Paper radius="md" px="sm" py={6} withBorder style={{ minHeight: 40 }}>
@@ -1372,6 +1690,57 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                             <Text size="xs" fw={700}>Tooth {hoveredFdi}</Text>
                             <Badge size="xs" color={hovCond === "caries" || hovCond === "periapical_lesion" ? "red" : hovCond === "normal" ? "gray" : "cyan"} variant="light">{CONDITION_CFG[hovCond].label}</Badge>
                             {hovFinding?.severity && <Badge size="xs" color={hovFinding.severity === "severe" ? "red" : hovFinding.severity === "moderate" ? "orange" : "yellow"} variant="light">{hovFinding.severity}</Badge>}
+                            {hovFinding?.surfaces && hovFinding.surfaces.length > 0 && (
+                                <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                                    <Text size="xs" c="dimmed" fw={500}>Surfaces:</Text>
+                                    {hovFinding.surfaces.map(s => <Badge key={s} size="xs" color="cyan" variant="dot">{s}</Badge>)}
+                                </Group>
+                            )}
+                            {(() => {
+                                const m = hovFinding?.measurements;
+                                if (!m) return null;
+                                const blD = temporalDelta(m.boneLossFromCej, m.priorBoneLossFromCej);
+                                const pdD = temporalDelta(m.probingDepth, m.priorProbingDepth);
+                                const calD = temporalDelta(m.clinicalAttachmentLevel, m.priorClinicalAttachmentLevel);
+                                if (!blD && !pdD && !calD) return null;
+                                return (
+                                    <Box style={{ width: "100%", marginTop: 2 }}>
+                                        <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.4px", marginBottom: 3 }}>Change vs. prior visit</Text>
+                                        <Group gap={5} wrap="wrap">
+                                            {blD && <Badge size="xs" color={blD.colorName} variant="filled">BL {blD.label}</Badge>}
+                                            {pdD && <Badge size="xs" color={pdD.colorName} variant="light">PD {pdD.label}</Badge>}
+                                            {calD && <Badge size="xs" color={calD.colorName} variant="light">CAL {calD.label}</Badge>}
+                                        </Group>
+                                    </Box>
+                                );
+                            })()}
+                            {hovFinding?.measurements && (
+                                <Box style={{ width: "100%", marginTop: 2 }}>
+                                    <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.4px", marginBottom: 3 }}>Measurements</Text>
+                                    <Group gap={5} wrap="wrap">
+                                        {hovFinding.measurements.boneLossFromCej != null && (
+                                            <Badge size="xs" color={boneLossColorName(hovFinding.measurements.boneLossFromCej)} variant="filled">
+                                                BL {hovFinding.measurements.boneLossFromCej}mm
+                                            </Badge>
+                                        )}
+                                        {hovFinding.measurements.probingDepth != null && (
+                                            <Badge size="xs" color="cyan" variant="light">PD {hovFinding.measurements.probingDepth}mm</Badge>
+                                        )}
+                                        {hovFinding.measurements.clinicalAttachmentLevel != null && (
+                                            <Badge size="xs" color="violet" variant="light">CAL {hovFinding.measurements.clinicalAttachmentLevel}mm</Badge>
+                                        )}
+                                        {hovFinding.measurements.recession != null && (
+                                            <Badge size="xs" color="grape" variant="light">Rec {hovFinding.measurements.recession}mm</Badge>
+                                        )}
+                                        {hovFinding.measurements.furcation && hovFinding.measurements.furcation !== "none" && (
+                                            <Badge size="xs" color="indigo" variant="light">Furc {hovFinding.measurements.furcation}</Badge>
+                                        )}
+                                        {hovFinding.measurements.mobility != null && hovFinding.measurements.mobility > 0 && (
+                                            <Badge size="xs" color="orange" variant="light">Mob {hovFinding.measurements.mobility}</Badge>
+                                        )}
+                                    </Group>
+                                </Box>
+                            )}
                             {hovFinding?.note
                                 ? <Text size="xs" c="dimmed" style={{ width: "100%" }}>{hovFinding.note}</Text>
                                 : <Text size="xs" c="dimmed">No specific finding</Text>}
@@ -1393,6 +1762,49 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                                         <Badge size="xs" color="gray" variant="light">{CONDITION_CFG[f.condition].label}</Badge>
                                         {f.severity && <Badge size="xs" color={f.severity === "severe" ? "red" : f.severity === "moderate" ? "orange" : "yellow"} variant="light">{f.severity}</Badge>}
                                     </Group>
+                                    {f.surfaces && f.surfaces.length > 0 && (
+                                        <Group gap={4} wrap="nowrap" style={{ flex: "1 1 100%" }}>
+                                            <Text size="xs" c="dimmed" fw={500}>Surfaces:</Text>
+                                            {f.surfaces.map(s => <Badge key={s} size="xs" color="cyan" variant="dot">{s}</Badge>)}
+                                        </Group>
+                                    )}
+                                    {(() => {
+                                        const m = f.measurements;
+                                        if (!m) return null;
+                                        const blD = temporalDelta(m.boneLossFromCej, m.priorBoneLossFromCej);
+                                        const pdD = temporalDelta(m.probingDepth, m.priorProbingDepth);
+                                        const calD = temporalDelta(m.clinicalAttachmentLevel, m.priorClinicalAttachmentLevel);
+                                        if (!blD && !pdD && !calD) return null;
+                                        return (
+                                            <Group gap={5} wrap="wrap" style={{ flex: "1 1 100%" }}>
+                                                {blD && <Badge size="xs" color={blD.colorName} variant="filled">Δ BL {blD.label}</Badge>}
+                                                {pdD && <Badge size="xs" color={pdD.colorName} variant="light">Δ PD {pdD.label}</Badge>}
+                                                {calD && <Badge size="xs" color={calD.colorName} variant="light">Δ CAL {calD.label}</Badge>}
+                                            </Group>
+                                        );
+                                    })()}
+                                    {f.measurements && (
+                                        <Group gap={5} wrap="wrap" style={{ flex: "1 1 100%" }}>
+                                            {f.measurements.boneLossFromCej != null && (
+                                                <Badge size="xs" color={boneLossColorName(f.measurements.boneLossFromCej)} variant="filled">BL {f.measurements.boneLossFromCej}mm</Badge>
+                                            )}
+                                            {f.measurements.probingDepth != null && (
+                                                <Badge size="xs" color="cyan" variant="light">PD {f.measurements.probingDepth}mm</Badge>
+                                            )}
+                                            {f.measurements.clinicalAttachmentLevel != null && (
+                                                <Badge size="xs" color="violet" variant="light">CAL {f.measurements.clinicalAttachmentLevel}mm</Badge>
+                                            )}
+                                            {f.measurements.recession != null && (
+                                                <Badge size="xs" color="grape" variant="light">Rec {f.measurements.recession}mm</Badge>
+                                            )}
+                                            {f.measurements.furcation && f.measurements.furcation !== "none" && (
+                                                <Badge size="xs" color="indigo" variant="light">Furc {f.measurements.furcation}</Badge>
+                                            )}
+                                            {f.measurements.mobility != null && f.measurements.mobility > 0 && (
+                                                <Badge size="xs" color="orange" variant="light">Mob {f.measurements.mobility}</Badge>
+                                            )}
+                                        </Group>
+                                    )}
                                     {f.note && <Text size="xs" c="dimmed" style={{ flex: "1 1 100%" }}>{f.note}</Text>}
                                 </Group>
                             </Paper>
@@ -1416,6 +1828,19 @@ export function DentalChartCard({ data }: Readonly<{ data: DentalChartInput }>) 
                             <Text size="xs" c="dimmed">{cfg.label}</Text>
                         </Group>
                     ))}
+                    {/* Temporal overlay legend */}
+                    <Group gap={4} wrap="nowrap">
+                        <Box style={{ width: 18, height: 2, flexShrink: 0, background: "#74c0fc", borderRadius: 1, border: "none" }} />
+                        <Text size="xs" c="dimmed">Prior BL</Text>
+                    </Group>
+                </Group>
+
+                {/* FDA 510(k)-convention overlay disclaimer */}
+                <Group gap={5} wrap="nowrap" pt={4} style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
+                    <IconShieldCheck size={11} color="var(--mantine-color-dimmed)" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <Text style={{ fontSize: 10, lineHeight: 1.4 }} c="dimmed">
+                        Reference overlays follow FDA 510(k) radiographic measurement conventions — CEJ line · bone crest baseline · mm ruler · temporal delta. For clinical reference only; not a substitute for professional diagnosis.
+                    </Text>
                 </Group>
             </Stack>
         </Paper>
@@ -1470,6 +1895,234 @@ export function SuggestActionsCard({
     );
 }
 
+// ── Log Vitals Card ───────────────────────────────────────────────────────────
+
+export function LogVitalsCard({ data }: Readonly<{ data: LogVitalsInput }>) {
+    const [opened, { toggle }] = useDisclosure(false);
+
+    // Build flat array of recorded readings for summary + grid
+    const readings: Array<{ icon: ReactNode; label: string; value: string }> = [];
+    if (data.systolicBp != null && data.diastolicBp != null)
+        readings.push({ icon: <IconHeartbeat size={13} />, label: "Blood Pressure", value: `${data.systolicBp}/${data.diastolicBp} mmHg` });
+    if (data.restingHr != null)
+        readings.push({ icon: <IconHeartbeat size={13} />, label: "Heart Rate", value: `${data.restingHr} bpm` });
+    if (data.spo2 != null)
+        readings.push({ icon: <IconLungs size={13} />, label: "SpO₂", value: `${data.spo2}%` });
+    if (data.temperatureC != null)
+        readings.push({ icon: <IconFlame size={13} />, label: "Temperature", value: `${data.temperatureC}°C` });
+    if (data.respiratoryRate != null)
+        readings.push({ icon: <IconLungs size={13} />, label: "Resp. Rate", value: `${data.respiratoryRate} br/min` });
+    if (data.glucoseMmol != null)
+        readings.push({ icon: <IconDroplet size={13} />, label: "Blood Glucose", value: `${data.glucoseMmol} mmol/L` });
+    if (data.waistCm != null)
+        readings.push({ icon: <IconFlask size={13} />, label: "Waist", value: `${data.waistCm} cm` });
+    if (data.hipCm != null)
+        readings.push({ icon: <IconFlask size={13} />, label: "Hip", value: `${data.hipCm} cm` });
+    if (data.neckCm != null)
+        readings.push({ icon: <IconFlask size={13} />, label: "Neck", value: `${data.neckCm} cm` });
+
+    const summaryLabels = readings.slice(0, 3).map(r => r.label).join(" · ");
+
+    return (
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-teal-5)" }}>
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
+                <Box px="md" py="sm" style={{ background: "light-dark(var(--mantine-color-teal-0), rgba(0,0,0,0.2))" }}>
+                    <Group gap="sm" wrap="nowrap" align="center">
+                        <ThemeIcon size={32} radius="md" color="teal" variant="filled" style={{ flexShrink: 0 }}>
+                            <IconHeartbeat size={16} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Vitals Recorded</Text>
+                            <Text size="sm" fw={600} c="teal.7" truncate>{summaryLabels || "Measurements saved"}</Text>
+                        </Box>
+                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                            {readings.length > 0 && (
+                                <Badge size="xs" color="teal" variant="light">{readings.length} reading{readings.length !== 1 ? "s" : ""}</Badge>
+                            )}
+                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
+                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                <IconChevronDown size={13} />
+                            </ThemeIcon>
+                        </Group>
+                    </Group>
+                </Box>
+            </UnstyledButton>
+            <Collapse in={opened}>
+                <Box px="md" py="sm">
+                    <Stack gap="xs">
+                        <SimpleGrid cols={2} spacing="xs">
+                            {readings.map((r) => (
+                                <Paper key={r.label} withBorder radius="md" px="sm" py={6}
+                                    style={{ background: "light-dark(var(--mantine-color-teal-0), rgba(0,0,0,0.15))" }}>
+                                    <Group gap={6} wrap="nowrap">
+                                        <ThemeIcon size={20} radius="sm" color="teal" variant="light" style={{ flexShrink: 0 }}>
+                                            {r.icon}
+                                        </ThemeIcon>
+                                        <Box style={{ minWidth: 0 }}>
+                                            <Text size="xs" c="dimmed" style={{ lineHeight: 1 }}>{r.label}</Text>
+                                            <Text size="sm" fw={600} style={{ lineHeight: 1.3 }}>{r.value}</Text>
+                                        </Box>
+                                    </Group>
+                                </Paper>
+                            ))}
+                        </SimpleGrid>
+                        {data.note && (
+                            <Text size="xs" c="dimmed" fs="italic">📝 {data.note}</Text>
+                        )}
+                        {data.measuredAt && (
+                            <Group gap={4}>
+                                <IconClock size={11} style={{ color: "var(--mantine-color-dimmed)" }} />
+                                <Text size="xs" c="dimmed">
+                                    {new Date(data.measuredAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                                </Text>
+                            </Group>
+                        )}
+                    </Stack>
+                </Box>
+            </Collapse>
+        </Paper>
+    );
+}
+
+// ── Patient Summary Card ──────────────────────────────────────────────────────
+
+export function PatientSummaryCard({ data }: Readonly<{ data: PatientSummaryInput }>) {
+    const [opened, { toggle }] = useDisclosure(false);
+    const hasDiagnoses = data.diagnoses.length > 0;
+    const hasMeds = data.medications.length > 0;
+    const hasVitals = data.vitals.length > 0;
+    const hasAllergies = data.allergies.length > 0;
+    const hasRisks = data.riskFactors.length > 0;
+    const hasRecs = data.recommendations.length > 0;
+    const hasComplaints = data.chiefComplaints.length > 0;
+
+    return (
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-primary-5)" }}>
+            {/* Header */}
+            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }}>
+                <Group justify="space-between" px="md" py="sm">
+                    <Group gap="xs">
+                        <ThemeIcon size={32} radius="md" color="primary" variant="light">
+                            <IconNotes size={17} />
+                        </ThemeIcon>
+                        <Box>
+                            <Text fw={600} size="sm">{data.title}</Text>
+                            <Text size="xs" c="dimmed">Patient Summary</Text>
+                        </Box>
+                    </Group>
+                    <ActionIcon variant="subtle" color="gray" size="sm">
+                        <IconChevronDown size={14} style={{ transform: opened ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }} />
+                    </ActionIcon>
+                </Group>
+            </UnstyledButton>
+
+            <Divider />
+
+            {/* Narrative */}
+            <Box px="md" py="sm">
+                <Text size="sm" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{data.narrative}</Text>
+            </Box>
+
+            {/* Expandable details */}
+            <Collapse in={opened}>
+                <Divider />
+                <Stack gap="sm" px="md" py="sm">
+                    {hasComplaints && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Chief Complaints</Text>
+                            <Group gap={6} wrap="wrap">
+                                {data.chiefComplaints.map((c) => (
+                                    <Badge key={c} variant="light" color="orange" size="sm">{c}</Badge>
+                                ))}
+                            </Group>
+                        </Box>
+                    )}
+
+                    {hasDiagnoses && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Diagnoses</Text>
+                            <Stack gap={4}>
+                                {data.diagnoses.map((d) => (
+                                    <Group key={d.name} gap={8}>
+                                        <Text size="sm" fw={500}>{d.name}</Text>
+                                        {d.icd10 && <Badge size="xs" variant="outline" color="gray">{d.icd10}</Badge>}
+                                        <Badge size="xs" variant="light" color={d.status === "confirmed" ? "teal" : d.status === "probable" ? "yellow" : "orange"}>
+                                            {d.status}
+                                        </Badge>
+                                    </Group>
+                                ))}
+                            </Stack>
+                        </Box>
+                    )}
+
+                    {hasMeds && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Medications</Text>
+                            <Stack gap={4}>
+                                {data.medications.map((m) => (
+                                    <Group key={m.name} gap={6}>
+                                        <ThemeIcon size={20} radius="xl" color="violet" variant="light"><IconCapsule size={11} /></ThemeIcon>
+                                        <Text size="sm">{m.name}</Text>
+                                        {m.dosage && <Text size="xs" c="dimmed">{m.dosage}</Text>}
+                                        {m.frequency && <Text size="xs" c="dimmed">· {m.frequency}</Text>}
+                                    </Group>
+                                ))}
+                            </Stack>
+                        </Box>
+                    )}
+
+                    {hasVitals && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Vitals</Text>
+                            <SimpleGrid cols={2} spacing={6}>
+                                {data.vitals.map((v) => (
+                                    <Group key={v.name} gap={6}>
+                                        <ThemeIcon size={20} radius="xl" color="red" variant="light"><IconHeartbeat size={11} /></ThemeIcon>
+                                        <Text size="xs">{v.name}: <strong>{v.value}{v.unit ? ` ${v.unit}` : ""}</strong></Text>
+                                    </Group>
+                                ))}
+                            </SimpleGrid>
+                        </Box>
+                    )}
+
+                    {hasAllergies && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Allergies</Text>
+                            <Group gap={6} wrap="wrap">
+                                {data.allergies.map((a) => (
+                                    <Badge key={a} variant="light" color="red" size="sm">{a}</Badge>
+                                ))}
+                            </Group>
+                        </Box>
+                    )}
+
+                    {hasRisks && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Risk Factors</Text>
+                            <Group gap={6} wrap="wrap">
+                                {data.riskFactors.map((r) => (
+                                    <Badge key={r} variant="light" color="yellow" size="sm">{r}</Badge>
+                                ))}
+                            </Group>
+                        </Box>
+                    )}
+
+                    {hasRecs && (
+                        <Box>
+                            <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4}>Recommendations</Text>
+                            <List size="sm" spacing={4}>
+                                {data.recommendations.map((rec) => (
+                                    <List.Item key={rec}>{rec}</List.Item>
+                                ))}
+                            </List>
+                        </Box>
+                    )}
+                </Stack>
+            </Collapse>
+        </Paper>
+    );
+}
+
 // ── Tool Part Dispatcher ──────────────────────────────────────────────────────
 
 export interface ToolPartRendererProps {
@@ -1502,6 +2155,8 @@ export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLea
             if (toolName === "dietPlan") return "Creating your diet plan…";
             if (toolName === "soapNote") return "Preparing clinical notes…";
             if (toolName === "dentalChart") return "Mapping dental findings…";
+            if (toolName === "logVitals") return "Logging vitals…";
+            if (toolName === "generatePatientSummary") return "Generating patient summary…";
             return "Processing…";
         })();
         return (
@@ -1551,6 +2206,12 @@ export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLea
 
     const dentalChart = extractToolInput<DentalChartInput>(part, "dentalChart");
     if (dentalChart) return <DentalChartCard data={dentalChart} />;
+
+    const logVitals = extractToolInput<LogVitalsInput>(part, "logVitals");
+    if (logVitals) return <LogVitalsCard data={logVitals} />;
+
+    const patientSummary = extractToolInput<PatientSummaryInput>(part, "generatePatientSummary");
+    if (patientSummary) return <PatientSummaryCard data={patientSummary} />;
 
     if (toolName) {
         return (

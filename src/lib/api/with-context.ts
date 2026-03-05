@@ -1,19 +1,20 @@
 // Server-only — used in Next.js App Router API route handlers.
 import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { COOKIE_NAME, verifySessionToken } from "@/lib/auth/jwt";
-import type { SessionPayload } from "@/lib/auth/jwt";
+import { COOKIE_NAME } from "@/lib/auth/jwt";
+import type { SessionPayload, UserKind } from "@/lib/auth/jwt";
+import { auth } from "@/lib/firebase/admin";
 
 // ── Context type ──────────────────────────────────────────────────────────────
 
 export interface ApiContext {
-  user: SessionPayload; // { uid, email }
+  user: SessionPayload; // { uid, email, kind }
   req: NextRequest;
   /** Raw dependent ID from the X-Dependent-Id header. Undefined for the user's own profile. */
   dependentId?: string;
   /**
    * Resolved profile ID used as the Firestore path segment:
-   *   users/{userId}/profiles/{profileId}/sessions/…
+   *   profiles/{profileId}/sessions/…
    * Equals `dependentId` when viewing a dependent, or `user.uid` for self.
    */
   profileId: string;
@@ -40,6 +41,11 @@ const ERRORS = {
     message: "Invalid request.",
   },
   NOT_FOUND: { status: 404, code: "NOT_FOUND", message: "Resource not found." },
+  CONFLICT: {
+    status: 409,
+    code: "CONFLICT",
+    message: "Resource already exists.",
+  },
   INTERNAL: {
     status: 500,
     code: "INTERNAL_SERVER_ERROR",
@@ -74,6 +80,10 @@ export class ApiError extends Error {
     return new ApiError(404, ERRORS.NOT_FOUND.code, message);
   }
 
+  static conflict(message: string = ERRORS.CONFLICT.message): ApiError {
+    return new ApiError(409, ERRORS.CONFLICT.code, message);
+  }
+
   static internal(message: string = ERRORS.INTERNAL.message): ApiError {
     return new ApiError(500, ERRORS.INTERNAL.code, message);
   }
@@ -81,30 +91,57 @@ export class ApiError extends Error {
 
 // ── HOF ───────────────────────────────────────────────────────────────────────
 
-/**
- * Higher-order function that wraps a Next.js App Router handler with:
- * - Session verification (reads the `careai_session` cookie → JWT)
- * - Typed `ApiContext` containing the authenticated user
- * - Zod / ApiError error handling
- * - Generic 500 fallback for unexpected throws
- *
- * @example
- * // src/app/api/sessions/route.ts
- * export const GET = WithContext(async ({ user }) => {
- *   const sessions = await new ListSessionsUseCase().execute({ userId: user.uid, limit: 20 });
- *   return NextResponse.json(sessions);
- * });
- *
- * @example
- * // Dynamic segment with params
- * export const DELETE = WithContext<{ sessionId: string }>(async ({ user }, { sessionId }) => {
- *   await new DeleteSessionUseCase().execute({ userId: user.uid, sessionId });
- *   return NextResponse.json({ ok: true });
- * });
- */
+export interface WithContextOptions {
+  /**
+   * When set, the request is rejected with 403 unless `session.kind` matches.
+   * Omit (or don't pass options at all) to allow any authenticated user.
+   *
+   * Extend `UserKind` in `@/lib/auth/jwt` to support new portal types —
+   * no changes needed here.
+   *
+   * @example
+   * // Any authenticated user
+   * export const GET = WithContext(handler);
+   *
+   * // Doctors only
+   * export const GET = WithContext({ kind: "doctor" }, handler);
+   *
+   * // Patients only
+   * export const PATCH = WithContext({ kind: "patient" }, handler);
+   */
+  kind?: UserKind;
+}
+
+// Overload — options first, then handler
 export function WithContext<
   TParams extends Record<string, string> = Record<string, string>,
->(handler: ApiHandler<TParams>) {
+>(
+  options: WithContextOptions,
+  handler: ApiHandler<TParams>,
+): ReturnType<typeof makeRouteHandler<TParams>>;
+
+// Overload — handler only (no kind restriction)
+export function WithContext<
+  TParams extends Record<string, string> = Record<string, string>,
+>(handler: ApiHandler<TParams>): ReturnType<typeof makeRouteHandler<TParams>>;
+
+export function WithContext<
+  TParams extends Record<string, string> = Record<string, string>,
+>(
+  handlerOrOptions: ApiHandler<TParams> | WithContextOptions,
+  maybeHandler?: ApiHandler<TParams>,
+) {
+  if (typeof handlerOrOptions === "function") {
+    return makeRouteHandler(handlerOrOptions);
+  }
+  return makeRouteHandler(maybeHandler!, handlerOrOptions.kind);
+}
+
+// ── Core implementation ───────────────────────────────────────────────────────
+
+function makeRouteHandler<
+  TParams extends Record<string, string> = Record<string, string>,
+>(handler: ApiHandler<TParams>, requiredKind?: UserKind) {
   return async function routeHandler(
     req: NextRequest,
     { params }: { params: Promise<TParams> },
@@ -126,26 +163,32 @@ export function WithContext<
         );
       }
 
-      const payload = await verifySessionToken(token);
-
-      if (!payload) {
-        return errorResponse(
-          401,
-          ERRORS.UNAUTHORIZED.code,
-          "Session expired or invalid.",
-        );
-      }
-
-      user = payload;
+      // verifySessionCookie with checkRevoked=true is Firebase's recommended
+      // approach for session management. It automatically rejects sessions
+      // whose user has been deleted, disabled, or had their tokens revoked —
+      // no extra getUser() call needed.
+      const decoded = await auth.verifySessionCookie(token, true);
+      // Back-compat: tokens may carry kind:"patient" (brief migration window) — normalise to "user".
+      const kind: UserKind = decoded.kind === "doctor" ? "doctor" : "user";
+      user = { uid: decoded.uid, email: decoded.email ?? "", kind };
     } catch {
       return errorResponse(
         401,
         ERRORS.UNAUTHORIZED.code,
-        ERRORS.UNAUTHORIZED.message,
+        "Session expired, revoked, or account no longer exists.",
       );
     }
 
-    // ── 1b. Extract optional dependent header ─────────────────────────────────
+    // ── 1b. Kind enforcement ──────────────────────────────────────────────────
+    if (requiredKind && user.kind !== requiredKind) {
+      return errorResponse(
+        403,
+        ERRORS.FORBIDDEN.code,
+        `This endpoint requires a ${requiredKind} session.`,
+      );
+    }
+
+    // ── 1c. Extract optional dependent header ─────────────────────────────────
     const dependentId = req.headers.get("x-dependent-id") ?? undefined;
     const profileId = dependentId ?? user.uid;
 

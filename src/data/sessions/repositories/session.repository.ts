@@ -14,7 +14,7 @@ const db = FirebaseService.getInstance().getDb();
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
 const sessionsCol = (userId: string, profileId: string) =>
-  db.collection(`users/${userId}/profiles/${profileId}/sessions`);
+  db.collection(`profiles/${profileId}/sessions`);
 
 const sessionDoc = (userId: string, profileId: string, sessionId: string) =>
   sessionsCol(userId, profileId).doc(sessionId);

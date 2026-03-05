@@ -9,6 +9,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifications } from "@mantine/notifications";
 import { chatKeys } from "@/app/chat/_keys";
 export { chatKeys } from "@/app/chat/_keys";
 import type { ExtractResult } from "@/data/prescriptions/models/extract.model";
@@ -447,14 +448,20 @@ export function useUploadFileMutation() {
     mutationFn: async ({
       sessionId,
       file,
+      dependentId,
     }: {
       sessionId: string;
       file: File;
+      /** Pass activeDependentId from useActiveProfile() at the call site. */
+      dependentId?: string;
     }): Promise<FileRecord> => {
       const formData = new FormData();
       formData.append("file", file);
+      const headers: HeadersInit = {};
+      if (dependentId) headers["x-dependent-id"] = dependentId;
       const res = await fetch(`/api/sessions/${sessionId}/files`, {
         method: "POST",
+        headers,
         body: formData,
       });
       if (!res.ok) {
@@ -467,9 +474,20 @@ export function useUploadFileMutation() {
     },
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: chatKeys.files() });
+      void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
       trackEvent({
         name: "file_uploaded",
         params: { file_type: data.mimeType },
+      });
+    },
+    onError: (err) => {
+      notifications.show({
+        title: "Upload failed",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not upload file. Please try again.",
+        color: "red",
       });
     },
   });
@@ -1018,6 +1036,16 @@ export function useInvalidateAssessments() {
     void qc.invalidateQueries({ queryKey: [...chatKeys.assessments(), pid] });
 }
 
+/** Invalidate the patient-summaries cache — call after a message finishes streaming. */
+export function useInvalidatePatientSummaries() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  return () =>
+    void qc.invalidateQueries({
+      queryKey: [...chatKeys.patientSummaries(), pid],
+    });
+}
+
 // ── Drug Search ──────────────────────────────────────────────────────────────
 
 export interface DrugStrengthRecord {
@@ -1079,6 +1107,8 @@ export function useDeleteAssessmentMutation() {
 
 export interface ProfileRecord {
   userId: string;
+  name?: string;
+  photoUrl?: string;
   dateOfBirth?: string;
   sex?: "male" | "female";
   height?: number;
@@ -1124,13 +1154,13 @@ export function useUpsertProfileMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpsertProfilePayload) =>
-      apiFetch<ProfileRecord>("/api/profile", {
+      apiFetch<ProfileRecord>("/api/patients/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: (updated) => {
-      qc.setQueryData(chatKeys.profile(), updated);
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chatKeys.profile() });
     },
   });
 }
@@ -1140,13 +1170,41 @@ export function useConsentMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiFetch<ProfileRecord>("/api/profile", {
+      apiFetch<ProfileRecord>("/api/patients/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consentedAt: new Date().toISOString() }),
       }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+    },
+  });
+}
+
+/** Updates base identity fields (name, phone, email) in profiles/{uid}. */
+export function useUpdateIdentityMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name?: string;
+      phone?: string;
+      email?: string;
+      city?: string;
+      country?: string;
+    }) =>
+      apiFetch<ProfileRecord>("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
     onSuccess: (updated) => {
-      qc.setQueryData(chatKeys.profile(), updated);
+      qc.setQueryData(
+        chatKeys.profile(),
+        (prev: ProfileRecord | undefined) => ({
+          ...prev,
+          ...updated,
+        }),
+      );
     },
   });
 }
@@ -1605,6 +1663,60 @@ export function useReExtractBloodTestMutation() {
       qc.setQueryData<BloodTestRecord[]>(btKey, (old = []) =>
         old.map((r) => (r.id === updated.id ? updated : r)),
       );
+    },
+  });
+}
+
+// ── Patient Summaries ─────────────────────────────────────────────────────────
+
+export interface PatientSummaryRecord {
+  id: string;
+  userId: string;
+  sessionId?: string;
+  title: string;
+  narrative: string;
+  chiefComplaints: string[];
+  diagnoses: Array<{ name: string; icd10?: string; status: string }>;
+  medications: Array<{ name: string; dosage?: string; frequency?: string }>;
+  vitals: Array<{ name: string; value: string; unit?: string }>;
+  allergies: string[];
+  riskFactors: string[];
+  recommendations: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Fetch all patient summaries for the active profile. */
+export function usePatientSummariesQuery() {
+  const pid = useActiveDependentId();
+  return useQuery({
+    queryKey: [...chatKeys.patientSummaries(), pid],
+    queryFn: () => apiFetch<PatientSummaryRecord[]>("/api/patient-summary"),
+  });
+}
+
+/** Delete a patient summary by id with optimistic removal. */
+export function useDeletePatientSummaryMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  const psKey = [...chatKeys.patientSummaries(), pid] as const;
+  return useMutation({
+    mutationFn: (summaryId: string) =>
+      apiFetch<{ ok: boolean }>(`/api/patient-summary/${summaryId}`, {
+        method: "DELETE",
+      }),
+    onMutate: async (summaryId) => {
+      await qc.cancelQueries({ queryKey: psKey });
+      const snapshot = qc.getQueryData<PatientSummaryRecord[]>(psKey);
+      qc.setQueryData<PatientSummaryRecord[]>(psKey, (old = []) =>
+        old.filter((r) => r.id !== summaryId),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.snapshot) {
+        qc.setQueryData(psKey, context.snapshot);
+      }
     },
   });
 }

@@ -8,6 +8,8 @@ export interface ConditionDocument {
   /** The chat session where this condition was detected */
   sessionId?: string;
   name: string;
+  /** Lowercase name used for duplicate detection queries */
+  nameLower?: string;
   icd10?: string;
   severity: "mild" | "moderate" | "severe" | "critical";
   status: "suspected" | "probable" | "confirmed";

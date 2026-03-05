@@ -11,7 +11,7 @@ import {
 
 const db = FirebaseService.getInstance().getDb();
 
-const creditDoc = (userId: string) => db.doc(`users/${userId}/credits/daily`);
+const creditDoc = (userId: string) => db.doc(`credits/${userId}`);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 

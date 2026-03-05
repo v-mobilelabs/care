@@ -12,9 +12,7 @@ const db = FirebaseService.getInstance().getDb();
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
 const messagesCol = (userId: string, profileId: string, sessionId: string) =>
-  db.collection(
-    `users/${userId}/profiles/${profileId}/sessions/${sessionId}/messages`,
-  );
+  db.collection(`profiles/${profileId}/sessions/${sessionId}/messages`);
 
 const messageDoc = (
   userId: string,

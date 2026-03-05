@@ -3,6 +3,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { auth } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDependentDto,
@@ -14,16 +15,25 @@ import {
 
 const db = FirebaseService.getInstance().getDb();
 
-/** All profiles (self + dependents) live under users/{ownerId}/profiles */
-const profilesCol = (ownerId: string) =>
-  db.collection("users").doc(ownerId).collection("profiles");
+/** All profiles (self + dependents) live in the top-level `profiles` collection.
+ *  Each document ID is the Firebase Auth UID for that profile.
+ */
+const profilesCol = () => db.collection("profiles");
+const profileDoc = (uid: string) => profilesCol().doc(uid);
 
 export const dependentRepository = {
   async create(input: CreateDependentInput): Promise<DependentDto> {
+    // Create a dedicated Firebase Auth account for this dependent profile.
+    const authUser = await auth.createUser({
+      displayName: `${input.firstName} ${input.lastName}`.trim(),
+    });
+    const uid = authUser.uid;
+
     const now = Timestamp.now();
     const doc: DependentDocument = {
       ownerId: input.ownerId,
       isDependent: true,
+      kind: "user",
       firstName: input.firstName,
       lastName: input.lastName,
       relationship: input.relationship,
@@ -42,13 +52,13 @@ export const dependentRepository = {
     if (input.country !== undefined) doc.country = input.country;
     if (input.city !== undefined) doc.city = input.city;
 
-    const ref = profilesCol(input.ownerId).doc();
-    await ref.set(stripUndefined(doc));
-    return toDependentDto(ref.id, doc);
+    await profileDoc(uid).set(stripUndefined(doc));
+    return toDependentDto(uid, doc);
   },
 
   async list(ownerId: string): Promise<DependentDto[]> {
-    const snap = await profilesCol(ownerId)
+    const snap = await profilesCol()
+      .where("ownerId", "==", ownerId)
       .where("isDependent", "==", true)
       .orderBy("createdAt", "asc")
       .get();
@@ -58,7 +68,7 @@ export const dependentRepository = {
   },
 
   async update(input: UpdateDependentInput): Promise<DependentDto> {
-    const ref = profilesCol(input.ownerId).doc(input.dependentId);
+    const ref = profileDoc(input.dependentId);
     const now = Timestamp.now();
     const update: Partial<DependentDocument> = { updatedAt: now };
 
@@ -78,21 +88,45 @@ export const dependentRepository = {
     if (input.country !== undefined) update.country = input.country;
     if (input.city !== undefined) update.city = input.city;
 
+    // Sync displayName in Firebase Auth when name fields are updated.
+    if (update.firstName !== undefined || update.lastName !== undefined) {
+      const snap = await ref.get();
+      const existing = snap.data() as DependentDocument | undefined;
+      const firstName = update.firstName ?? existing?.firstName ?? "";
+      const lastName = update.lastName ?? existing?.lastName ?? "";
+      await auth
+        .updateUser(input.dependentId, {
+          displayName: `${firstName} ${lastName}`.trim(),
+        })
+        .catch(() => {
+          /* best-effort — do not fail the update if Auth sync fails */
+        });
+    }
+
     await ref.update(update);
     const snap = await ref.get();
     return toDependentDto(ref.id, snap.data() as DependentDocument);
   },
 
   async delete(ownerId: string, dependentId: string): Promise<void> {
-    await profilesCol(ownerId).doc(dependentId).delete();
+    await Promise.allSettled([
+      profileDoc(dependentId).delete(),
+      // Delete the Firebase Auth account created for this dependent.
+      auth.deleteUser(dependentId).catch(() => {
+        /* ignore if already deleted */
+      }),
+    ]);
   },
 
   async findById(
     ownerId: string,
     dependentId: string,
   ): Promise<DependentDto | null> {
-    const snap = await profilesCol(ownerId).doc(dependentId).get();
+    const snap = await profileDoc(dependentId).get();
     if (!snap.exists) return null;
-    return toDependentDto(snap.id, snap.data() as DependentDocument);
+    const doc = snap.data() as DependentDocument;
+    // Verify ownership before returning.
+    if (doc.ownerId !== ownerId) return null;
+    return toDependentDto(snap.id, doc);
   },
 };

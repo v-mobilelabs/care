@@ -5,9 +5,24 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconMail } from "@tabler/icons-react";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
+import { useSearchParams } from "next/navigation";
 import { saveSignInEmail } from "@/lib/firebase/magic-link";
 
-export function MagicLinkForm() {
+interface MagicLinkFormProps {
+    /** Email input placeholder. Defaults to "you@example.com". */
+    placeholder?: string;
+    /** reCAPTCHA action label. Defaults to "magic_link". */
+    captchaAction?: string;
+}
+
+export function MagicLinkForm({
+    placeholder = "you@example.com",
+    captchaAction = "magic_link",
+}: Readonly<MagicLinkFormProps> = {}) {
+    const searchParams = useSearchParams();
+    // Read kind directly from the URL so this works regardless of how the
+    // parent page is structured. Only "doctor" is a valid override.
+    const kind = searchParams.get("kind") === "doctor" ? "doctor" : undefined;
     const [sent, setSent] = useState(false);
     const [loading, setLoading] = useState(false);
     const { executeRecaptcha } = useGoogleReCaptcha();
@@ -23,11 +38,11 @@ export function MagicLinkForm() {
         }
         setLoading(true);
         try {
-            const token = await executeRecaptcha("magic_link");
+            const token = await executeRecaptcha(captchaAction);
             const res = await fetch("/api/auth/magic-link", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, captchaToken: token }),
+                body: JSON.stringify({ email, captchaToken: token, ...(kind ? { kind } : {}) }),
             });
             if (res.status === 429) {
                 const data = (await res.json()) as { error?: string };
@@ -66,14 +81,16 @@ export function MagicLinkForm() {
     return (
         <Paper withBorder radius="lg" p="xl" w="100%" component="form" onSubmit={form.onSubmit(handleSubmit)}>
             <Stack gap="md">
-                <TextInput label="Email address" placeholder="you@example.com" leftSection={<IconMail size={16} />} {...form.getInputProps("email")} />
+                <TextInput label="Email address" placeholder={placeholder} leftSection={<IconMail size={16} />} {...form.getInputProps("email")} />
                 <Button type="submit" fullWidth loading={loading}>Send magic link</Button>
-                <Text size="xs" c="dimmed" ta="center">
-                    By signing in you agree to our{" "}
-                    <Text component="a" href="/terms" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Terms &amp; Conditions</Text>
-                    {" and "}
-                    <Text component="a" href="/privacy" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Privacy Policy</Text>.
-                </Text>
+                {kind !== "doctor" && (
+                    <Text size="xs" c="dimmed" ta="center">
+                        By signing in you agree to our{" "}
+                        <Text component="a" href="/terms" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Terms &amp; Conditions</Text>
+                        {" and "}
+                        <Text component="a" href="/privacy" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Privacy Policy</Text>.
+                    </Text>
+                )}
                 <Text size="xs" c="dimmed" ta="center">
                     Protected by reCAPTCHA —{" "}
                     <Text component="a" href="https://policies.google.com/privacy" target="_blank" size="xs" c="dimmed" style={{ textDecoration: "underline" }}>Privacy</Text>

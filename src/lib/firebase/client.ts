@@ -1,5 +1,6 @@
 // Firebase client-side SDK — safe to import in browser/client components.
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getDatabase, type Database } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -9,6 +10,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_REALTIME_DB_URL!,
 };
 
 // Singleton — reuse the existing app on hot reloads / React Compiler re-runs.
@@ -17,3 +19,8 @@ function getClientApp(): FirebaseApp {
 }
 
 export const firebaseApp = getClientApp();
+
+/** Firebase Realtime Database client instance (singleton). */
+export function getClientDatabase(): Database {
+  return getDatabase(firebaseApp);
+}

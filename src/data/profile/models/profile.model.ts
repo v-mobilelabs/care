@@ -1,41 +1,36 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
+import type { PatientDocument } from "@/data/patients/models/patient.model";
+import { USER_KINDS, type UserKind } from "@/lib/auth/jwt";
 
-// ── Firestore document shape ──────────────────────────────────────────────────
+// ── Firestore document shape — base identity ──────────────────────────────────
+// Stored at profiles/{userId}.
+// Patient health fields (dob, sex, height, weight, etc.) live in patients/{userId}.
+// Doctor professional fields (specialty, licenseNumber, etc.) live in doctors/{userId}.
 
 export interface ProfileDocument {
   userId: string;
-  dateOfBirth?: string; // ISO date "YYYY-MM-DD"
-  /** Biological sex — used for BMR / IBW / body-fat calculations */
-  sex?: "male" | "female";
-  /** Height in cm */
-  height?: number;
-  /** Weight in kg */
-  weight?: number;
-  /** Waist circumference in cm — Waist-to-Height ratio, WHR, Navy body-fat */
-  waistCm?: number;
-  /** Neck circumference in cm — used in Navy body-fat formula */
-  neckCm?: number;
-  /** Hip circumference in cm — WHR and female body-fat formula */
-  hipCm?: number;
-  /**
-   * Physical activity multiplier for TDEE = BMR × factor:
-   *   sedentary 1.2 | light 1.375 | moderate 1.55 | active 1.725 | very_active 1.9
-   */
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
-  country?: string;
+  /** Discriminates user kind across all collections. */
+  kind: UserKind;
+  name?: string;
+  email?: string;
+  phone?: string;
+  photoUrl?: string;
   city?: string;
-  /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
-  foodPreferences?: string[];
-  /** Set once when the user accepts the informed-consent terms. */
-  consentedAt?: Timestamp;
+  country?: string;
   updatedAt: Timestamp;
 }
 
-// ── DTO — outbound ────────────────────────────────────────────────────────────
+// ── DTO — outbound (combined view: base + patient health fields) ───────────────
 
 export interface ProfileDto {
   userId: string;
+  kind: UserKind;
+  name?: string;
+  email?: string;
+  phone?: string;
+  photoUrl?: string;
+  // ── Patient health fields (sourced from patients/{userId}) ────────────────
   dateOfBirth?: string;
   sex?: "male" | "female";
   height?: number;
@@ -46,7 +41,6 @@ export interface ProfileDto {
   activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
-  /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
   foodPreferences?: string[];
   /** ISO-8601 timestamp of when the user accepted the consent terms. */
   consentedAt?: string;
@@ -55,22 +49,36 @@ export interface ProfileDto {
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
-export function toProfileDto(doc: ProfileDocument): ProfileDto {
+export function toProfileDto(
+  base: ProfileDocument,
+  patient?: PatientDocument | null,
+): ProfileDto {
+  // Back-compat: documents may carry the legacy kind:"patient" value written
+  // during a brief migration window — normalise to the canonical "user".
+  const rawKind = base.kind as string;
+  const kind: UserKind = rawKind === "doctor" ? "doctor" : "user";
+
   return {
-    userId: doc.userId,
-    dateOfBirth: doc.dateOfBirth,
-    sex: doc.sex,
-    height: doc.height,
-    weight: doc.weight,
-    waistCm: doc.waistCm,
-    neckCm: doc.neckCm,
-    hipCm: doc.hipCm,
-    activityLevel: doc.activityLevel,
-    country: doc.country,
-    city: doc.city,
-    foodPreferences: doc.foodPreferences,
-    consentedAt: doc.consentedAt?.toDate().toISOString(),
-    updatedAt: doc.updatedAt.toDate().toISOString(),
+    userId: base.userId,
+    kind,
+    name: base.name,
+    email: base.email,
+    phone: base.phone,
+    photoUrl: base.photoUrl,
+    city: base.city,
+    country: base.country,
+    // Patient health fields
+    dateOfBirth: patient?.dateOfBirth,
+    sex: patient?.sex,
+    height: patient?.height,
+    weight: patient?.weight,
+    waistCm: patient?.waistCm,
+    neckCm: patient?.neckCm,
+    hipCm: patient?.hipCm,
+    activityLevel: patient?.activityLevel,
+    foodPreferences: patient?.foodPreferences,
+    consentedAt: patient?.consentedAt?.toDate().toISOString(),
+    updatedAt: base.updatedAt.toDate().toISOString(),
   };
 }
 
@@ -78,22 +86,15 @@ export function toProfileDto(doc: ProfileDocument): ProfileDto {
 
 export const UpsertProfileSchema = z.object({
   userId: z.string().min(1),
-  dateOfBirth: z.string().optional(),
-  sex: z.enum(["male", "female"]).optional(),
-  height: z.number().positive().optional(),
-  weight: z.number().positive().optional(),
-  waistCm: z.number().positive().optional(),
-  neckCm: z.number().positive().optional(),
-  hipCm: z.number().positive().optional(),
-  activityLevel: z
-    .enum(["sedentary", "light", "moderate", "active", "very_active"])
-    .optional(),
-  country: z.string().optional(),
+  // Base identity only — patient health fields go to PUT /api/patients/me,
+  // doctor professional fields go to PUT /api/doctors/me.
+  kind: z.enum(USER_KINDS).optional(),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  photoUrl: z.string().url().optional(),
   city: z.string().optional(),
-  /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
-  foodPreferences: z.array(z.string().min(1)).optional(),
-  /** ISO-8601 string — set once when the user accepts the consent terms. */
-  consentedAt: z.iso.datetime().optional(),
+  country: z.string().optional(),
 });
 
 export type UpsertProfileInput = z.infer<typeof UpsertProfileSchema>;

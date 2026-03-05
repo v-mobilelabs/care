@@ -13,7 +13,7 @@ import {
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
 const assessmentsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "assessments", dependentId);
+  scopedCol(dependentId ?? userId, "assessments");
 
 const assessmentDoc = (
   userId: string,

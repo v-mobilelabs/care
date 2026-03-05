@@ -7,7 +7,9 @@ import {
     useProfileQuery,
     useUpsertProfileMutation,
     useDependentsQuery,
+    chatKeys,
 } from "@/app/chat/_query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useActiveProfile } from "@/app/chat/_context/active-profile-context";
 import { bmiInfo } from "./_shared";
 import { HeroCard } from "./_sections/hero-card";
@@ -16,10 +18,12 @@ import { HealthInfoSection } from "./_sections/health-info";
 import { LocationInfoSection } from "./_sections/location-info";
 import { DependentProfileContent } from "./_sections/family";
 import { ConsentSection, DangerSection } from "./_sections/settings";
+import { getInitials } from "@/lib/get-initials";
 
 export function ProfileContent() {
     const { user, refreshUser } = useAuth();
     const { activeDependentId } = useActiveProfile();
+    const qc = useQueryClient();
 
     const { data: healthProfile } = useProfileQuery();
     const upsertProfile = useUpsertProfileMutation();
@@ -35,9 +39,8 @@ export function ProfileContent() {
         return <DependentProfileContent dep={activeDependent} />;
     }
 
-    const initials = user?.displayName
-        ? user.displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
-        : user?.email?.[0]?.toUpperCase() ?? "?";
+    const displayName = healthProfile?.name ?? user?.displayName ?? null;
+    const initials = getInitials(displayName, user?.email);
 
     const bmi =
         healthProfile?.height && healthProfile?.weight
@@ -73,12 +76,17 @@ export function ProfileContent() {
                     <Box px={{ base: "md", sm: "xl" }} py="lg" maw={600} mx="auto">
                         <Stack gap="md">
                             <HeroCard
-                                user={user}
+                                photoURL={healthProfile?.photoUrl ?? user?.photoURL ?? null}
+                                email={user?.email ?? null}
+                                emailVerified={user?.emailVerified ?? false}
                                 initials={initials}
                                 healthProfile={healthProfile}
                                 isProfileLoaded={healthProfile !== undefined}
                                 bmi={bmi}
-                                onAvatarUpdated={refreshUser}
+                                onAvatarUpdated={() => {
+                                    refreshUser();
+                                    void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+                                }}
                             />
                             <PersonalInfoSection />
                             <HealthInfoSection
@@ -87,7 +95,6 @@ export function ProfileContent() {
                             />
                             <LocationInfoSection
                                 healthProfile={healthProfile}
-                                upsertProfile={upsertProfile}
                             />
                             <ConsentSection />
                             <DangerSection />

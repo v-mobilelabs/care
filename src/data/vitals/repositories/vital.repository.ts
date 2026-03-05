@@ -9,7 +9,7 @@ import {
 } from "../models/vital.model";
 
 const vitalsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "vitals", dependentId);
+  scopedCol(dependentId ?? userId, "vitals");
 
 export const vitalRepository = {
   async create(
@@ -32,7 +32,8 @@ export const vitalRepository = {
     if (data.waistCm !== undefined) doc.waistCm = data.waistCm;
     if (data.hipCm !== undefined) doc.hipCm = data.hipCm;
     if (data.neckCm !== undefined) doc.neckCm = data.neckCm;
-    if (data.activityLevel !== undefined) doc.activityLevel = data.activityLevel;
+    if (data.activityLevel !== undefined)
+      doc.activityLevel = data.activityLevel;
     if (data.systolicBp !== undefined) doc.systolicBp = data.systolicBp;
     if (data.diastolicBp !== undefined) doc.diastolicBp = data.diastolicBp;
     if (data.restingHr !== undefined) doc.restingHr = data.restingHr;

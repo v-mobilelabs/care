@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { generateText, Output } from "ai";
+import { google } from "@ai-sdk/google";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { aiService } from "@/lib/ai/ai.service";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ Rules:
  *
  * Does NOT consume a user credit — this is a background system check.
  */
-export const POST = WithContext(async ({ user, req }) => {
+export const POST = WithContext(async ({ req }) => {
   const formData = await req.formData().catch(() => null);
   if (!formData) throw ApiError.badRequest("Expected multipart/form-data.");
 
@@ -103,9 +104,12 @@ export const POST = WithContext(async ({ user, req }) => {
       };
 
   try {
-    const extracted = await aiService.extractObject(
-      PersonSchema,
-      [
+    // Use generateText directly — bypasses consumeCredit so no user credit is
+    // charged for this background system check.
+    const result = await generateText({
+      model: google("gemini-2.5-flash"),
+      output: Output.object({ schema: PersonSchema }),
+      messages: [
         {
           role: "user",
           content: [
@@ -114,16 +118,15 @@ export const POST = WithContext(async ({ user, req }) => {
           ],
         },
       ],
-      { userId: user.uid, model: aiService.fast },
-    );
+    });
 
-    return NextResponse.json<ExtractedPersonResult>(extracted);
-  } catch (err) {
-    // Credits exhausted or model error — don't block the send, just skip the check.
-    const code = (err as { code?: string }).code;
-    if (code === "CREDITS_EXHAUSTED") {
+    const extracted = (result as unknown as { output?: ExtractedPersonResult })
+      .output;
+    if (!extracted)
       return NextResponse.json<ExtractedPersonResult>({ hasPersonData: false });
-    }
-    throw err;
+    return NextResponse.json<ExtractedPersonResult>(extracted);
+  } catch {
+    // Model error — don't block the send, just skip the check.
+    return NextResponse.json<ExtractedPersonResult>({ hasPersonData: false });
   }
 });

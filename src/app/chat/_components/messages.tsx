@@ -40,6 +40,11 @@ export interface MessagesProps {
     error?: Error | null;
     /** Called when the user clicks the Retry chip after an error. */
     onRetry?: () => void;
+    /**
+     * When set, shows the loading bubble with this fixed label before the AI
+     * stream starts (e.g. "Scanning file…" or "Uploading file…").
+     */
+    preparingLabel?: string;
 }
 
 // ── Error parsing helper ──────────────────────────────────────────────────────
@@ -141,6 +146,7 @@ export function Messages({
     onLearnMore,
     error,
     onRetry,
+    preparingLabel,
 }: Readonly<MessagesProps>) {
     const bottomRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -170,7 +176,8 @@ export function Messages({
         if (distanceFromBottom <= SCROLL_THRESHOLD) {
             bottomRef.current?.scrollIntoView({ behavior: "smooth" });
         }
-    }, [messages, isLoading]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages.length, isLoading, preparingLabel]);
 
     const hasUserMessages = messages.some(m => m.role === "user");
 
@@ -257,12 +264,13 @@ export function Messages({
                         />
                     )}
 
-                    {/* Loading indicator */}
-                    {isLoading && (
+                    {/* Loading indicator — shown while preparing/uploading files OR while the AI is streaming */}
+                    {(preparingLabel != null || isLoading) && (
                         <StatusIndicator
                             chatStatus={chatStatus}
                             phraseIdx={phraseIdx}
                             phraseFading={phraseFading}
+                            overrideLabel={preparingLabel && !isLoading ? preparingLabel : undefined}
                         />
                     )}
 

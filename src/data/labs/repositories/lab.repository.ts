@@ -10,7 +10,7 @@ import {
 } from "../models/lab.model";
 
 const labsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "labs", dependentId);
+  scopedCol(dependentId ?? userId, "labs");
 
 export const labRepository = {
   async create(

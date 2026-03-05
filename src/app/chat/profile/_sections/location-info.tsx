@@ -15,6 +15,7 @@ import { IconCheck, IconMapPin } from "@tabler/icons-react";
 
 import { colors } from "@/ui/tokens";
 import type { ProfileRecord } from "@/app/chat/_query";
+import { useUpdateIdentityMutation } from "@/app/chat/_query";
 import { COUNTRIES, SectionHeader } from "../_shared";
 import { trackEvent } from "@/lib/analytics";
 
@@ -69,13 +70,10 @@ export function LocationForm({ initial, onSave, saving }: Readonly<FormProps>) {
 
 interface SectionProps {
     healthProfile: ProfileRecord | undefined;
-    upsertProfile: {
-        mutate: (data: Partial<ProfileRecord>, options?: { onSuccess?: () => void }) => void;
-        isPending: boolean;
-    };
 }
 
-export function LocationInfoSection({ healthProfile, upsertProfile }: Readonly<SectionProps>) {
+export function LocationInfoSection({ healthProfile }: Readonly<SectionProps>) {
+    const updateIdentity = useUpdateIdentityMutation();
     return (
         <Paper withBorder radius="lg" p="xl">
             <Stack gap="md">
@@ -92,7 +90,7 @@ export function LocationInfoSection({ healthProfile, upsertProfile }: Readonly<S
                         city: healthProfile?.city ?? "",
                     }}
                     onSave={(data) => {
-                        upsertProfile.mutate(data, {
+                        updateIdentity.mutate(data, {
                             onSuccess: () => {
                                 trackEvent({ name: "profile_updated", params: { section: "location-info" } });
                                 notifications.show({
@@ -104,7 +102,7 @@ export function LocationInfoSection({ healthProfile, upsertProfile }: Readonly<S
                             },
                         });
                     }}
-                    saving={upsertProfile.isPending}
+                    saving={updateIdentity.isPending}
                 />
             </Stack>
         </Paper>

@@ -20,6 +20,8 @@ export interface DependentDocument {
   ownerId: string;
   /** Discriminator so we can query profiles where isDependent == true */
   isDependent: true;
+  /** Always 'user' — dependents are patient-side profiles, not doctors. */
+  kind: "user";
   firstName: string;
   lastName: string;
   relationship: Relationship;
@@ -52,6 +54,7 @@ export interface DependentDocument {
 export interface DependentDto {
   id: string;
   ownerId: string;
+  kind: "user";
   firstName: string;
   lastName: string;
   relationship: Relationship;
@@ -78,6 +81,7 @@ export function toDependentDto(
   return {
     id,
     ownerId: doc.ownerId,
+    kind: doc.kind ?? "user",
     firstName: doc.firstName,
     lastName: doc.lastName,
     relationship: doc.relationship,

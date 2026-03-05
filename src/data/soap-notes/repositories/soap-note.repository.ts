@@ -11,7 +11,7 @@ import {
 } from "../models/soap-note.model";
 
 const soapNotesCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "soapNotes", dependentId);
+  scopedCol(dependentId ?? userId, "soapNotes");
 
 const soapNoteDoc = (userId: string, noteId: string, dependentId?: string) =>
   soapNotesCol(userId, dependentId).doc(noteId);

@@ -142,6 +142,9 @@ export interface SoapNoteInput {
 export type DentalCondition =
   | "normal"
   | "caries"
+  | "cavity"
+  | "restoration"
+  | "sinus"
   | "missing"
   | "crown"
   | "root_canal"
@@ -151,16 +154,56 @@ export type DentalCondition =
   | "unerupted"
   | "bridge";
 
+/** Calibrated per-tooth periodontal and radiographic measurements. */
+export interface DentalMeasurements {
+  /** Radiographic bone loss in mm from the CEJ to the current alveolar bone crest */
+  boneLossFromCej?: number;
+  /** Periodontal pocket probing depth in mm */
+  probingDepth?: number;
+  /** Clinical attachment level in mm (recession + probing depth) */
+  clinicalAttachmentLevel?: number;
+  /** Gingival recession in mm measured from CEJ */
+  recession?: number;
+  /** Furcation involvement grade (multi-root teeth only) */
+  furcation?: "none" | "I" | "II" | "III";
+  /** Tooth mobility grade — Miller classification (0 = physiologic, 3 = severe) */
+  mobility?: 0 | 1 | 2 | 3;
+  // ── Prior-visit values for temporal analysis ────────────────────────────
+  /** Bone loss from CEJ at the prior visit — drives temporal delta overlay */
+  priorBoneLossFromCej?: number;
+  /** Probing depth at the prior visit */
+  priorProbingDepth?: number;
+  /** CAL at the prior visit */
+  priorClinicalAttachmentLevel?: number;
+}
+
 export interface DentalFinding {
   tooth: number;
   condition: DentalCondition;
   note?: string;
   severity?: "mild" | "moderate" | "severe";
+  /** Affected surfaces for cavity/restoration (e.g. ["occlusal", "mesial"]) */
+  surfaces?: (
+    | "occlusal"
+    | "mesial"
+    | "distal"
+    | "buccal"
+    | "lingual"
+    | "palatal"
+  )[];
+  /** Calibrated measurements extracted from the radiograph */
+  measurements?: DentalMeasurements;
 }
 
 export interface DentalChartInput {
   summary: string;
   orthodonticFindings?: string;
+  /** Overall periodontal staging/grading (e.g. Stage III Grade B generalised periodontitis) */
+  periodontalSummary?: string;
+  /** ISO 8601 date of the current radiograph */
+  visitDate?: string;
+  /** ISO 8601 date of the prior radiograph used for temporal comparison */
+  priorVisitDate?: string;
   findings: DentalFinding[];
 }
 
@@ -172,6 +215,39 @@ export interface SuggestActionItem {
 export interface SuggestActionsInput {
   condition: string;
   actions: SuggestActionItem[];
+}
+
+// ── PatientSummary input ──────────────────────────────────────────────────────
+
+export interface PatientSummaryInput {
+  title: string;
+  narrative: string;
+  chiefComplaints: string[];
+  diagnoses: Array<{ name: string; icd10?: string; status: string }>;
+  medications: Array<{ name: string; dosage?: string; frequency?: string }>;
+  vitals: Array<{ name: string; value: string; unit?: string }>;
+  allergies: string[];
+  riskFactors: string[];
+  recommendations: string[];
+}
+
+// ── LogVitals input ─────────────────────────────────────────────────────
+
+export interface LogVitalsInput {
+  sex?: "male" | "female";
+  waistCm?: number;
+  hipCm?: number;
+  neckCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  systolicBp?: number;
+  diastolicBp?: number;
+  restingHr?: number;
+  spo2?: number;
+  temperatureC?: number;
+  respiratoryRate?: number;
+  glucoseMmol?: number;
+  note?: string;
+  measuredAt?: string;
 }
 
 // ── Colour maps ───────────────────────────────────────────────────────────────

@@ -18,9 +18,7 @@ const bucket = firebaseService.getBucket();
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
 const filesCol = (userId: string, profileId: string, sessionId: string) =>
-  db.collection(
-    `users/${userId}/profiles/${profileId}/sessions/${sessionId}/files`,
-  );
+  db.collection(`profiles/${profileId}/sessions/${sessionId}/files`);
 
 const fileDoc = (
   userId: string,
@@ -36,11 +34,13 @@ const storagePath = (
   sessionId: string,
   fileId: string,
   name: string,
-) =>
-  `users/${userId}/profiles/${profileId}/sessions/${sessionId}/files/${fileId}/${name}`;
+) => `profiles/${profileId}/sessions/${sessionId}/files/${fileId}/${name}`;
 
-/** Signed URL expiry — 1 hour */
-const SIGNED_URL_EXPIRY_MS = 60 * 60 * 1000;
+/** Signed URL expiry — 7 days (GCS maximum for service-account-signed URLs). */
+const SIGNED_URL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Refresh URLs that expire within this window (1 day). */
+const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -75,10 +75,11 @@ export const fileRepository = {
       metadata: { cacheControl: "private, max-age=31536000" },
     });
 
-    // 3. Generate a signed download URL (1 h).
+    // 3. Generate a signed download URL (7 days).
+    const urlExpiresAt = Date.now() + SIGNED_URL_EXPIRY_MS;
     const [downloadUrl] = await gcsFile.getSignedUrl({
       action: "read",
-      expires: Date.now() + SIGNED_URL_EXPIRY_MS,
+      expires: urlExpiresAt,
     });
 
     // 4. Write Firestore metadata.
@@ -90,6 +91,7 @@ export const fileRepository = {
       size: data.size,
       storagePath: gcsPath,
       downloadUrl,
+      urlExpiresAt,
       createdAt: Timestamp.now(),
     };
     await ref.set(stripUndefined(doc));
@@ -135,14 +137,15 @@ export const fileRepository = {
     const doc = snap.data() as FileDocument;
 
     // Refresh the signed URL so the caller always gets a valid link.
+    const urlExpiresAt = Date.now() + SIGNED_URL_EXPIRY_MS;
     const gcsFile = bucket.file(doc.storagePath);
     const [freshUrl] = await gcsFile.getSignedUrl({
       action: "read",
-      expires: Date.now() + SIGNED_URL_EXPIRY_MS,
+      expires: urlExpiresAt,
     });
-    await snap.ref.update({ downloadUrl: freshUrl });
+    await snap.ref.update({ downloadUrl: freshUrl, urlExpiresAt });
 
-    return toFileDto(snap.id, { ...doc, downloadUrl: freshUrl });
+    return toFileDto(snap.id, { ...doc, downloadUrl: freshUrl, urlExpiresAt });
   },
 
   async list(
@@ -172,18 +175,28 @@ export const fileRepository = {
 
   /** Same as listAllForUser but without orderBy — avoids the composite index requirement. */
   async listAllForUserUnordered(userId: string): Promise<FileDto[]> {
-    const snap = await db
-      .collectionGroup("files")
-      .where("userId", "==", userId)
-      .get();
-    const docs = snap.docs.map((d: QueryDocumentSnapshot) =>
-      toFileDto(d.id, d.data() as FileDocument),
-    );
-    // Sort client-side so we don't require the composite index to be deployed
-    return docs.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    try {
+      const snap = await db
+        .collectionGroup("files")
+        .where("userId", "==", userId)
+        .get();
+      const docs = snap.docs.map((d: QueryDocumentSnapshot) =>
+        toFileDto(d.id, d.data() as FileDocument),
+      );
+      // Sort client-side so we don't require the composite index to be deployed
+      return docs.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    } catch (err) {
+      // Firestore single-field collection-group index may not be deployed yet.
+      // Return an empty list so the Files page degrades gracefully instead of 500.
+      console.error(
+        "[fileRepository.listAllForUserUnordered] query failed:",
+        err,
+      );
+      return [];
+    }
   },
 
   /** Delete GCS object and Firestore metadata. */

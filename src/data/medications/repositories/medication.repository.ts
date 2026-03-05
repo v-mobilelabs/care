@@ -11,7 +11,7 @@ import {
 } from "../models/medication.model";
 
 const medicationsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "medications", dependentId);
+  scopedCol(dependentId ?? userId, "medications");
 
 export const medicationRepository = {
   async create(

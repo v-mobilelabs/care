@@ -54,6 +54,8 @@ export interface FileDocument {
   storagePath: string;
   /** Signed download URL (refreshed on retrieval) */
   downloadUrl: string | null;
+  /** Unix epoch ms when downloadUrl expires. Used to detect stale URLs on list. */
+  urlExpiresAt?: number;
   createdAt: Timestamp;
   /** AI-extracted prescription data, populated after the user triggers extraction. */
   extractedData?: ExtractedPrescriptionData;

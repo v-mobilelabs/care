@@ -9,18 +9,46 @@ import {
   type ConditionDocument,
   type ConditionDto,
 } from "../models/condition.model";
+import { ApiError } from "@/lib/api/with-context";
 
 const conditionsCol = (userId: string, dependentId?: string) =>
-  scopedCol(userId, "conditions", dependentId);
+  scopedCol(dependentId ?? userId, "conditions");
 
 export const conditionRepository = {
+  async existsByName(
+    userId: string,
+    name: string,
+    dependentId?: string,
+  ): Promise<boolean> {
+    const snap = await conditionsCol(userId, dependentId)
+      .where("nameLower", "==", name.toLowerCase())
+      .limit(1)
+      .get();
+    return !snap.empty;
+  },
+
   async create(
     userId: string,
     data: Omit<ConditionDocument, "userId" | "createdAt">,
     dependentId?: string,
   ): Promise<ConditionDto> {
+    const isDuplicate = await conditionRepository.existsByName(
+      userId,
+      data.name,
+      dependentId,
+    );
+    if (isDuplicate) {
+      throw ApiError.conflict(
+        `Condition "${data.name}" already exists for this profile.`,
+      );
+    }
     const now = Timestamp.now();
-    const doc: ConditionDocument = { userId, ...data, createdAt: now };
+    const doc: ConditionDocument = {
+      userId,
+      ...data,
+      nameLower: data.name.toLowerCase(),
+      createdAt: now,
+    };
     const ref = conditionsCol(userId, dependentId).doc();
     await ref.set(stripUndefined(doc));
     return toConditionDto(ref.id, doc);

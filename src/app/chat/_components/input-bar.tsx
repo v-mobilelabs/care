@@ -6,6 +6,7 @@ import {
     CloseButton,
     Group,
     Image,
+    Loader,
     Paper,
     Text,
     Textarea,
@@ -51,6 +52,8 @@ export interface InputBarProps {
     creditsRemaining?: number;
     /** Stops the current AI response stream. */
     onStop?: () => void;
+    /** True while file uploads are in flight (before the AI stream starts). */
+    isUploading?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -66,8 +69,10 @@ export function InputBar({
     onAnswerFreeText,
     creditsRemaining,
     onStop,
+    isUploading = false,
 }: Readonly<InputBarProps>) {
     const outOfCredits = creditsRemaining === 0;
+    const isBusy = isLoading || isUploading;
     const [attachments, setAttachments] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -76,8 +81,8 @@ export function InputBar({
 
     // Re-focus the input after the AI finishes responding.
     useEffect(() => {
-        if (!isLoading) textareaRef.current?.focus();
-    }, [isLoading]);
+        if (!isBusy) textareaRef.current?.focus();
+    }, [isBusy]);
 
     // ── Hooks ─────────────────────────────────────────────────────────────────
     const { isListening, toggleMic } = useMic({ input, setInput: onInputChange });
@@ -112,7 +117,7 @@ export function InputBar({
     // ── Send ──────────────────────────────────────────────────────────────────
     function handleSend() {
         const text = input.trim();
-        if ((!text && attachments.length === 0) || isLoading || outOfCredits) return;
+        if ((!text && attachments.length === 0) || isBusy || outOfCredits) return;
         onInputChange("");
 
         const filesToSend = attachments.length > 0
@@ -198,25 +203,34 @@ export function InputBar({
                                     <Box key={`${file.name}-${file.lastModified}`} style={{ position: "relative", display: "inline-block" }}>
                                         {(file.type === "application/pdf" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") ? (
                                             <Paper withBorder radius="md" px="sm" py={6}
-                                                style={{ display: "flex", alignItems: "center", gap: 6, height: 64, maxWidth: 200 }}>
+                                                style={{ display: "flex", alignItems: "center", gap: 6, height: 64, maxWidth: 200, opacity: isUploading ? 0.6 : 1, transition: "opacity 0.2s" }}>
                                                 {file.type === "application/pdf"
                                                     ? <IconFileTypePdf size={24} color="var(--mantine-color-red-6)" style={{ flexShrink: 0 }} />
                                                     : <IconFileWord size={24} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />}
                                                 <Box style={{ overflow: "hidden" }}>
                                                     <Text size="xs" fw={600} truncate>{file.name}</Text>
-                                                    <Text size="xs" c="dimmed">{(file.size / 1024).toFixed(0)} KB</Text>
+                                                    <Text size="xs" c="dimmed">{isUploading ? "Uploading…" : `${(file.size / 1024).toFixed(0)} KB`}</Text>
                                                 </Box>
                                             </Paper>
                                         ) : (
-                                            <Image src={getPreviewURL(file)} w={64} h={64} radius="md"
-                                                style={{ objectFit: "cover", border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))" }}
-                                                alt={file.name}
+                                            <Box style={{ position: "relative" }}>
+                                                <Image src={getPreviewURL(file)} w={64} h={64} radius="md"
+                                                    style={{ objectFit: "cover", border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))", opacity: isUploading ? 0.5 : 1, transition: "opacity 0.2s" }}
+                                                    alt={file.name}
+                                                />
+                                                {isUploading && (
+                                                    <Box style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--mantine-radius-md)" }}>
+                                                        <Loader size="xs" color="white" />
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        )}
+                                        {!isUploading && (
+                                            <CloseButton size="xs" radius="xl"
+                                                style={{ position: "absolute", top: -6, right: -6, background: "var(--mantine-color-dark-7)", color: "white" }}
+                                                onClick={() => removeAttachment(file)} aria-label="Remove attachment"
                                             />
                                         )}
-                                        <CloseButton size="xs" radius="xl"
-                                            style={{ position: "absolute", top: -6, right: -6, background: "var(--mantine-color-dark-7)", color: "white" }}
-                                            onClick={() => removeAttachment(file)} aria-label="Remove attachment"
-                                        />
                                     </Box>
                                 ))}
                             </Group>
@@ -231,7 +245,7 @@ export function InputBar({
                             value={input}
                             onChange={e => onInputChange(e.currentTarget.value)}
                             onKeyDown={handleKeyDown}
-                            disabled={isLoading || outOfCredits}
+                            disabled={isBusy || outOfCredits}
                             variant="unstyled"
                             styles={{
                                 input: {
@@ -250,13 +264,13 @@ export function InputBar({
                         <Group justify="space-between" px="sm" pb="sm" pt={4} gap={4}>
                             <Group gap={2}>
                                 <Tooltip label="Upload image or document (PDF, DOCX · max 10 MB)" withArrow position="top">
-                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isLoading}
+                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isBusy}
                                         onClick={() => fileInputRef.current?.click()} aria-label="Upload image or document">
                                         <IconPaperclip size={17} />
                                     </ActionIcon>
                                 </Tooltip>
                                 <Tooltip label="Take photo" withArrow position="top">
-                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isLoading}
+                                    <ActionIcon size={36} radius="xl" color="gray" variant="subtle" disabled={isBusy}
                                         onClick={() => cameraInputRef.current?.click()} aria-label="Take photo">
                                         <IconCamera size={17} />
                                     </ActionIcon>
@@ -265,7 +279,7 @@ export function InputBar({
                                     <ActionIcon size={36} radius="xl"
                                         color={isListening ? "red" : "gray"}
                                         variant={isListening ? "light" : "subtle"}
-                                        disabled={isLoading}
+                                        disabled={isBusy}
                                         onClick={toggleMic}
                                         aria-label={isListening ? "Stop recording" : "Use microphone"}
                                         style={isListening ? { animation: "pulse 1.2s ease-in-out infinite" } : undefined}>
@@ -287,6 +301,10 @@ export function InputBar({
                                         <IconPlayerStopFilled size={16} />
                                     </ActionIcon>
                                 </Tooltip>
+                            ) : isUploading ? (
+                                <ActionIcon size={36} radius="xl" color="primary" variant="filled" disabled aria-label="Uploading">
+                                    <Loader size={14} color="white" />
+                                </ActionIcon>
                             ) : (
                                 <Tooltip label="Send (Enter)" withArrow position="top">
                                     <ActionIcon size={36} radius="xl" color="primary" variant="filled"

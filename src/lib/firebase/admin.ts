@@ -3,6 +3,7 @@ import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { getDatabase } from "firebase-admin/database";
 
 function getAdminApp(): App {
   if (getApps().length > 0) return getApps()[0]!;
@@ -23,6 +24,7 @@ function getAdminApp(): App {
       privateKey: privateKey.replace(/\\n/g, "\n"),
     }),
     storageBucket,
+    databaseURL: process.env.NEXT_PUBLIC_FIREBASE_REALTIME_DB_URL,
   });
 }
 
@@ -34,3 +36,6 @@ export const db = getFirestore(getAdminApp());
 
 /** Firebase Admin Storage bucket (singleton, Node.js only). */
 export const storage = getStorage(getAdminApp());
+
+/** Firebase Admin Realtime Database instance (singleton, Node.js only). */
+export const rtdb = getDatabase(getAdminApp());

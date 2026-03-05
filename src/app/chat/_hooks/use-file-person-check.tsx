@@ -1,5 +1,5 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Badge, Group, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -12,6 +12,7 @@ import {
   type DependentRecord,
   type ExtractedPersonResult,
 } from "@/app/chat/_query";
+import { DependentForm } from "@/app/chat/profile/_shared";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { colors } from "@/ui/tokens";
 
@@ -56,6 +57,11 @@ function findMatchingDependent(
   });
 }
 
+// ── Feature flag ─────────────────────────────────────────────────────────────
+
+/** Set to true to re-enable the AI person-extraction flow for uploaded files. */
+const PERSON_CHECK_ENABLED = false;
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -78,6 +84,7 @@ export function useFilePersonCheck({
   const createDependent = useCreateDependentMutation();
   const { data: dependents = [] } = useDependentsQuery();
   const checkingRef = useRef(false);
+  const [isChecking, setIsChecking] = useState(false);
 
   // ── Switch to an existing dependent ────────────────────────────────────────
 
@@ -182,12 +189,13 @@ export function useFilePersonCheck({
       )
       : [];
 
-    if (visualFiles.length === 0) {
+    if (!PERSON_CHECK_ENABLED || visualFiles.length === 0) {
       onProceedNormal(text, files);
       return;
     }
 
     checkingRef.current = true;
+    setIsChecking(true);
 
     let extracted: ExtractedPersonResult = { hasPersonData: false };
     try {
@@ -204,6 +212,7 @@ export function useFilePersonCheck({
       // Network error → proceed normally
     } finally {
       checkingRef.current = false;
+      setIsChecking(false);
     }
 
     // No person data detected → proceed normally
@@ -274,14 +283,17 @@ export function useFilePersonCheck({
           ),
       });
     } else {
-      // Path B: no existing profile → offer to create one
-      modals.openConfirmModal({
-        title: "Document belongs to a different person",
+      // Path B: no existing profile → show pre-filled create profile form
+      modals.open({
+        title: (
+          <Group gap="xs">
+            <IconUserPlus size={18} />
+            <Text fw={600} size="sm">Create profile</Text>
+          </Group>
+        ),
+        size: "lg",
         children: (
-          <Stack gap="sm">
-            <Text size="sm">
-              This document appears to contain details for a different person:
-            </Text>
+          <Stack gap="sm" pb="xs">
             <Group gap={6}>
               <Badge
                 size="lg"
@@ -298,24 +310,61 @@ export function useFilePersonCheck({
               )}
             </Group>
             <Text size="sm" c="dimmed">
-              Would you like to create a profile for{" "}
-              <Text span fw={600} c="primary">
-                {displayName}
-              </Text>{" "}
-              and continue in their session?
+              This document appears to be for someone not in your profiles.
+              Fill in the required fields to create their profile and continue in their session.
             </Text>
+            <DependentForm
+              existing={{
+                id: "",
+                ownerId: "",
+                firstName: extracted.firstName ?? displayName,
+                lastName: extracted.lastName ?? "",
+                relationship: "Other",
+                dateOfBirth: extracted.dateOfBirth,
+                createdAt: "",
+                updatedAt: "",
+              } as DependentRecord}
+              submitLabel="Create & continue"
+              onCancel={() => {
+                modals.closeAll();
+                // Create minimal profile with extracted data and switch anyway
+                createAndSwitch(extracted, displayName, text, files);
+              }}
+              onSave={(data) => {
+                modals.closeAll();
+                createDependent.mutate(
+                  data,
+                  {
+                    onSuccess: (newDep) => {
+                      const newSessionId = crypto.randomUUID();
+                      const label = [newDep.firstName, newDep.lastName]
+                        .filter(Boolean)
+                        .join(" ");
+                      switchProfile(newDep.id, label);
+                      onProceedAsNewProfile(text, files, newSessionId);
+                      notifications.show({
+                        title: "Profile created & switched",
+                        message: `Now chatting as ${label}`,
+                        color: colors.success,
+                      });
+                    },
+                    onError: () => {
+                      notifications.show({
+                        title: "Could not create profile",
+                        message: "Continuing with your current profile.",
+                        color: colors.danger,
+                      });
+                      onProceedNormal(text, files);
+                    },
+                  },
+                );
+              }}
+            />
           </Stack>
         ),
-        labels: { confirm: "Create profile & switch", cancel: "Continue as myself" },
-        confirmProps: { color: "primary" },
-        onCancel: () => onProceedNormal(text, files),
-        onConfirm: () =>
-          openSwitchConfirmModal(displayName, text, files, () =>
-            createAndSwitch(extracted, displayName, text, files),
-          ),
       });
     }
   }
 
-  return { checkAndSend };
+  return { checkAndSend, isChecking };
 }

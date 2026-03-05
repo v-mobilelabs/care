@@ -258,48 +258,72 @@ export function FamilySection({ dependents }: Readonly<Props>) {
                         </Box>
                     </Group>
                 ) : (
-                    <Stack gap={6}>
+                    <Stack gap="xs">
                         {dependents.map((dep) => {
                             const depInitials = [dep.firstName[0], dep.lastName?.[0]]
                                 .filter(Boolean).join("").toUpperCase();
+                            const fullName = [dep.firstName, dep.lastName].filter(Boolean).join(" ");
+                            const meta = [
+                                dep.dateOfBirth ? `Born ${dep.dateOfBirth}` : null,
+                                dep.sex ? dep.sex.charAt(0).toUpperCase() + dep.sex.slice(1) : null,
+                                dep.height ? `${dep.height} cm` : null,
+                                dep.weight ? `${dep.weight} kg` : null,
+                                dep.country ? [dep.city, dep.country].filter(Boolean).join(", ") : null,
+                            ].filter(Boolean).join(" · ");
+
                             return (
-                                <Group
-                                    key={dep.id}
-                                    justify="space-between"
-                                    p="sm"
-                                    style={{
-                                        borderRadius: "var(--mantine-radius-md)",
-                                        background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
-                                        border: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                                    }}
-                                >
-                                    <Group gap="sm">
-                                        <Avatar size={34} radius="xl" color="primary" variant="light">
-                                            {depInitials || "?"}
-                                        </Avatar>
-                                        <Box>
-                                            <Group gap={6} align="center">
-                                                <Text size="sm" fw={600}>
-                                                    {dep.firstName}{dep.lastName ? ` ${dep.lastName}` : ""}
+                                <Paper key={dep.id} withBorder radius="md" px="md" py="sm">
+                                    <Group justify="space-between" wrap="nowrap" gap="sm">
+                                        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                                            <Avatar
+                                                size={36}
+                                                radius="xl"
+                                                color="primary"
+                                                variant="light"
+                                                style={{ flexShrink: 0 }}
+                                            >
+                                                {depInitials || "?"}
+                                            </Avatar>
+                                            <Box style={{ minWidth: 0 }}>
+                                                <Text
+                                                    size="sm"
+                                                    fw={500}
+                                                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                                >
+                                                    {fullName}
                                                 </Text>
-                                                <Badge size="xs" variant="light" color="primary">{dep.relationship}</Badge>
-                                            </Group>
-                                            <Group gap={4} mt={2}>
-                                                {dep.dateOfBirth && <Text size="xs" c="dimmed">Born {dep.dateOfBirth}</Text>}
-                                                {dep.height && <Text size="xs" c="dimmed">· {dep.height} cm</Text>}
-                                                {dep.weight && <Text size="xs" c="dimmed">· {dep.weight} kg</Text>}
-                                            </Group>
-                                        </Box>
+                                                {meta ? (
+                                                    <Text size="xs" c="dimmed" mt={2} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {meta}
+                                                    </Text>
+                                                ) : null}
+                                            </Box>
+                                        </Group>
+                                        <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
+                                            <Badge size="xs" variant="light" color="primary" radius="sm" visibleFrom="xs">
+                                                {dep.relationship}
+                                            </Badge>
+                                            <ActionIcon
+                                                size={28}
+                                                variant="subtle"
+                                                color="gray"
+                                                onClick={() => openModal(dep)}
+                                                title="Edit"
+                                            >
+                                                <IconEdit size={13} />
+                                            </ActionIcon>
+                                            <ActionIcon
+                                                size={28}
+                                                variant="subtle"
+                                                color="red"
+                                                onClick={() => confirmDelete(dep)}
+                                                title="Remove"
+                                            >
+                                                <IconTrash size={13} />
+                                            </ActionIcon>
+                                        </Group>
                                     </Group>
-                                    <Group gap={4}>
-                                        <ActionIcon variant="subtle" color="gray" onClick={() => openModal(dep)}>
-                                            <IconEdit size={18} />
-                                        </ActionIcon>
-                                        <ActionIcon variant="subtle" color="red" onClick={() => confirmDelete(dep)}>
-                                            <IconTrash size={18} />
-                                        </ActionIcon>
-                                    </Group>
-                                </Group>
+                                </Paper>
                             );
                         })}
                     </Stack>

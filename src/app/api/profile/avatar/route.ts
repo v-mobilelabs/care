@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { auth } from "@/lib/firebase/admin";
 import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { profileRepository } from "@/data/profile";
 
 // POST /api/profile/avatar — upload a cropped avatar image
 // Body: multipart/form-data with a single "file" field (image/jpeg)
@@ -31,10 +32,13 @@ export const POST = WithContext(async ({ user, req }) => {
     resumable: false,
   });
 
-  const photoURL = fileRef.publicUrl();
+  const photoURL = `${fileRef.publicUrl()}?t=${Date.now()}`;
 
-  // Persist on the Firebase Auth user record so client SDK reflects the change
-  await auth.updateUser(user.uid, { photoURL });
+  // Persist on Firebase Auth and Firestore profile in parallel
+  await Promise.all([
+    auth.updateUser(user.uid, { photoURL }),
+    profileRepository.upsert({ userId: user.uid, photoUrl: photoURL }),
+  ]);
 
   return NextResponse.json({ photoURL });
 });
