@@ -1,3 +1,15 @@
+/* ── Meet: recording pulse ─────────────────────────────────────────────────── */
+
+@keyframes meet-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* ── Mobile-first base resets ──────────────────────────────────────────────── */
 
 /* Prevent iOS text inflation and ensure consistent font scaling */
@@ -5,6 +17,17 @@ html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Fill the entire screen on notched iOS devices */
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+/* === Safe-area insets for iOS standalone PWA === */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
 }
 
 body {
@@ -13,6 +36,14 @@ body {
   /* Better mobile font rendering */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Respect notch / home-indicator safe areas */
+  padding-top: var(--sat);
+  padding-right: var(--sar);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  /* Fill entire viewport on iOS */
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 /* Remove tap flash on iOS / Android — brand primary ghost instead */

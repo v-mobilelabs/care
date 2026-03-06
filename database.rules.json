@@ -1,6 +1,7 @@
 {
   "rules": {
     "presence": {
+      ".indexOn": ["kind"],
       "$uid": {
         // Any authenticated user can read any presence node.
         // This lets patients see if a doctor is online, and vice versa.
@@ -33,12 +34,46 @@
       }
     },
 
+    // Public queue size counter — any authenticated user can read, only Admin SDK writes.
+    // Allows patients to see how many people are waiting for a given doctor.
+    "queue-size": {
+      "$doctorId": {
+        ".read": "auth != null",
+        ".write": false,
+        ".validate": "newData.isNumber()"
+      }
+    },
+
     // Patient call state — only the patient themselves can read their state.
     // Writes are performed exclusively by the Admin SDK (server-side API routes).
     "call-state": {
       "$patientId": {
         ".read": "auth != null && auth.uid === $patientId",
         ".write": false
+      }
+    },
+
+    // In-call consent invite signaling.
+    // The patient can read their own pending invite and write back acceptance.
+    // Server writes via Admin SDK (bypasses these rules).
+    "in-call-consent": {
+      "$patientId": {
+        "$requestId": {
+          ".read": "auth != null && auth.uid === $patientId",
+          ".write": "auth != null && auth.uid === $patientId"
+        }
+      }
+    },
+
+    // Doctor acknowledgement node: patient writes here after accepting, doctor reads it.
+    "in-call-consent-ack": {
+      "$doctorId": {
+        "$requestId": {
+          // Doctor reads their own acks.
+          ".read": "auth != null && auth.uid === $doctorId",
+          // Any authenticated user can write (patient writes acceptance here).
+          ".write": "auth != null"
+        }
       }
     },
 

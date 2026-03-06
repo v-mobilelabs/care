@@ -24,8 +24,10 @@ export interface CallState {
   status: CallStatus;
   requestId?: string;
   doctorId?: string;
+  doctorName?: string;
   chimeMeetingId?: string;
   joinInfo?: AttendeeJoinInfo | null;
+  queuePosition?: number;
 }
 
 const INITIAL: CallState = { status: "idle" };
@@ -65,6 +67,8 @@ export function useCallState(patientId: string | null | undefined): CallState {
                   attendeeId?: string;
                   joinToken?: string;
                   meeting?: AttendeeJoinInfo["meeting"];
+                  queuePosition?: number;
+                  doctorName?: string;
                 })
               | null;
 
@@ -93,8 +97,10 @@ export function useCallState(patientId: string | null | undefined): CallState {
               status: (data.status as CallStatus) ?? "idle",
               requestId: data.requestId,
               doctorId: data.doctorId,
+              doctorName: data.doctorName,
               chimeMeetingId: data.chimeMeetingId,
               joinInfo,
+              queuePosition: data.queuePosition,
             });
           },
           (error) => {

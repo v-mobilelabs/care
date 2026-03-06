@@ -1,94 +1,77 @@
-"use client";
 /**
- * MeetPage — loads join credentials then renders the Chime video room.
- * The actual room is dynamically imported to prevent SSR issues with Web APIs.
+ * MeetPage — SSR page that pre-fetches Chime join credentials and call-request
+ * metadata on the server, then hydrates TanStack Query so the client has the
+ * data instantly without a second round-trip.
+ *
+ * On revisit (e.g. doctor clicks Dynamic Island), the client cache already has
+ * the session data so the MeetingRoom mounts immediately. The SSR still runs
+ * in the background to refresh the short-lived Chime token.
  */
-import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Center, Loader, Stack, Text } from "@mantine/core";
-import type { AttendeeJoinInfo } from "@/data/meet";
-import { useAuth } from "@/ui/providers/auth-provider";
+import { redirect } from "next/navigation";
+import { getServerUser } from "@/lib/api/server-prefetch";
+import { GetMeetingJoinInfoUseCase } from "@/data/meet";
+import { meetRepository } from "@/data/meet/repositories/meet.repository";
+import { getQueryClient } from "@/lib/query/client";
+import { Hydrate } from "@/ui/hydrate";
+import { MeetContent } from "./_content";
+import { meetSessionKey, type MeetSessionData } from "./_keys";
 
-const MeetingRoom = dynamic(
-    () => import("./_room").then((m) => ({ default: m.MeetingRoom })),
-    { ssr: false },
-);
-
-export default function MeetPage({
+export default async function MeetPage({
     params,
 }: Readonly<{ params: Promise<{ requestId: string }> }>) {
-    const { user, loading: authLoading, kind } = useAuth();
-    const router = useRouter();
-    const [requestId, setRequestId] = useState<string | null>(null);
-    const [joinInfo, setJoinInfo] = useState<AttendeeJoinInfo | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [user, { requestId }] = await Promise.all([
+        getServerUser(),
+        params,
+    ]);
 
-    // Resolve route params
-    useEffect(() => {
-        void params.then((p) => setRequestId(p.requestId));
-    }, [params]);
+    if (!user) redirect("/auth/login");
 
-    // Fetch join info once auth + requestId are ready
-    useEffect(() => {
-        if (authLoading || !user || !requestId) return;
+    const isDoctor = user.kind === "doctor";
+    const fallback = isDoctor ? "/doctor/dashboard" : "/chat/connect";
 
-        // Check if doctor has pre-stored join info (set when accepting the call)
-        const stored = sessionStorage.getItem(`meet-join-${requestId}`);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored) as AttendeeJoinInfo;
-                sessionStorage.removeItem(`meet-join-${requestId}`);
-                setJoinInfo(parsed);
-                return;
-            } catch {
-                // fall through to API
-            }
-        }
+    // Fetch join credentials + call request metadata in parallel.
+    const [joinInfoResult, callRequest] = await Promise.all([
+        new GetMeetingJoinInfoUseCase()
+            .execute({ requestId, userId: user.uid })
+            .catch(() => null),
+        meetRepository.get(requestId).catch(() => null),
+    ]);
 
-        fetch(`/api/meet/${requestId}/join`)
-            .then(async (res) => {
-                if (!res.ok) {
-                    const body = (await res.json()) as { error?: { message?: string } };
-                    throw new Error(body.error?.message ?? "Failed to load meeting");
-                }
-                return res.json() as Promise<AttendeeJoinInfo>;
-            })
-            .then((info) => setJoinInfo(info))
-            .catch((err: Error) => {
-                setError(err.message);
-                const fallback = kind === "doctor" ? "/doctor/dashboard" : "/chat/connect";
-                setTimeout(() => router.push(fallback), 3000);
-            });
-    }, [authLoading, user, requestId, router, kind]);
+    if (!joinInfoResult) redirect(fallback);
 
-    if (error) {
-        return (
-            <Center h="100vh">
-                <Stack align="center" gap="sm">
-                    <Text c="red" fw={600}>
-                        {error}
-                    </Text>
-                    <Text c="dimmed" size="sm">
-                        Redirecting you back…
-                    </Text>
-                </Stack>
-            </Center>
-        );
-    }
+    // Derive display names from the call request document.
+    const localName = callRequest
+        ? (isDoctor ? callRequest.doctorName : callRequest.patientName)
+        : (isDoctor ? "Doctor" : "You");
+    const localPhoto = callRequest
+        ? (isDoctor ? (callRequest.doctorPhotoUrl ?? null) : (callRequest.patientPhotoUrl ?? null))
+        : null;
+    const remoteName = callRequest
+        ? (isDoctor ? callRequest.patientName : callRequest.doctorName)
+        : (isDoctor ? "Patient" : "Doctor");
+    const remotePhoto = callRequest
+        ? (isDoctor ? (callRequest.patientPhotoUrl ?? null) : (callRequest.doctorPhotoUrl ?? null))
+        : null;
 
-    if (!joinInfo) {
-        return (
-            <Center h="100vh">
-                <Stack align="center" gap="md">
-                    <Loader size="lg" />
-                    <Text c="dimmed" size="sm">
-                        Setting up your video call…
-                    </Text>
-                </Stack>
-            </Center>
-        );
-    }
+    // Build session data and seed the TanStack Query cache so the client
+    // has it instantly — no extra API call on mount or revisit.
+    const sessionData: MeetSessionData = {
+        requestId,
+        joinInfo: joinInfoResult,
+        localUser: { name: localName, photoUrl: localPhoto },
+        remoteUser: { name: remoteName, photoUrl: remotePhoto },
+        exitRoute: fallback,
+        userKind: isDoctor ? "doctor" : "patient",
+        localUserId: user.uid,
+        doctorId: callRequest?.doctorId ?? null,
+    };
 
-    return <MeetingRoom requestId={requestId!} joinInfo={joinInfo} />;
+    const queryClient = getQueryClient();
+    queryClient.setQueryData(meetSessionKey(requestId), sessionData);
+
+    return (
+        <Hydrate client={queryClient}>
+            <MeetContent requestId={requestId} />
+        </Hydrate>
+    );
 }

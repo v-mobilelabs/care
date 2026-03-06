@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { GetFileUseCase, DeleteFileUseCase } from "@/data/sessions";
-import { PRESCRIPTIONS_SESSION_ID } from "../route";
+import { PRESCRIPTIONS_SESSION_ID } from "../constants";
 
 // GET /api/prescriptions/[fileId] — refresh signed URL
 export const GET = WithContext<{ fileId: string }>(

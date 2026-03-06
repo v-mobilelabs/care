@@ -1,9 +1,11 @@
 import { createChimeMeeting, createChimeAttendee } from "@/lib/meet/chime";
 import { meetRepository } from "../repositories/meet.repository";
 import { rtdb, db } from "@/lib/firebase/admin";
-import { FieldValue } from "firebase-admin/firestore";
 import type { AttendeeJoinInfo } from "../models/meet.model";
 import { ApiError } from "@/lib/api/with-context";
+import { doctorPatientRepository } from "@/data/doctor-patients";
+import { encounterRepository } from "@/data/encounters";
+import { recomputeQueuePositions } from "./recompute-queue";
 
 export class AcceptCallUseCase {
   async execute(params: {
@@ -38,47 +40,67 @@ export class AcceptCallUseCase {
       doctorAttendee,
     });
 
+    // Fetch doctor's photo URL to store alongside the call request
+    const doctorProfileSnap = await db
+      .collection("profiles")
+      .doc(doctorId)
+      .get();
+    const doctorPhotoUrl =
+      (doctorProfileSnap.data() as { photoUrl?: string | null } | undefined)
+        ?.photoUrl ?? null;
+
     await meetRepository.updateStatus(requestId, "accepted", {
       chimeMeetingId: meetingId,
       chimeMeetingData,
+      doctorPhotoUrl,
     });
 
-    // Build the relationship: add patient to doctor's patients list + vice versa
-    const batch = db.batch();
-
-    // patients/{patientId}/doctorIds (stored in patient doc as an array field)
-    const patientRef = db.collection("patients").doc(request.patientId);
-    batch.set(
-      patientRef,
-      { doctorIds: FieldValue.arrayUnion(doctorId) },
-      { merge: true },
-    );
-
-    // doctors/{doctorId} — add patient to patients list
-    const doctorRef = db.collection("doctor-patients").doc(doctorId);
-    batch.set(
-      doctorRef,
-      {
-        patientIds: FieldValue.arrayUnion(request.patientId),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    // Create an encounter record
-    const encounterRef = db.collection("encounters").doc();
-    batch.set(encounterRef, {
-      patientId: request.patientId,
+    // Send a consent invite to the patient (source: "call") so they can
+    // explicitly accept or decline the doctor's access to their health records.
+    // Only create the invite if no accepted relationship already exists —
+    // we don't want to downgrade an existing accepted connection back to pending.
+    const existing = await doctorPatientRepository.get(
       doctorId,
+      request.patientId,
+    );
+    if (existing?.status !== "accepted") {
+      const patientProfileSnap = await db
+        .collection("profiles")
+        .doc(request.patientId)
+        .get();
+      const patientName = patientProfileSnap.exists
+        ? (patientProfileSnap.data() as { name?: string }).name
+        : undefined;
+
+      await doctorPatientRepository.invite({
+        doctorId,
+        patientId: request.patientId,
+        source: "call",
+        patientName,
+      });
+      // Notify the patient inside the active meeting room via RTDB so they can
+      // accept right from the call UI.
+      // Path: /in-call-consent/{patientId}/{requestId} — scoped to patient so
+      // RTDB security rules can allow only that patient to read/write.
+      await rtdb.ref(`in-call-consent/${request.patientId}/${requestId}`).set({
+        doctorId,
+        status: "pending",
+      });
+    }
+
+    // Create an encounter record via the encounters repository
+    await encounterRepository.create({
+      patientId: request.patientId,
+      patientName: request.patientName,
+      patientPhotoUrl: request.patientPhotoUrl,
+      doctorId,
+      doctorName: request.doctorName,
+      doctorPhotoUrl,
       requestId,
       chimeMeetingId: meetingId,
-      status: "active",
-      startedAt: FieldValue.serverTimestamp(),
     });
 
-    await batch.commit();
-
-    // Update RTDB — notify patient that call was accepted
+    // Update RTDB — notify patient that call was accepted + mark doctor as busy
     await Promise.all([
       rtdb.ref(`call-state/${request.patientId}`).update({
         status: "accepted",
@@ -97,7 +119,12 @@ export class AcceptCallUseCase {
       rtdb.ref(`call-requests/${doctorId}/${requestId}`).update({
         status: "accepted",
       }),
+      // Mark the doctor as busy for the duration of the call
+      rtdb.ref(`presence/${doctorId}`).update({ status: "busy" }),
     ]);
+
+    // Recompute queue positions for remaining pending requests
+    await recomputeQueuePositions(doctorId);
 
     // Return doctor's join info
     return {

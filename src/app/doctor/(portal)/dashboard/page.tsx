@@ -1,8 +1,7 @@
 "use client";
 import { Badge, Box, Grid, Group, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconCalendarStats, IconUsers } from "@tabler/icons-react";
-import { CheckInCard } from "./_checkin-card";
-import { DoctorCallQueue } from "./_call-queue";
+import { PresenceCard } from "./_presence-card";
 
 export default function DoctorDashboardPage() {
     return (
@@ -15,13 +14,10 @@ export default function DoctorDashboardPage() {
                 </Text>
             </Box>
 
-            {/* Real-time incoming call queue */}
-            <DoctorCallQueue />
-
             <Grid gutter="lg">
-                {/* Check-in card — primary action */}
+                {/* Presence status card */}
                 <Grid.Col span={{ base: 12, md: 6, lg: 5 }}>
-                    <CheckInCard />
+                    <PresenceCard />
                 </Grid.Col>
 
                 {/* Quick stat cards */}
@@ -79,8 +75,9 @@ export default function DoctorDashboardPage() {
                                     <Badge color="primary" variant="light" size="sm">Tip</Badge>
                                 </Group>
                                 <Text size="sm">
-                                    Check in at the start of your shift so patients can see you&apos;re
-                                    available. Check out when you finish to pause new requests.
+                                    Your availability is managed automatically — patients can see
+                                    you&apos;re available whenever you&apos;re signed in. Simply sign out
+                                    or close the browser when you&apos;re done.
                                 </Text>
                             </Stack>
                         </Paper>

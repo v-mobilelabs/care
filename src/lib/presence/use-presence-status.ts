@@ -22,9 +22,27 @@ export interface PresenceStatus {
    */
   lastSeen: number | null;
   kind: UserKind | null;
+  /**
+   * Fine-grained activity state.
+   * - "online"  — logged in and idle
+   * - "busy"    — currently on a video call
+   * Absent for users whose presence was written before this field was added.
+   */
+  status?: "online" | "busy";
+  /**
+   * True until the first RTDB snapshot arrives.
+   * Consumers can use this to avoid showing a "definitely offline" indicator
+   * while the subscription is still being established.
+   */
+  loading: boolean;
 }
 
-const INITIAL: PresenceStatus = { online: false, lastSeen: null, kind: null };
+const INITIAL: PresenceStatus = {
+  online: false,
+  lastSeen: null,
+  kind: null,
+  loading: true,
+};
 
 export function usePresenceStatus(
   uid: string | null | undefined,
@@ -37,12 +55,17 @@ export function usePresenceStatus(
       return;
     }
 
+    // Reset to loading when uid changes so we don't flash stale state.
+    setStatus(INITIAL);
+
     const db = getClientDatabase();
     const presenceRef = ref(db, `presence/${uid}`);
 
     const unsubscribe = onValue(presenceRef, (snap) => {
-      const data = snap.val() as PresenceStatus | null;
-      setStatus(data ?? INITIAL);
+      const data = snap.val() as Omit<PresenceStatus, "loading"> | null;
+      setStatus(
+        data ? { ...data, loading: false } : { ...INITIAL, loading: false },
+      );
     });
 
     return unsubscribe;

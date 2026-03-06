@@ -2,57 +2,93 @@
  * usePresence — manages the current user's online/offline state.
  *
  * Architecture:
- *   • POST /api/presence { online: true }  — Admin SDK write on mount.
- *     Reliable regardless of whether Firebase client Auth is fully established.
- *   • onDisconnect() registered via client RTDB — server-side cleanup on crash.
- *     Best-effort: only active once the RTDB client is authenticated.
- *   • POST /api/presence { online: false } — called on intentional sign-out.
+ *   • `.info/connected` listener re-fires on every RTDB reconnect, so the
+ *     presence node is always refreshed (not just on first mount).
+ *   • onDisconnect() is re-registered on each reconnect — the server marks
+ *     the user offline the instant the TCP connection drops.
+ *   • POST /api/presence { online: true } is a supplementary write via
+ *     Admin SDK that also mirrors availability into Firestore for doctors.
+ *   • On unmount / sign-out, POST /api/presence { online: false } is called.
  *
  * RTDB path: /presence/{uid}
  */
 "use client";
-import { useEffect } from "react";
-import { ref, set, onDisconnect, serverTimestamp } from "firebase/database";
+import { useEffect, useRef } from "react";
+import {
+  ref,
+  set,
+  onDisconnect,
+  onValue,
+  serverTimestamp,
+} from "firebase/database";
 import { getClientDatabase } from "@/lib/firebase/client";
 import type { UserKind } from "@/lib/auth/jwt";
 
-async function writePresence(online: boolean): Promise<void> {
-  try {
-    await fetch("/api/presence", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ online }),
-    });
-  } catch {
+/**
+ * Write presence via the server API route (Admin SDK).
+ * Returns the AbortController so callers can cancel in-flight requests.
+ */
+function writePresenceApi(online: boolean): AbortController {
+  const controller = new AbortController();
+  fetch("/api/presence", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ online }),
+    signal: controller.signal,
+  }).catch(() => {
     // Best-effort — never throw from presence writes.
-  }
+  });
+  return controller;
 }
 
 export function usePresence(uid: string | null, kind: UserKind | null) {
+  // Track the latest AbortController so Strict-Mode cleanup can cancel
+  // the in-flight "online" request before a stale "offline" request is sent.
+  const apiControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (!uid || !kind) return;
 
-    // 1. Server-side write — works before client RTDB auth is established.
-    void writePresence(true);
-
-    // 2. Best-effort: register onDisconnect via the client RTDB SDK.
-    //    This fires on the server when the TCP connection drops (crash / tab close).
-    //    It activates once the client RTDB is authenticated (after signInWithCustomToken).
     const db = getClientDatabase();
     const presenceRef = ref(db, `presence/${uid}`);
+    const connectedRef = ref(db, ".info/connected");
+
+    const onlinePayload = { online: true, lastSeen: serverTimestamp(), kind };
     const offlinePayload = { online: false, lastSeen: serverTimestamp(), kind };
-    const disconnectRef = onDisconnect(presenceRef);
-    void disconnectRef.set(offlinePayload).catch(() => {
-      // RTDB not yet authenticated — onDisconnect will not be active.
-      // The server write on sign-out (see cleanup below) still handles it.
+
+    // ── Reconnect-aware presence ────────────────────────────────────
+    // `.info/connected` fires every time the RTDB WebSocket (re)connects.
+    // On each connection we:
+    //   1. Register an onDisconnect handler (server-side cleanup).
+    //   2. Write online state via the client SDK (instant).
+    //   3. Mirror to Firestore via the API route (supplementary).
+    const unsubConnected = onValue(connectedRef, (snap) => {
+      if (snap.val() !== true) return;
+
+      // Register onDisconnect FIRST — if the connection drops between
+      // here and the set() below, the server still cleans up.
+      onDisconnect(presenceRef)
+        .set(offlinePayload)
+        .then(() => set(presenceRef, onlinePayload))
+        .catch(() => {
+          // Client RTDB not yet authenticated — fall through to API write.
+        });
+
+      // Supplementary: API route mirrors to Firestore for doctor availability.
+      apiControllerRef.current?.abort();
+      apiControllerRef.current = writePresenceApi(true);
     });
 
     return () => {
-      // 3. Intentional sign-out / unmount — cancel server handler and mark offline.
-      void disconnectRef.cancel().catch(() => {
-        /* ignore */
-      });
-      void writePresence(false);
+      unsubConnected();
+
+      // Cancel any in-flight "online" API request so it cannot arrive
+      // after the "offline" request below (prevents Strict-Mode race).
+      apiControllerRef.current?.abort();
+
+      // Mark offline via API (Admin SDK) — reliable even if the RTDB
+      // client is no longer connected.
+      writePresenceApi(false);
     };
   }, [uid, kind]);
 }

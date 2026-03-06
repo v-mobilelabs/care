@@ -25,6 +25,7 @@ import {
     IconX,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
@@ -70,20 +71,23 @@ function IncomingCallCard({
     const router = useRouter();
     const accept = useAcceptCall();
     const reject = useRejectCall();
+    const [joining, setJoining] = useState(false);
+
+    // Optimistically hide the card the moment the doctor confirms rejection
+    // so the UI feels instant — RTDB propagation catches up in the background.
+    if (reject.isPending || reject.isSuccess) return null;
 
     const handleAccept = () => {
+        // Optimistic — show "Joining" instantly
+        setJoining(true);
         accept.mutate(
             { requestId: call.requestId },
             {
-                onSuccess: (joinInfo) => {
-                    // Navigate to the video room with join info stored in sessionStorage
-                    sessionStorage.setItem(
-                        `meet-join-${call.requestId}`,
-                        JSON.stringify(joinInfo),
-                    );
+                onSuccess: () => {
                     router.push(`/meet/${call.requestId}`);
                 },
                 onError: (err) => {
+                    setJoining(false);
                     notifications.show({
                         title: "Could not accept",
                         message: err.message,
@@ -109,6 +113,7 @@ function IncomingCallCard({
             ),
             labels: { confirm: "Decline", cancel: "Cancel" },
             confirmProps: { color: "red" },
+            closeOnConfirm: true,
             onConfirm: () => {
                 reject.mutate(
                     { requestId: call.requestId },
@@ -119,6 +124,14 @@ function IncomingCallCard({
                                 message: `${call.patientName}'s call was declined.`,
                                 color: "gray",
                                 icon: <IconCheck size={18} />,
+                            });
+                        },
+                        onError: () => {
+                            notifications.show({
+                                title: "Could not decline",
+                                message: "Failed to decline the call. Please try again.",
+                                color: "red",
+                                icon: <IconX size={18} />,
                             });
                         },
                     },
@@ -167,35 +180,44 @@ function IncomingCallCard({
                                 Waiting {waitLabel}
                             </Badge>
                         </Group>
-                        <Text size="xs" c="dimmed">
-                            Requesting instant video consultation
-                        </Text>
                     </Stack>
                 </Group>
 
                 <Group gap="xs" wrap="nowrap">
-                    <Tooltip label="Reject" position="top">
-                        <ActionIcon
-                            size="lg"
-                            radius="xl"
-                            color="red"
-                            variant="light"
-                            loading={reject.isPending}
-                            onClick={handleReject}
-                        >
-                            <IconPhoneOff size={18} />
-                        </ActionIcon>
-                    </Tooltip>
-                    <Button
-                        leftSection={<IconVideo size={16} />}
-                        color={colors.success}
-                        variant="filled"
-                        size="sm"
-                        loading={accept.isPending}
-                        onClick={handleAccept}
-                    >
-                        Accept
-                    </Button>
+                    {/* When the call has been accepted (RTDB updated) show a
+                        joining spinner while the router navigates to /meet. */}
+                    {joining || call.status === "accepted" || accept.isSuccess ? (
+                        <Group gap="xs" wrap="nowrap">
+                            <Loader size="sm" color={colors.success} />
+                            <Text size="sm" c={`${colors.success}.6`} fw={500}>
+                                Joining…
+                            </Text>
+                        </Group>
+                    ) : (
+                        <>
+                            <Tooltip label="Reject" position="top">
+                                <ActionIcon
+                                    size="lg"
+                                    radius="xl"
+                                    color="red"
+                                    variant="light"
+                                    loading={reject.isPending}
+                                    onClick={handleReject}
+                                >
+                                    <IconPhoneOff size={18} />
+                                </ActionIcon>
+                            </Tooltip>
+                            <Button
+                                leftSection={<IconVideo size={16} />}
+                                color={colors.success}
+                                variant="filled"
+                                size="sm"
+                                onClick={handleAccept}
+                            >
+                                Accept
+                            </Button>
+                        </>
+                    )}
                 </Group>
             </Group>
         </Paper>

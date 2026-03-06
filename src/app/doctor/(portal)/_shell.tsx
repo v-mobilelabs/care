@@ -5,12 +5,12 @@ import {
     IconCalendarStats,
     IconPhone,
     IconStethoscope,
+    IconUsers,
 } from "@tabler/icons-react";
 import { PortalLayout } from "@/ui/layouts/portal";
 import { useQuery } from "@tanstack/react-query";
 import type { ProfileDto } from "@/data/profile";
-import { PresenceDot } from "@/lib/presence/presence-dot";
-import { useAuth } from "@/ui/providers/auth-provider";
+import { IncomingCallNotifications } from "./_incoming-call-toast";
 
 const menus = [
     {
@@ -27,6 +27,16 @@ const menus = [
         label: "Calls",
         icon: <IconPhone size={18} />,
         href: "/doctor/calls",
+    },
+    {
+        label: "Encounters",
+        icon: <IconStethoscope size={18} />,
+        href: "/doctor/encounters",
+    },
+    {
+        label: "Patients",
+        icon: <IconUsers size={18} />,
+        href: "/doctor/patients",
     },
     {
         label: "Profile",
@@ -56,8 +66,11 @@ export function DoctorPortalShell({
     });
 
     return (
-        <PortalLayout menus={menus} application={application} profileHref="/doctor/profile" avatarSrc={myProfile?.photoUrl ?? null} avatarName={myProfile?.name ?? null}>
-            {children}
-        </PortalLayout>
+        <>
+            <PortalLayout menus={menus} application={application} profileHref="/doctor/profile" avatarSrc={myProfile?.photoUrl ?? null} avatarName={myProfile?.name ?? null}>
+                {children}
+            </PortalLayout>
+            <IncomingCallNotifications />
+        </>
     );
 }

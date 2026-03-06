@@ -17,6 +17,7 @@ export interface IncomingCallEntry {
   requestId: string;
   patientId: string;
   patientName: string;
+  patientPhotoUrl?: string | null;
   status: "pending" | "accepted";
   createdAt: number;
 }
@@ -63,7 +64,12 @@ export function useDoctorCallQueue(
               return;
             }
             const entries = Object.values(data)
-              .filter((e) => e.status === "pending")
+              // Keep "accepted" entries too — the accept API updates the RTDB
+              // entry to "accepted" before returning the HTTP response. The
+              // WebSocket can propagate this change before the HTTP response
+              // arrives, which would otherwise unmount IncomingCallCard and
+              // destroy the TanStack mutation observer before onSuccess fires.
+              .filter((e) => e.status === "pending" || e.status === "accepted")
               .sort((a, b) => a.createdAt - b.createdAt);
             setQueue(entries);
           },

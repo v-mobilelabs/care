@@ -3,7 +3,6 @@ import {
   toDoctorProfileDto,
   type GetDoctorProfileInput,
   type RegisterDoctorInput,
-  type UpdateAvailabilityInput,
   type DoctorProfileDto,
 } from "../models/doctor-profile.model";
 
@@ -29,16 +28,6 @@ export class DoctorProfileService {
       .get(input.uid)
       .catch(() => null);
     if (!doctorDoc) return null;
-    return toDoctorProfileDto(doctorDoc);
-  }
-
-  async updateAvailability(
-    input: UpdateAvailabilityInput,
-  ): Promise<DoctorProfileDto> {
-    const doctorDoc = await doctorProfileRepository.updateAvailability(
-      input.uid,
-      input.availability,
-    );
     return toDoctorProfileDto(doctorDoc);
   }
 }

@@ -17,14 +17,15 @@ import { PortalFooter } from "../footers/portal.footer";
 import { useDisclosure } from "@mantine/hooks";
 import { Logo } from "../brand/logo";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { BreadcrumbsBar } from "../breadcrumbs";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { getInitials } from "@/lib/get-initials";
 import { IconLogout, IconUser } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
-import { PresenceDot } from "@/lib/presence/presence-dot";
+import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 
 const ColorSchemeToggle = dynamic(
   () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
@@ -48,6 +49,7 @@ export function PortalLayout({
   profileHref,
   avatarSrc,
   avatarName,
+  headerExtra,
 }: Readonly<{
   children: React.ReactNode;
   menus: MenuItem[];
@@ -60,9 +62,16 @@ export function PortalLayout({
   profileHref?: string;
   avatarSrc?: string | null;
   avatarName?: string | null;
+  /** Extra element rendered in the header between logo and user controls. */
+  headerExtra?: ReactNode;
 }>) {
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close }] = useDisclosure();
   const pathName = usePathname();
+
+  // Close the mobile sidebar whenever the route changes (client-side nav).
+  useEffect(() => {
+    close();
+  }, [pathName, close]);
   const router = useRouter();
   const { user } = useAuth();
   const initials = getInitials(
@@ -70,6 +79,16 @@ export function PortalLayout({
     user?.email ?? null,
   );
   const photoSrc = avatarSrc ?? user?.photoURL ?? undefined;
+  const { online, loading: presenceLoading } = usePresenceStatus(user?.uid);
+
+  // Derive the outline color:
+  //  • loading / no user → neutral (no red flash while RTDB is connecting)
+  //  • online → teal
+  //  • offline → red
+  const outlineColor = (() => {
+    if (presenceLoading || !user) return "var(--mantine-color-gray-5)";
+    return online ? "var(--mantine-color-teal-5)" : "var(--mantine-color-red-5)";
+  })();
 
   function doSignOut() {
     modals.closeAll();
@@ -110,34 +129,23 @@ export function PortalLayout({
           <Logo />
         </Group>
         <Group gap="xs">
+          {headerExtra}
           <ColorSchemeToggle />
-          {/* ── Presence indicator — standalone header item ── */}
-          <Box
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 10px",
-              borderRadius: "var(--mantine-radius-xl)",
-              border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))",
-              background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
-              cursor: "default",
-              userSelect: "none",
-            }}
-          >
-            <PresenceDot uid={user?.uid} size="sm" withLabel />
-          </Box>
           <Menu shadow="md" width={200} position="bottom-end" withArrow>
             <Menu.Target>
               <Avatar
                 src={photoSrc ?? null}
-                size={34}
+                size="sm"
                 radius="xl"
                 color="primary"
                 imageProps={{
                   onError: (e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; },
                 }}
-                style={{ cursor: "pointer" }}
+                style={{
+                  cursor: "pointer",
+                  outline: `2px solid ${outlineColor}`,
+                  outlineOffset: "2px",
+                }}
               >
                 {initials}
               </Avatar>
@@ -151,7 +159,7 @@ export function PortalLayout({
               {profileHref && (
                 <Menu.Item
                   leftSection={<IconUser size={14} />}
-                  component="a"
+                  component={Link}
                   href={profileHref}
                 >
                   My profile
@@ -220,7 +228,7 @@ export function PortalLayout({
                           key={child.label}
                           label={child.label}
                           leftSection={child.icon}
-                          component="a"
+                          component={Link}
                           href={child.href}
                           active={isChildActive}
                           variant="filled"
@@ -254,7 +262,7 @@ export function PortalLayout({
                   key={menu.label}
                   label={menu.label}
                   leftSection={menu.icon}
-                  component="a"
+                  component={Link}
                   href={menu.href}
                   active={isActive}
                   variant="filled"
@@ -272,7 +280,7 @@ export function PortalLayout({
             "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
         }}>
           <Box pb={{ base: "sm", md: "md" }}>
-            <BreadcrumbsBar application={application} menus={menus} />
+            <BreadcrumbsBar menus={menus} />
           </Box>
           {children}
         </AppShell.Main>

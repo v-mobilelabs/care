@@ -1,26 +1,33 @@
+import { Suspense } from "react";
 import { Hydrate } from "@/ui/hydrate";
 import { getQueryClient } from "@/lib/query/client";
+import { ListOnlineDoctorsUseCase } from "@/data/meet/use-cases/list-online-doctors.use-case";
 import { ConnectContent } from "./_content";
+import ConnectLoading from "./loading";
 
 export const metadata = { title: "Connect to a Doctor" };
 
-export default async function ConnectPage() {
+// ── Async boundary — streams doctor data without blocking the shell ────────
+
+async function ConnectPrefetch() {
     const queryClient = getQueryClient();
 
-    // Prefetch available doctors on the server
     await queryClient.prefetchQuery({
         queryKey: ["meet", "doctors"],
-        queryFn: async () => {
-            const { ListOnlineDoctorsUseCase } = await import(
-                "@/data/meet/use-cases/list-online-doctors.use-case"
-            );
-            return new ListOnlineDoctorsUseCase().execute();
-        },
+        queryFn: () => new ListOnlineDoctorsUseCase().execute(),
     });
 
     return (
         <Hydrate client={queryClient}>
             <ConnectContent />
         </Hydrate>
+    );
+}
+
+export default function ConnectPage() {
+    return (
+        <Suspense fallback={<ConnectLoading />}>
+            <ConnectPrefetch />
+        </Suspense>
     );
 }

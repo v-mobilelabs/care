@@ -2,6 +2,7 @@
 import { ActionIcon, Avatar, Badge, Box, Button, Group, Menu, Text, Tooltip } from "@mantine/core";
 import {
     IconBolt,
+    IconGauge,
     IconLayoutSidebar,
     IconLogout,
     IconPlus,
@@ -13,7 +14,7 @@ import { signOut } from "@/lib/auth/sign-out";
 import { useCreditsQuery, useProfileQuery } from "@/app/chat/_query";
 import { useChatContext } from "@/app/chat/_context/chat-context";
 import { getInitials } from "@/lib/get-initials";
-import { PresenceDot } from "@/lib/presence/presence-dot";
+import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 
 interface ChatHeaderProps {
     mobileNavOpened: boolean;
@@ -33,6 +34,7 @@ export function ChatHeader({
     const { data: credits } = useCreditsQuery();
     const { data: profile } = useProfileQuery();
     const { onNewChat } = useChatContext();
+    const { online } = usePresenceStatus(user?.uid);
 
     async function handleSignOut() {
         await signOut();
@@ -83,38 +85,27 @@ export function ChatHeader({
                                     leftSection={<IconBolt size={13} />}
                                     color={color}
                                     variant="light"
-                                    size="md"
-                                    style={{ cursor: "default" }}
+                                    size="sm"
+                                    style={{ cursor: "pointer" }}
+                                    onClick={() => router.push("/chat/usage")}
                                 >
-                                    {credits.remaining}/{credits.total}
+                                    {credits.remaining}
                                 </Badge>
                             </Tooltip>
                         );
                     })()}
-                    {/* ── Presence indicator pill ── */}
-                    {/* ── Presence indicator pill ── */}
-                    <Box
-                        style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "4px 10px",
-                            borderRadius: "var(--mantine-radius-xl)",
-                            border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))",
-                            background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
-                            cursor: "default",
-                            userSelect: "none",
-                        }}
-                    >
-                        <PresenceDot uid={user?.uid} size="sm" withLabel />
-                    </Box>
                     <Menu position="bottom-end" withArrow offset={8}>
                         <Menu.Target>
                             <Avatar
                                 src={photoURL ?? undefined}
-                                size={36}
+                                size={28}
                                 radius="xl"
                                 color="primary"
-                                style={{ cursor: "pointer" }}
+                                style={{
+                                    cursor: "pointer",
+                                    outline: `2px solid ${online ? "var(--mantine-color-teal-5)" : "var(--mantine-color-red-5)"}`,
+                                    outlineOffset: "2px",
+                                }}
                                 aria-label="User menu"
                             >
                                 {!photoURL && initials}
@@ -127,6 +118,8 @@ export function ChatHeader({
                             </Menu.Label>
                             <Menu.Divider />
                             <Menu.Item leftSection={<IconUser size={16} />} onClick={() => router.push("/chat/profile")}>Profile</Menu.Item>
+                            <Menu.Item leftSection={<IconGauge size={16} />} onClick={() => router.push("/chat/usage")}>Usage</Menu.Item>
+                            <Menu.Divider />
                             <Menu.Item leftSection={<IconLogout size={16} />} color="red" onClick={() => void handleSignOut()}>
                                 Sign out
                             </Menu.Item>

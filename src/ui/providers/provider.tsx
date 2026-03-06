@@ -7,6 +7,7 @@ import "@mantine/dates/styles.css";
 import { Notifications } from "@mantine/notifications";
 import { ModalsProvider } from "@mantine/modals";
 import { AnalyticsProvider } from "./analytics-provider";
+import { QueryProvider } from "./query-provider";
 
 export function Provider({
   children,
@@ -21,8 +22,10 @@ export function Provider({
         withCssVariables
         withGlobalClasses
       >
-        <Notifications position="bottom-center" />
-        <ModalsProvider>{children}</ModalsProvider>
+        <QueryProvider>
+          <Notifications position="bottom-center" />
+          <ModalsProvider>{children}</ModalsProvider>
+        </QueryProvider>
       </MantineProvider>
     </AnalyticsProvider>
   );

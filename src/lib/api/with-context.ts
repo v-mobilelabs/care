@@ -212,6 +212,19 @@ function makeRouteHandler<
         return errorResponse(400, ERRORS.BAD_REQUEST.code, issues.join("; "));
       }
 
+      // Firestore missing index (gRPC FAILED_PRECONDITION = code 9)
+      if (isFirestoreMissingIndexError(err)) {
+        console.error(
+          "[WithContext] Missing Firestore index:",
+          (err as Error).message,
+        );
+        return errorResponse(
+          503,
+          "INDEX_MISSING",
+          "A required database index is missing. Please contact support.",
+        );
+      }
+
       // Log in development; suppress full stack in production.
       if (process.env.NODE_ENV !== "production") {
         console.error("[WithContext] Unhandled error:", err);
@@ -246,5 +259,21 @@ function isZodError(
     err !== null &&
     "issues" in err &&
     Array.isArray((err as { issues: unknown }).issues)
+  );
+}
+
+/**
+ * Detect a Firestore query that failed because a composite index is missing.
+ * The Admin SDK wraps gRPC errors with a numeric `code` property;
+ * FAILED_PRECONDITION = 9.  The message always contains the Firebase Console
+ * URL to create the index.
+ */
+function isFirestoreMissingIndexError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: unknown; message?: unknown };
+  return (
+    e.code === 9 &&
+    typeof e.message === "string" &&
+    e.message.toLowerCase().includes("index")
   );
 }

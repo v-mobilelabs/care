@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
       kind,
     });
 
-    // For doctors, mirror presence into Firestore availability so check-in /
-    // check-out timestamps stay in sync automatically.
+    // For doctors, mirror presence into Firestore availability so the
+    // "Connect to a Doctor" page can query available doctors from Firestore.
     if (kind === "doctor") {
       await doctorProfileRepository
         .updateAvailability(decoded.uid, online ? "available" : "unavailable")

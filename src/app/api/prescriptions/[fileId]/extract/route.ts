@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { ExtractPrescriptionUseCase } from "@/data/prescriptions";
-import { PRESCRIPTIONS_SESSION_ID } from "../../route";
+import { PRESCRIPTIONS_SESSION_ID } from "../../constants";
 
 // Re-export types so existing client code that imports from this path keeps working
 export type { ExtractedMedication, ExtractResult } from "@/data/prescriptions";

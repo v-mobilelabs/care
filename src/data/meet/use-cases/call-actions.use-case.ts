@@ -1,8 +1,9 @@
 import { meetRepository } from "../repositories/meet.repository";
-import { rtdb, db } from "@/lib/firebase/admin";
+import { rtdb } from "@/lib/firebase/admin";
 import { deleteChimeMeeting } from "@/lib/meet/chime";
-import { FieldValue } from "firebase-admin/firestore";
 import { ApiError } from "@/lib/api/with-context";
+import { encounterRepository } from "@/data/encounters";
+import { recomputeQueuePositions } from "./recompute-queue";
 
 export class RejectCallUseCase {
   async execute(params: {
@@ -23,11 +24,15 @@ export class RejectCallUseCase {
     await meetRepository.updateStatus(requestId, "rejected");
 
     await Promise.all([
-      rtdb
-        .ref(`call-state/${request.patientId}`)
-        .update({ status: "rejected" }),
+      // Remove the node entirely so the patient's call state returns to idle
+      // cleanly. A stale "rejected" node would cause the notification to
+      // re-fire on every page revisit.
+      rtdb.ref(`call-state/${request.patientId}`).remove(),
       rtdb.ref(`call-requests/${doctorId}/${requestId}`).remove(),
     ]);
+
+    // Recompute queue positions for remaining requests
+    await recomputeQueuePositions(doctorId);
   }
 }
 
@@ -41,6 +46,13 @@ export class EndCallUseCase {
     // Allow both doctor and patient to end the call
     if (request.doctorId !== userId && request.patientId !== userId) {
       throw ApiError.forbidden("You are not part of this call.");
+    }
+
+    // Already ended / cancelled / rejected — nothing to do.
+    // This makes the endpoint idempotent so double-clicks or late
+    // requests from both parties don't 400.
+    if (["ended", "cancelled", "rejected", "missed"].includes(request.status)) {
+      return;
     }
 
     if (request.status !== "accepted") {
@@ -60,24 +72,18 @@ export class EndCallUseCase {
 
     await meetRepository.updateStatus(requestId, "ended");
 
-    // Update encounter record
-    const encounterSnap = await db
-      .collection("encounters")
-      .where("requestId", "==", requestId)
-      .limit(1)
-      .get();
-
-    if (!encounterSnap.empty) {
-      await encounterSnap.docs[0]!.ref.update({
-        status: "completed",
-        endedAt: FieldValue.serverTimestamp(),
-      });
-    }
+    // Complete the encounter record via the encounters repository
+    await encounterRepository.completeByRequestId(requestId);
 
     await Promise.all([
       rtdb.ref(`call-state/${request.patientId}`).update({ status: "ended" }),
       rtdb.ref(`call-requests/${request.doctorId}/${requestId}`).remove(),
+      // Restore the doctor's presence status to online once the call is over
+      rtdb.ref(`presence/${request.doctorId}`).update({ status: "online" }),
     ]);
+
+    // Recompute queue positions for remaining requests
+    await recomputeQueuePositions(request.doctorId);
   }
 }
 
@@ -111,6 +117,17 @@ export class CancelCallUseCase {
     await Promise.all([
       rtdb.ref(`call-state/${patientId}`).remove(),
       rtdb.ref(`call-requests/${request.doctorId}/${requestId}`).remove(),
+      // If the call was already accepted the doctor is marked busy — restore.
+      ...(request.status === "accepted"
+        ? [
+            rtdb
+              .ref(`presence/${request.doctorId}`)
+              .update({ status: "online" }),
+          ]
+        : []),
     ]);
+
+    // Recompute queue positions for remaining requests
+    await recomputeQueuePositions(request.doctorId);
   }
 }

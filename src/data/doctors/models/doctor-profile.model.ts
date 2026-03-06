@@ -14,8 +14,6 @@ export interface DoctorProfileDocument {
   licenseNumber: string;
   bio?: string;
   availability: AvailabilityStatus;
-  checkedInAt?: Timestamp;
-  checkedOutAt?: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -29,8 +27,6 @@ export interface DoctorProfileDto {
   licenseNumber: string;
   bio?: string;
   availability: AvailabilityStatus;
-  checkedInAt?: string; // ISO-8601
-  checkedOutAt?: string; // ISO-8601
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
@@ -46,8 +42,6 @@ export function toDoctorProfileDto(
     licenseNumber: doc.licenseNumber,
     bio: doc.bio,
     availability: doc.availability,
-    checkedInAt: doc.checkedInAt?.toDate().toISOString(),
-    checkedOutAt: doc.checkedOutAt?.toDate().toISOString(),
     createdAt: doc.createdAt.toDate().toISOString(),
     updatedAt: doc.updatedAt.toDate().toISOString(),
   };
@@ -74,13 +68,6 @@ export const UpdateDoctorSchema = z.object({
 });
 
 export type UpdateDoctorInput = z.infer<typeof UpdateDoctorSchema>;
-
-export const UpdateAvailabilitySchema = z.object({
-  uid: z.string().min(1, { message: "uid is required" }),
-  availability: z.enum(["available", "unavailable"]),
-});
-
-export type UpdateAvailabilityInput = z.infer<typeof UpdateAvailabilitySchema>;
 
 export const GetDoctorProfileSchema = z.object({
   uid: z.string().min(1, { message: "uid is required" }),

@@ -24,10 +24,8 @@ import {
     IconChevronDown,
     IconClipboardHeart,
     IconClipboardList,
-    IconGauge,
     IconHeartbeat,
     IconFolder,
-    IconHistory,
     IconMessage,
     IconNotes,
     IconQuestionMark,
@@ -247,9 +245,12 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                     borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), rgba(255,255,255,0.06))",
                 }}
             >
-                <Box px={2} pt="sm" pb={4} style={{ flexShrink: 0 }}>
+                <Group px={2} pt="sm" pb={4} justify="space-between" align="center" style={{ flexShrink: 0 }}>
                     <Text style={sectionLabelStyle}>History</Text>
-                </Box>
+                    <UnstyledButton onClick={() => nav("/chat/history")} style={{ lineHeight: 1 }}>
+                        <Text size="xs" c="dimmed" style={{ textDecoration: "underline", textUnderlineOffset: 2 }}>View all</Text>
+                    </UnstyledButton>
+                </Group>
                 <ScrollArea style={{ flex: 1 }}>
                     {(() => {
                         if (sessionsLoading) {
@@ -396,12 +397,6 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                 </Box>
                 <SimpleGrid cols={3} spacing={4}>
                     <NavGridItem
-                        icon={<IconHistory size={18} />}
-                        label="History"
-                        active={pathname === "/chat/history"}
-                        onClick={() => nav("/chat/history")}
-                    />
-                    <NavGridItem
                         icon={<IconFolder size={18} />}
                         label="My Files"
                         active={pathname === "/chat/files"}
@@ -418,18 +413,6 @@ export function Sidebar({ sessionId, onNewChat, onSelectSession, onCloseMobile }
                         label="Family"
                         active={pathname.startsWith("/chat/family-members")}
                         onClick={() => nav("/chat/family-members")}
-                    />
-                    <NavGridItem
-                        icon={<IconUser size={18} />}
-                        label="Profile"
-                        active={pathname === "/chat/profile"}
-                        onClick={() => nav("/chat/profile")}
-                    />
-                    <NavGridItem
-                        icon={<IconGauge size={18} />}
-                        label="Usage"
-                        active={pathname === "/chat/usage"}
-                        onClick={() => nav("/chat/usage")}
                     />
                     <NavGridItem
                         icon={<IconQuestionMark size={18} />}

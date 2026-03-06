@@ -22,7 +22,7 @@ export const POST = WithContext(async ({ user, req }) => {
     );
   }
 
-  // Verify doctor is available
+  // Verify doctor exists and is online (available in Firestore)
   const doctorProfile = await new GetDoctorProfileUseCase().execute({
     uid: body.doctorId,
   });
@@ -45,8 +45,11 @@ export const POST = WithContext(async ({ user, req }) => {
     db.collection("profiles").doc(user.uid).get(),
     db.collection("profiles").doc(body.doctorId).get(),
   ]);
-  const patientName =
-    (profileSnap.data() as { name?: string } | undefined)?.name ?? "Patient";
+  const profileData = profileSnap.data() as
+    | { name?: string; photoUrl?: string }
+    | undefined;
+  const patientName = profileData?.name ?? "Patient";
+  const patientPhotoUrl = profileData?.photoUrl ?? null;
   const doctorName =
     (doctorProfileSnap.data() as { name?: string } | undefined)?.name ??
     "Doctor";
@@ -54,6 +57,7 @@ export const POST = WithContext(async ({ user, req }) => {
   const request = await new CreateCallRequestUseCase().execute({
     patientId: user.uid,
     patientName,
+    patientPhotoUrl,
     doctorId: body.doctorId,
     doctorName,
   });

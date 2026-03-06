@@ -23,9 +23,10 @@ import {
     IconFile,
     IconGauge,
     IconUsers,
+    IconVideo,
 } from "@tabler/icons-react";
 
-import { useCreditsQuery, useDependentsQuery, useStorageMetricsQuery } from "@/app/chat/_query";
+import { useCreditsQuery, useDependentsQuery, useStorageMetricsQuery, useCallMetricsQuery } from "@/app/chat/_query";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -444,6 +445,89 @@ function ProfilesCard() {
     );
 }
 
+// ── Calls card ────────────────────────────────────────────────────────────────
+
+const MONTHLY_CALL_LIMIT = 1000;
+
+function CallsCard() {
+    const { data: metrics, isLoading, isError } = useCallMetricsQuery();
+    const [hovered, setHovered] = useState(false);
+
+    if (isLoading) return <CardSkeleton />;
+    if (isError || !metrics) return <CardError title="Doctor Calls" subtitle="Video calls this month" />;
+
+    const used = Math.min(metrics.used, MONTHLY_CALL_LIMIT);
+    const remaining = Math.max(MONTHLY_CALL_LIMIT - used, 0);
+    const usedPct = MONTHLY_CALL_LIMIT > 0 ? Math.min((used / MONTHLY_CALL_LIMIT) * 100, 100) : 0;
+    const barColor = usageBarColor(usedPct);
+
+    return (
+        <CardShell accentColor="warning" hovered={hovered} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+            {/* Header */}
+            <Group justify="space-between" align="center" wrap="nowrap" mb={12}>
+                <Group gap="xs">
+                    <ThemeIcon size={30} radius="md" color="warning" variant="light">
+                        <IconVideo size={16} />
+                    </ThemeIcon>
+                    <Box>
+                        <Text fw={600} size="sm" lh={1.2}>Doctor Calls</Text>
+                        <Text size="xs" c="dimmed">Video calls · resets monthly</Text>
+                    </Box>
+                </Group>
+                <Badge size="sm" color={remaining === 0 ? "red" : "warning"} variant="light" radius="xl">
+                    {remaining} left
+                </Badge>
+            </Group>
+
+            {/* Ring */}
+            <Box
+                style={{
+                    borderRadius: 12,
+                    background: `light-dark(var(--mantine-color-${barColor}-0), rgba(251,189,35,0.07))`,
+                    display: "flex",
+                    justifyContent: "center",
+                    padding: "10px 0",
+                    marginBottom: 12,
+                }}
+            >
+                <RingProgress
+                    size={100}
+                    thickness={10}
+                    roundCaps
+                    sections={[{ value: usedPct, color: barColor }]}
+                    label={
+                        <Stack gap={2} align="center">
+                            <Text fw={800} size="lg" lh={1} c={barColor}>{Math.round(100 - usedPct)}%</Text>
+                            <Text style={{ fontSize: 10 }} c="dimmed" lh={1}>remaining</Text>
+                        </Stack>
+                    }
+                />
+            </Box>
+
+            {/* Stat row */}
+            <StatRow leftLabel="Used this month" leftValue={used} rightLabel="Monthly limit" rightValue={MONTHLY_CALL_LIMIT.toLocaleString()} />
+
+            {/* Progress */}
+            <Stack gap={4} mt={10}>
+                <Progress value={usedPct} color={barColor} size="sm" radius="xl" />
+                <Group justify="space-between">
+                    <Text style={{ fontSize: 10 }} c="dimmed">0 calls</Text>
+                    <Text style={{ fontSize: 10 }} c="dimmed">{usedPct.toFixed(0)}% consumed</Text>
+                </Group>
+            </Stack>
+
+            {/* Footer */}
+            <Group gap={5} mt="auto" pt={10}>
+                <IconCalendarClock size={12} color="var(--mantine-color-dimmed)" />
+                <Text size="xs" c="dimmed">
+                    Resets on{" "}
+                    <Text span fw={600} c="inherit">{formatResetDate(metrics.resetsAt)}</Text>
+                </Text>
+            </Group>
+        </CardShell>
+    );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function UsageContent() {
@@ -485,6 +569,7 @@ export function UsageContent() {
                             <CreditsCard />
                             <StorageCard />
                             <ProfilesCard />
+                            <CallsCard />
                         </SimpleGrid>
                     </Box>
                 </ScrollArea>

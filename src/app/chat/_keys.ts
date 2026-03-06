@@ -16,6 +16,7 @@ export const chatKeys = {
   medications: () => ["chat", "medications"] as const,
   dietPlans: () => ["chat", "diet-plans"] as const,
   doctors: () => ["chat", "doctors"] as const,
+  doctorInvites: () => ["doctor-invites"] as const,
   assessments: () => ["chat", "assessments"] as const,
   drugs: (q: string) => ["chat", "drugs", q] as const,
   assessment: (assessmentId: string) =>
@@ -25,4 +26,5 @@ export const chatKeys = {
   insurance: () => ["chat", "insurance"] as const,
   bloodTests: () => ["chat", "blood-tests"] as const,
   patientSummaries: () => ["chat", "patient-summaries"] as const,
+  callMetrics: () => ["chat", "call-metrics"] as const,
 } as const;

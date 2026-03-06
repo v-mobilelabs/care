@@ -9,3 +9,4 @@ export {
 } from "./use-cases/call-actions.use-case";
 export { GetMeetingJoinInfoUseCase } from "./use-cases/get-meeting-join-info.use-case";
 export { ListCallHistoryUseCase } from "./use-cases/list-call-history.use-case";
+export { GetCallMetricsUseCase } from "./use-cases/get-call-metrics.use-case";

@@ -8,6 +8,9 @@ import {
   CreateAttendeeCommand,
   DeleteMeetingCommand,
   GetMeetingCommand,
+  ListAttendeesCommand,
+  StartMeetingTranscriptionCommand,
+  StopMeetingTranscriptionCommand,
 } from "@aws-sdk/client-chime-sdk-meetings";
 
 function getChimeClient(): ChimeSDKMeetingsClient {
@@ -77,4 +80,58 @@ export async function getChimeMeeting(meetingId: string) {
     new GetMeetingCommand({ MeetingId: meetingId }),
   );
   return response.Meeting ?? null;
+}
+
+// ── List attendees in a meeting ────────────────────────────────────────────────
+
+/**
+ * Returns attendee count for a Chime meeting.
+ * Returns null if the meeting no longer exists (already ended / auto-deleted).
+ */
+export async function getChimeMeetingAttendeeCount(
+  meetingId: string,
+): Promise<number | null> {
+  const client = getChimeClient();
+
+  try {
+    const response = await client.send(
+      new ListAttendeesCommand({ MeetingId: meetingId }),
+    );
+    return response.Attendees?.length ?? 0;
+  } catch (err: unknown) {
+    // Meeting not found → it was deleted or Chime auto-removed it
+    const name = (err as { name?: string })?.name;
+    if (name === "NotFoundException" || name === "BadRequestException") {
+      return null;
+    }
+    throw err;
+  }
+}
+
+// ── Real-time transcription ───────────────────────────────────────────────────
+
+export async function startMeetingTranscription(
+  meetingId: string,
+): Promise<void> {
+  const client = getChimeClient();
+  await client.send(
+    new StartMeetingTranscriptionCommand({
+      MeetingId: meetingId,
+      TranscriptionConfiguration: {
+        EngineTranscribeSettings: {
+          LanguageCode: "en-US",
+          VocabularyFilterMethod: "mask",
+        },
+      },
+    }),
+  );
+}
+
+export async function stopMeetingTranscription(
+  meetingId: string,
+): Promise<void> {
+  const client = getChimeClient();
+  await client.send(
+    new StopMeetingTranscriptionCommand({ MeetingId: meetingId }),
+  );
 }

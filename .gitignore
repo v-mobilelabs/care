@@ -46,3 +46,10 @@ firebase-service-account*.json
 firebase-adminsdk*.json
 firebase-debug.log
 .firebase/
+
+# PWA — generated service worker files
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
+public/workbox-*.js
+public/workbox-*.js.map

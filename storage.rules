@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Call recordings — any authenticated user involved in the call may
+    // upload or download recordings under their request folder.
+    match /call-recordings/{requestId}/{filename} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Default: deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

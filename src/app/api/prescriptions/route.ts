@@ -6,9 +6,7 @@ import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from "@/data/sessions";
-
-/** Virtual session ID used to namespace prescription files in Firestore/GCS. */
-export const PRESCRIPTIONS_SESSION_ID = "prescriptions";
+import { PRESCRIPTIONS_SESSION_ID } from "./constants";
 
 // GET /api/prescriptions — list all prescription files for the current user
 export const GET = WithContext(async ({ user, profileId }) => {

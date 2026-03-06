@@ -93,6 +93,15 @@ export interface StorageMetricsRecord {
   limitBytes: number;
 }
 
+export interface CallMetricsRecord {
+  /** Number of calls initiated this calendar month. */
+  used: number;
+  /** Maximum calls allowed per month. */
+  limit: number;
+  /** ISO-8601 timestamp when the monthly counter resets (first of next month UTC). */
+  resetsAt: string;
+}
+
 export type MedicationStatus =
   | "active"
   | "completed"
@@ -540,6 +549,15 @@ export function useStorageMetricsQuery() {
     queryKey: chatKeys.storageMetrics(),
     queryFn: () => apiFetch<StorageMetricsRecord>("/api/files/storage"),
     staleTime: 30_000,
+  });
+}
+
+/** Fetch authenticated patient's monthly call usage (used/limit/resetsAt). */
+export function useCallMetricsQuery() {
+  return useQuery({
+    queryKey: chatKeys.callMetrics(),
+    queryFn: () => apiFetch<CallMetricsRecord>("/api/meet/metrics"),
+    staleTime: 60_000,
   });
 }
 

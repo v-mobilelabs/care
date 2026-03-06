@@ -1,4 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firebase/admin";
 import type {
   CallRequestDocument,
@@ -15,6 +15,7 @@ export const meetRepository = {
   async create(data: {
     patientId: string;
     patientName: string;
+    patientPhotoUrl?: string | null;
     doctorId: string;
     doctorName: string;
   }): Promise<CallRequestDto> {
@@ -26,6 +27,7 @@ export const meetRepository = {
     } = {
       patientId: data.patientId,
       patientName: data.patientName,
+      patientPhotoUrl: data.patientPhotoUrl ?? null,
       doctorId: data.doctorId,
       doctorName: data.doctorName,
       status: "pending",
@@ -51,7 +53,11 @@ export const meetRepository = {
   async updateStatus(
     requestId: string,
     status: CallRequestStatus,
-    extra?: { chimeMeetingId?: string; chimeMeetingData?: string },
+    extra?: {
+      chimeMeetingId?: string;
+      chimeMeetingData?: string;
+      doctorPhotoUrl?: string | null;
+    },
   ): Promise<void> {
     await db
       .collection(COL)
@@ -62,8 +68,33 @@ export const meetRepository = {
         ...(extra?.chimeMeetingData && {
           chimeMeetingData: extra.chimeMeetingData,
         }),
+        ...(extra?.doctorPhotoUrl != null && {
+          doctorPhotoUrl: extra.doctorPhotoUrl,
+        }),
         updatedAt: FieldValue.serverTimestamp(),
       });
+  },
+
+  // ── Save recording metadata (called after upload completes) ───────────────
+
+  async saveRecording(
+    requestId: string,
+    data: { recordingUrl: string; durationSeconds: number },
+  ): Promise<void> {
+    await db.collection(COL).doc(requestId).update({
+      recordingUrl: data.recordingUrl,
+      durationSeconds: data.durationSeconds,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  },
+
+  // ── Append transcript text ─────────────────────────────────────────────────
+
+  async saveTranscript(requestId: string, transcript: string): Promise<void> {
+    await db.collection(COL).doc(requestId).update({
+      transcript,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   },
 
   // ── List pending for doctor ───────────────────────────────────────────────
@@ -128,5 +159,36 @@ export const meetRepository = {
     return snap.docs.map((d) =>
       toCallRequestDto(d.id, d.data() as CallRequestDocument),
     );
+  },
+
+  // ── Count calls initiated by a patient in the current calendar month ──────
+
+  async countByPatientThisMonth(patientId: string): Promise<number> {
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const snap = await db
+      .collection(COL)
+      .where("patientId", "==", patientId)
+      .where("createdAt", ">=", Timestamp.fromDate(monthStart))
+      .get();
+    return snap.size;
+  },
+
+  // ── Get active call for doctor ────────────────────────────────────────────
+
+  async getActiveForDoctor(doctorId: string): Promise<CallRequestDto | null> {
+    const snap = await db
+      .collection(COL)
+      .where("doctorId", "==", doctorId)
+      .where("status", "==", "accepted")
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snap.empty) return null;
+    const d = snap.docs[0]!;
+    return toCallRequestDto(d.id, d.data() as CallRequestDocument);
   },
 };

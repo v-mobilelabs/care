@@ -81,19 +81,7 @@ export const doctorProfileRepository = {
     availability: AvailabilityStatus,
   ): Promise<DoctorProfileDocument> {
     const now = Timestamp.now();
-    const update: Record<string, unknown> = {
-      availability,
-      updatedAt: now,
-    };
-
-    if (availability === "available") {
-      update.checkedInAt = now;
-      update.checkedOutAt = null;
-    } else {
-      update.checkedOutAt = now;
-    }
-
-    await col().doc(uid).update(update);
+    await col().doc(uid).update({ availability, updatedAt: now });
     const snap = await col().doc(uid).get();
     return snap.data() as DoctorProfileDocument;
   },
