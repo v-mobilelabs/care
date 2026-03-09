@@ -5,84 +5,54 @@
  * Features:
  *  - Adaptive bitrate (simulcast + VideoAdaptiveProbePolicy)
  *  - Voice Focus noise cancellation with graceful fallback
- *  - Real-time transcription (server-side Transcribe → client captions)
  *  - Session recording saved to Firebase Storage + call history
  *  - Proper media track release on disconnect (fixes camera light staying on)
  *
  * Dynamically imported (no SSR) to avoid `window` / Web Audio errors in Node.
  */
 import {
+    BackgroundBlurVideoFrameProcessor,
     ConsoleLogger,
     DefaultDeviceController,
     DefaultEventController,
     DefaultMeetingSession,
+    DefaultVideoTransformDevice,
     LogLevel,
     MeetingSessionConfiguration,
     MeetingSessionStatusCode,
     NoOpEventReporter,
     VideoAdaptiveProbePolicy,
     VoiceFocusDeviceTransformer,
+    type BackgroundBlurProcessor,
+    type ContentShareObserver,
     type MeetingSessionStatus,
-    type TranscriptEvent,
     type VideoTileState,
 } from "amazon-chime-sdk-js";
-import {
-    ActionIcon,
-    Alert,
-    Avatar,
-    Badge,
-    Box,
-    Button,
-    Divider,
-    Group,
-    Loader,
-    Modal,
-    Paper,
-    Progress,
-    ScrollArea,
-    Select,
-    Stack,
-    Switch,
-    Text,
-    Tooltip,
-} from "@mantine/core";
+import { Alert, Box, Button, Group, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import {
-    IconAlertCircle,
-    IconArrowDown,
-    IconArrowUp,
-    IconCheck,
-    IconClock,
-    IconHome,
-    IconMicrophone,
-    IconMicrophoneOff,
-    IconPhone,
-    IconRecordMail,
-    IconSettings,
-    IconShieldCheck,
-    IconVideo,
-    IconVideoOff,
-    IconWaveSine,
-    IconWifi,
-    IconUsers,
-    IconX,
-} from "@tabler/icons-react";
-import { ref as dbRef, onValue, set as dbSet } from "firebase/database";
+import { IconAlertCircle, IconHome, IconRecordMail, IconScreenShare, IconShieldCheck, IconWifi, IconWifiOff, IconX } from "@tabler/icons-react";
+import { ref as dbRef, onValue, set as dbSet, update as dbUpdate } from "firebase/database";
 import { getDownloadURL, getStorage, ref as storageRef, uploadBytes } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttendeeJoinInfo } from "@/data/meet";
 import { firebaseApp, getClientDatabase } from "@/lib/firebase/client";
-import { useEndCall } from "@/app/chat/connect/_query";
-import { getInitials } from "@/lib/get-initials"
-import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue"
+import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
+import { useMessages } from "@/lib/messaging/use-messages";
+import { useTyping } from "@/lib/messaging/use-typing";
+import { sendMessage as sendDmMessage, markAsRead } from "@/lib/messaging/actions";
+import { useInbox } from "@/lib/messaging/use-inbox";
+import { ChatSidebar } from "./_chat-sidebar";
+import { ConsentBanner } from "./_consent-banner";
+import { ControlBar } from "./_control-bar";
+import { FeedbackModal } from "./_feedback-modal";
+import { LocalPip } from "./_local-pip";
+import { QueueOverlay } from "./_queue-overlay";
+import { RemoteVideo } from "./_remote-video";
+import { RoomHeader } from "./_room-header";
+import type { ConnectionHealth, NetworkStats, Participant } from "./_room-types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Participant {
-    name: string;
-    photoUrl?: string | null;
-}
 
 interface RoomProps {
     requestId: string;
@@ -97,6 +67,10 @@ interface RoomProps {
     localUserId: string;
     /** The doctorId for the call — used by the patient to respond to the consent invite. */
     doctorId: string | null;
+    /** DM conversation ID for in-call chat. */
+    conversationId: string | null;
+    /** The patient's UID — used to derive the recipientId for sending messages. */
+    patientId: string | null;
     /** Initial mic state from the pre-join lobby (default: true). */
     initialMicOn?: boolean;
     /** Initial camera state from the pre-join lobby (default: true). */
@@ -109,12 +83,6 @@ interface RoomProps {
     onEnd?: () => void;
     /** Called when the user wants to minimise the room (e.g. Home button) without ending the call. */
     onMinimize?: () => void;
-}
-
-interface TranscriptLine {
-    id: string;
-    text: string;
-    isFinal: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -158,86 +126,18 @@ async function stopSession(sess: DefaultMeetingSession): Promise<void> {
     try { sess.audioVideo.stop(); } catch { /* ignore */ }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDuration(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    const mm = String(m).padStart(2, "0");
-    const ss = String(s).padStart(2, "0");
-    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
-// ── Audio waveform visualiser ───────────────────────────────────────────────
-
-const WAVE_BARS = 5;
-const WAVE_WEIGHTS = [0.45, 0.75, 1, 0.75, 0.45] as const;
-
-function AudioWaveform({
-    levelRef,
-    barHeight = 14,
-    barWidth = 2.5,
-    gap = 2,
-}: Readonly<{
-    levelRef: React.RefObject<number>;
-    barHeight?: number;
-    barWidth?: number;
-    gap?: number;
-}>) {
-    const barsRef = useRef<(HTMLSpanElement | null)[]>([]);
-
-    useEffect(() => {
-        let rafId: number;
-        const minH = 1.5;
-        const loop = () => {
-            const t = Date.now() / 1000;
-            const lvl = levelRef.current;
-            barsRef.current.forEach((bar, i) => {
-                if (!bar) return;
-                const w = WAVE_WEIGHTS[i] ?? 1;
-                const phase = (i / WAVE_BARS) * Math.PI * 2;
-                let h: number;
-                if (lvl > 0.02) {
-                    const mod = 0.55 + 0.45 * Math.sin(t * 10 + phase);
-                    h = minH + (barHeight - minH) * lvl * w * mod;
-                } else {
-                    h = minH + 1.2 * w * (0.5 + 0.5 * Math.sin(t * 1.8 + phase));
-                }
-                bar.style.height = `${Math.max(minH, Math.min(barHeight, h)).toFixed(1)}px`;
-            });
-            rafId = requestAnimationFrame(loop);
-        };
-        rafId = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(rafId);
-    }, [levelRef, barHeight]);
-
-    return (
-        <Box style={{ display: "flex", alignItems: "center", gap }}>
-            {Array.from({ length: WAVE_BARS }, (_, i) => (
-                <span
-                    key={i}
-                    ref={(el) => { barsRef.current[i] = el; }}
-                    style={{
-                        display: "inline-block",
-                        width: barWidth,
-                        height: 1.5,
-                        borderRadius: 2,
-                        background: "rgba(52,211,153,0.9)",
-                        willChange: "height",
-                        transition: "height 0.05s linear",
-                    }}
-                />
-            ))}
-        </Box>
-    );
+/** Race a promise against a timeout — returns `null` when the deadline expires. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+    return Promise.race([
+        promise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+    ]);
 }
 
 // ── Main room component ───────────────────────────────────────────────────────
 
-export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRoute, userKind, localUserId, doctorId, initialMicOn = true, initialCameraOn = true, initialAudioDeviceId, initialVideoDeviceId, onEnd, onMinimize }: Readonly<RoomProps>) {
+export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRoute, userKind, localUserId, doctorId, conversationId, patientId, initialMicOn = true, initialCameraOn = true, initialAudioDeviceId, initialVideoDeviceId, onEnd, onMinimize }: Readonly<RoomProps>) {
     const router = useRouter();
-    const endCall = useEndCall();
 
     // Doctor's pending call queue — shows patients waiting while the doctor is on a call
     const callQueue = useDoctorCallQueue(userKind === "doctor" ? localUserId : undefined);
@@ -248,6 +148,15 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     const sessionRef = useRef<DefaultMeetingSession | null>(null);
     const stoppedByUsRef = useRef(false); // true when WE initiated the stop
     const callStartTimeRef = useRef<number>(0);
+    // Single idempotent flag to prevent multiple teardown executions from
+    // the 3 parallel end-call signal paths (handleEnd, RTDB, Chime observer).
+    const teardownCalledRef = useRef(false);
+
+    // ── Reconnection state ────────────────────────────────────────────────
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const reconnectAttemptsRef = useRef(0);
+    // True while we are auto-reconnecting (not user-initiated retry)
+    const isReconnectingRef = useRef(false);
 
     // Recording
     const recorderRef = useRef<MediaRecorder | null>(null);
@@ -255,24 +164,40 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     const [isRecording, setIsRecording] = useState(false);
     const [isUploadingRecording, setIsUploadingRecording] = useState(false);
 
-    // Transcription
-    const transcriptLinesRef = useRef<TranscriptLine[]>([]);
-    const fullTranscriptRef = useRef<string>("");
-    const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
-    const [transcriptionActive, setTranscriptionActive] = useState(false);
-    const [showCaptions, setShowCaptions] = useState(true);
-
     const [status, setStatus] = useState<"initialising" | "ready" | "error">("initialising");
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [retryCount, setRetryCount] = useState(0);
     const [micOn, setMicOn] = useState(initialMicOn);
     const [cameraOn, setCameraOn] = useState(initialCameraOn);
     const [noiseCancellationOn, setNoiseCancellationOn] = useState(false);
     const vfTransformerRef = useRef<VoiceFocusDeviceTransformer | null>(null);
     const vfDeviceRef = useRef<ReturnType<VoiceFocusDeviceTransformer["createTransformDevice"]> extends Promise<infer T> ? T : never>(null);
     const rawAudioDeviceIdRef = useRef<string | null>(null);
+
+    // ── Background blur state ────────────────────────────────────────────────
+    const [backgroundBlurOn, setBackgroundBlurOn] = useState(true); // enabled by default
+    const blurProcessorRef = useRef<BackgroundBlurProcessor | null>(null);
+    const blurTransformDeviceRef = useRef<DefaultVideoTransformDevice | null>(null);
+
+    const localTileIdRef = useRef<number | null>(null);
     const [remoteTileId, setRemoteTileId] = useState<number | null>(null);
     const [remoteMuted, setRemoteMuted] = useState(false);
     const [callDuration, setCallDuration] = useState(0);
+
+    // ── Screen sharing state ─────────────────────────────────────────────────
+    const [screenShareOn, setScreenShareOn] = useState(false);
+    const screenShareOnRef = useRef(false);
+    const [remoteScreenShareTileId, setRemoteScreenShareTileId] = useState<number | null>(null);
+    const contentShareVideoRef = useRef<HTMLVideoElement | null>(null);
+
+    // ── Post-call feedback ───────────────────────────────────────────────────
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
+    const feedbackExitRouteRef = useRef<string>("");
+    const feedbackReasonRef = useRef<string>("");
+
+    // ── Connection health state ───────────────────────────────────────────────
+    const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth>("good");
+    const connectionHealthTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── In-call consent invite ───────────────────────────────────────────────
     // Patient: true when the doctor has sent a pending consent invite during the call.
@@ -285,22 +210,43 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     const [videoInputs, setVideoInputs] = useState<{ value: string; label: string }[]>([]);
     const [selectedAudioInput, setSelectedAudioInput] = useState<string | null>(null);
     const [selectedVideoInput, setSelectedVideoInput] = useState<string | null>(null);
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [pipMinimized, setPipMinimized] = useState(false);
-    const [pipHovered, setPipHovered] = useState(false);
+
+    // ── In-call chat (RTDB DM) ──────────────────────────────────────────
+    const [chatOpen, setChatOpen] = useState(false);
+    const [chatDraft, setChatDraft] = useState("");
+
+    // Derive unread count from the persisted RTDB inbox entry so it
+    // survives page reloads and stays in sync with the messaging drawer.
+    const { entries: inboxEntries } = useInbox(localUserId);
+    const inboxEntry = conversationId
+        ? inboxEntries.find((e) => e.conversationId === conversationId)
+        : undefined;
+    const unreadCount = inboxEntry?.unread ?? 0;
+
+    // When the chat panel is opened, persist the read status to RTDB.
+    useEffect(() => {
+        if (chatOpen && conversationId && localUserId) {
+            void markAsRead(localUserId, conversationId);
+        }
+    }, [chatOpen, conversationId, localUserId]);
+
+    // DM hooks — subscribe to real-time messages and typing indicators.
+    // Pass localUserId so markAsRead fires automatically when the chat
+    // panel is open and new messages arrive.
+    const recipientId = userKind === "doctor" ? patientId : doctorId;
+    const { messages: chatMessages } = useMessages(
+        conversationId,
+        200,
+        chatOpen ? localUserId : null,
+    );
+    const { otherTyping, startTyping, clearTyping } = useTyping(conversationId, localUserId, recipientId);
 
     // ── Network stats ────────────────────────────────────────────────────────
-    interface NetworkStats {
-        rtt: number;
-        uplinkKbps: number;
-        downlinkKbps: number;
-        packetLoss: number;
-        quality: "excellent" | "good" | "fair" | "poor";
-    }
     const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
 
     const localVideoRef = useRef<HTMLVideoElement | null>(null);
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+    const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
     // Audio levels — written by Chime volume callbacks, read by AudioWaveform RAF
     const localAudioLevelRef = useRef(0);
@@ -490,56 +436,115 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         }
     }, [requestId]);
 
-    // ── Transcription helpers ───────────────────────────────────────────────
+    // ── Consolidated teardown ────────────────────────────────────────────────
+    // Idempotent: safe to call from handleEnd, RTDB listener, OR Chime observer.
+    // Only the first invocation runs; subsequent calls are no-ops.
+    type TeardownReason = "user" | "remote-rtdb" | "chime-ended" | "chime-kicked";
 
-    const startTranscription = useCallback(async (sess: DefaultMeetingSession) => {
-        const handler = (event: TranscriptEvent) => {
-            if (!("results" in event)) return; // TranscriptionStatus — skip
-            event.results.forEach((result) => {
-                const text = result.alternatives[0]?.transcript ?? "";
-                if (!text) return;
-                const line: TranscriptLine = {
-                    id: result.resultId,
-                    text,
-                    isFinal: !result.isPartial,
-                };
-                transcriptLinesRef.current = [
-                    ...transcriptLinesRef.current
-                        .filter((l) => l.id !== result.resultId)
-                        .slice(-19),
-                    line,
-                ];
-                setTranscriptLines([...transcriptLinesRef.current]);
-                if (!result.isPartial) {
-                    fullTranscriptRef.current +=
-                        (fullTranscriptRef.current ? " " : "") + text;
-                }
-            });
-        };
-        sess.audioVideo.transcriptionController?.subscribeToTranscriptEvent(handler);
-        try {
-            const res = await fetch(`/api/meet/${requestId}/transcription`, {
-                method: "POST",
-            });
-            if (res.ok) setTranscriptionActive(true);
-        } catch {
-            // Non-fatal — transcription just won't be active
+    const teardown = useCallback((reason: TeardownReason) => {
+        if (teardownCalledRef.current) return;
+        teardownCalledRef.current = true;
+        stoppedByUsRef.current = true;
+
+        const durationSeconds = Math.round(
+            (Date.now() - callStartTimeRef.current) / 1000,
+        );
+
+        // Clear persisted session state
+        sessionStorage.removeItem(`callStartedAt_${requestId}`);
+        sessionStorage.removeItem(`callMicOn_${requestId}`);
+        sessionStorage.removeItem(`callCamOn_${requestId}`);
+
+        // Release Chime media resources
+        const sess = sessionRef.current;
+        if (sess) {
+            sessionRef.current = null;
+            void stopSession(sess);
         }
-    }, [requestId]);
 
-    const stopTranscription = useCallback(async () => {
-        try {
-            await fetch(`/api/meet/${requestId}/transcription`, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcript: fullTranscriptRef.current }),
-                // keepalive ensures the request completes even if the page
-                // unmounts / navigates away before the response arrives.
+        // Notification
+        const message = (() => {
+            if (reason === "chime-kicked") return "You joined this call on another device or tab.";
+            if (reason === "user") return "You ended the call.";
+            return "The other person ended the call.";
+        })();
+        notifications.show({
+            title: reason === "chime-kicked" ? "Joined from another device" : "Call ended",
+            message,
+            color: reason === "chime-kicked" ? "yellow" : "gray",
+        });
+
+        // Clean up overlay
+        onEnd?.();
+
+        // Show feedback modal for normal call ends (not kicked scenarios).
+        // For kicks, navigate immediately since it's not the user's choice.
+        if (reason === "chime-kicked") {
+            router.push(exitRoute);
+        } else {
+            feedbackExitRouteRef.current = exitRoute;
+            feedbackReasonRef.current = reason;
+            setFeedbackOpen(true);
+        }
+
+        // Fire-and-forget async cleanup ──────────────────────────────────
+        // ① RTDB signal for the other participant (only when WE ended)
+        if (reason === "user") {
+            void dbSet(
+                dbRef(getClientDatabase(), `call-ended/${requestId}/${localUserId}`),
+                true,
+            ).catch((err: unknown) => console.error("[call-end] RTDB write FAILED", err));
+        }
+
+        // ② Server-side cleanup (only when user-initiated or Chime observer;
+        //    when remote-rtdb fires, the other party already called the API)
+        if (reason === "user" || reason === "chime-ended") {
+            void fetch(`/api/meet/${requestId}/end`, {
+                method: "POST",
                 keepalive: true,
-            });
-        } catch { /* best-effort */ }
-        setTranscriptionActive(false);
-    }, [requestId]);
+            }).catch((err: unknown) => console.error("[call-end] API call FAILED", err));
+        }
+
+        // ③ Save recording
+        void finaliseRecording(durationSeconds);
+
+        // ④ Optimistic patient call-state update
+        if (userKind === "patient") {
+            void dbUpdate(
+                dbRef(getClientDatabase(), `call-state/${localUserId}`),
+                { status: "ended" },
+            );
+        }
+    }, [exitRoute, finaliseRecording, localUserId, onEnd, requestId, router, userKind]);
+
+    // ── RTDB listener for remote call-end ─────────────────────────────────
+    // When either participant clicks End, their client writes
+    // /call-ended/{requestId}/{theirUid} = true BEFORE calling the server
+    // API. This listener detects that write and tears down the local
+    // session — it works even if Chime's MeetingEnded signal is slow
+    // or the server API hasn't completed yet.
+    useEffect(() => {
+        const endedRef = dbRef(
+            getClientDatabase(),
+            `call-ended/${requestId}`,
+        );
+
+        const unsub = onValue(endedRef, (snap) => {
+            if (!snap.exists()) return;
+
+            // Check if the OTHER participant wrote a child here.
+            const data = snap.val() as Record<string, boolean>;
+            const otherEnded = Object.keys(data).some(
+                (uid) => uid !== localUserId && data[uid] === true,
+            );
+            if (!otherEnded) return;
+
+            // Idempotent — teardown no-ops if already called.
+            teardown("remote-rtdb");
+        });
+
+        return () => unsub();
+    }, [localUserId, requestId, teardown]);
 
     // ── Initialise Chime session ────────────────────────────────────────────
 
@@ -589,6 +594,9 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 // VideoAdaptiveProbePolicy probes for the highest quality stream
                 // each downlink subscriber can sustain and falls back smoothly.
                 config.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(logger);
+                // Allow the SDK more time to recover the WebSocket before
+                // giving up so short network blips don't end the call.
+                config.reconnectTimeoutMs = 30_000;
 
                 // Pass a NoOpEventReporter so Chime never tries to flatten
                 // nested meeting attributes (MediaPlacement, etc.) into a flat
@@ -607,13 +615,53 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 );
 
                 const observer = {
+                    connectionDidBecomePoor: () => {
+                        setConnectionHealth("poor");
+                        // Auto-clear after 10s if quality improves (no further callback)
+                        if (connectionHealthTimeoutRef.current) clearTimeout(connectionHealthTimeoutRef.current);
+                        connectionHealthTimeoutRef.current = setTimeout(() => setConnectionHealth("good"), 10_000);
+                    },
+                    connectionDidBecomeGood: () => {
+                        if (connectionHealthTimeoutRef.current) clearTimeout(connectionHealthTimeoutRef.current);
+                        setConnectionHealth("good");
+                    },
+                    connectionDidSuggestStopVideo: () => {
+                        setConnectionHealth("poor");
+                        notifications.show({
+                            title: "Unstable connection",
+                            message: "Consider turning off your camera for better audio quality.",
+                            color: "yellow",
+                            icon: <IconWifi size={18} />,
+                            autoClose: 8000,
+                        });
+                    },
                     videoTileDidUpdate: (tileState: VideoTileState) => {
                         if (tileState.tileId === null) return;
+
+                        // Content share tiles (screen sharing)
+                        if (tileState.isContent) {
+                            if (!tileState.localTile && contentShareVideoRef.current) {
+                                sess.audioVideo.bindVideoElement(
+                                    tileState.tileId,
+                                    contentShareVideoRef.current,
+                                );
+                                setRemoteScreenShareTileId(tileState.tileId);
+                                // Explicitly kick playback — autoPlay is unreliable
+                                // when the element was invisible or just had srcObject swapped.
+                                contentShareVideoRef.current.play().catch(() => { });
+                            }
+                            return;
+                        }
+
                         if (tileState.localTile && localVideoRef.current) {
+                            localTileIdRef.current = tileState.tileId;
                             sess.audioVideo.bindVideoElement(
                                 tileState.tileId,
                                 localVideoRef.current,
                             );
+                            // Explicitly kick playback — autoPlay is unreliable
+                            // when srcObject is swapped (e.g. blur toggle).
+                            localVideoRef.current.play().catch(() => { });
                         } else if (!tileState.localTile && remoteVideoRef.current) {
                             sess.audioVideo.bindVideoElement(
                                 tileState.tileId,
@@ -629,86 +677,82 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                     },
                     videoTileWasRemoved: (tileId: number) => {
                         setRemoteTileId((prev) => (prev === tileId ? null : prev));
+                        setRemoteScreenShareTileId((prev) => (prev === tileId ? null : prev));
                     },
                     audioVideoDidStop: (sessionStatus: MeetingSessionStatus) => {
-                        // Guard against stale callbacks: in React StrictMode the
-                        // first session is stopped during cleanup, then a second
-                        // mount resets stoppedByUsRef. The first session's
-                        // audioVideoDidStop fires asynchronously and would
-                        // otherwise treat the reset ref as a "remote hangup" and
-                        // navigate away. Comparing the captured `sess` with the
-                        // current ref ensures we only act on the active session.
+                        // Guard against stale callbacks from React StrictMode
+                        // double-mount: only act on the active session.
                         if (sessionRef.current !== sess) return;
 
                         const code = sessionStatus.statusCode();
 
-                        // ── Duplicate device join — always handle, even if
-                        // stoppedByUsRef is set (e.g. StrictMode cleanup). ────
                         if (code === MeetingSessionStatusCode.AudioJoinedFromAnotherDevice) {
-                            stoppedByUsRef.current = true;
-                            const currentSess = sessionRef.current;
-                            if (currentSess) {
-                                void stopSession(currentSess);
-                                sessionRef.current = null;
-                            }
-                            onEnd?.();
-                            notifications.show({
-                                title: "Joined from another device",
-                                message: "You joined this call on another device or tab.",
-                                color: "yellow",
-                            });
-                            router.push(exitRoute);
+                            teardown("chime-kicked");
                             return;
                         }
 
-                        // Only navigate away if the stop was triggered by the
-                        // remote side (doctor/patient hung up) — not by our own
-                        // cleanup or explicit End button.
+                        // If WE initiated the stop (handleEnd / unmount), skip.
                         if (stoppedByUsRef.current) return;
 
-                        // Mark as stopped by us so the unmount cleanup does not
-                        // attempt a redundant stopSession call.
-                        stoppedByUsRef.current = true;
+                        // ── Terminal codes: the meeting itself ended ─────────
+                        const terminalCodes = new Set([
+                            MeetingSessionStatusCode.MeetingEnded,
+                            MeetingSessionStatusCode.Left,
+                            MeetingSessionStatusCode.AudioJoinedFromAnotherDevice,
+                            MeetingSessionStatusCode.AudioDisconnectAudio,
+                        ]);
 
-                        // Release camera / mic hardware immediately — the Chime
-                        // session has already stopped on the server side (e.g.
-                        // MeetingEnded), so we just need to free local devices.
-                        const currentSess = sessionRef.current;
-                        if (currentSess) {
-                            void stopSession(currentSess);
-                            sessionRef.current = null;
+                        if (terminalCodes.has(code)) {
+                            teardown("chime-ended");
+                            return;
                         }
 
-                        const isMeetingEnded = code === MeetingSessionStatusCode.MeetingEnded;
+                        // ── Recoverable: network drop, ICE failure, etc. ─────
+                        // Attempt automatic reconnection if under the limit.
+                        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                            console.warn(`[Chime] Session stopped (code ${code}). Attempting reconnect ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS}…`);
+                            reconnectAttemptsRef.current += 1;
+                            isReconnectingRef.current = true;
+                            setConnectionHealth("reconnecting");
 
-                        notifications.show({
-                            title: "Call ended",
-                            message: isMeetingEnded
-                                ? "The meeting has ended."
-                                : "The other person left the call.",
-                            color: "gray",
-                        });
-                        const duration = Math.round(
-                            (Date.now() - callStartTimeRef.current) / 1000,
-                        );
-                        void finaliseRecording(duration);
-                        sessionStorage.removeItem(`callStartedAt_${requestId}`);
-                        void stopTranscription();
+                            // Clean up the dead session before re-init
+                            sessionRef.current = null;
+                            void stopSession(sess).catch(() => { });
 
-                        // Clean up overlay immediately so the room disappears.
-                        onEnd?.();
-
-                        // End the call on the server so RTDB call-state is
-                        // cleared, THEN navigate. Without this the patient
-                        // lands on /chat/connect while RTDB still shows
-                        // "accepted" → auto-redirects back to the meet lobby.
-                        endCall.mutate({ requestId }, {
-                            onSettled: () => router.push(exitRoute),
-                        });
+                            // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 16_000);
+                            setTimeout(() => {
+                                // Abort if the user already ended the call
+                                if (teardownCalledRef.current) return;
+                                setRetryCount((c) => c + 1);
+                            }, delay);
+                        } else {
+                            console.error(`[Chime] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Ending call.`);
+                            notifications.show({
+                                title: "Connection lost",
+                                message: "Unable to reconnect after multiple attempts.",
+                                color: "red",
+                                icon: <IconWifiOff size={18} />,
+                            });
+                            teardown("chime-ended");
+                        }
                     },
                 };
 
                 sess.audioVideo.addObserver(observer);
+
+                // ── Content share observer (screen sharing) ────────────────
+                const contentShareObserver: ContentShareObserver = {
+                    contentShareDidStart: () => {
+                        screenShareOnRef.current = true;
+                        setScreenShareOn(true);
+                    },
+                    contentShareDidStop: () => {
+                        screenShareOnRef.current = false;
+                        setScreenShareOn(false);
+                    },
+                };
+                sess.audioVideo.addContentShareObserver(contentShareObserver);
 
                 // Enumerate and start devices
                 const [audioDevices, videoDevices] = await Promise.all([
@@ -729,6 +773,8 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 // VoiceFocusDeviceTransformer wraps the mic with a WebAssembly
                 // noise-suppression model. Falls back to raw microphone on
                 // unsupported browsers (e.g. Safari with no WASM SIMD).
+                // Wrapped in a 10 s timeout so a slow WASM download can't block
+                // the entire session init (which has a 30 s safety timeout).
                 let noiseCancellationActive = false;
                 const preferredAudioId = (initialAudioDeviceId && audioDevices.some((d) => d.deviceId === initialAudioDeviceId))
                     ? initialAudioDeviceId
@@ -736,28 +782,37 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 if (preferredAudioId) {
                     rawAudioDeviceIdRef.current = preferredAudioId;
                     try {
-                        // isSupported() takes an AssetSpec (no variant field) — pass no spec
-                        const isSupported = await VoiceFocusDeviceTransformer.isSupported(
-                            undefined,
-                            { logger },
+                        const vfResult = await withTimeout(
+                            (async () => {
+                                const isSupported = await VoiceFocusDeviceTransformer.isSupported(
+                                    undefined,
+                                    { logger },
+                                );
+                                if (!isSupported) return false;
+                                const transformer = await VoiceFocusDeviceTransformer.create(
+                                    { variant: "auto" },
+                                    { logger },
+                                );
+                                vfTransformerRef.current = transformer;
+                                const vfDevice = await transformer.createTransformDevice(
+                                    preferredAudioId,
+                                );
+                                if (vfDevice) {
+                                    vfDeviceRef.current = vfDevice;
+                                    await sess.audioVideo.startAudioInput(vfDevice);
+                                    return true;
+                                }
+                                return false;
+                            })(),
+                            10_000,
                         );
-                        if (isSupported) {
-                            const transformer = await VoiceFocusDeviceTransformer.create(
-                                { variant: "auto" },
-                                { logger },
-                            );
-                            vfTransformerRef.current = transformer;
-                            const vfDevice = await transformer.createTransformDevice(
-                                preferredAudioId,
-                            );
-                            if (vfDevice) {
-                                vfDeviceRef.current = vfDevice;
-                                await sess.audioVideo.startAudioInput(vfDevice);
-                                noiseCancellationActive = true;
-                            } else {
-                                await sess.audioVideo.startAudioInput(preferredAudioId);
-                            }
+                        if (vfResult === true) {
+                            noiseCancellationActive = true;
                         } else {
+                            // Timed out or unsupported — plain mic
+                            if (vfResult === null) {
+                                console.warn("[VoiceFocus] Timed out after 10 s, falling back to raw mic");
+                            }
                             await sess.audioVideo.startAudioInput(preferredAudioId);
                         }
                     } catch (vfErr) {
@@ -768,14 +823,43 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 }
 
                 // ── Adaptive video quality ─────────────────────────────────
-                // Request 720p @ 15 fps — Chime SDK and simulcast layers will
+                // Request 720p @ 24 fps — Chime SDK and simulcast layers will
                 // adapt the resolution/bitrate down based on available bandwidth.
                 const preferredVideoId = (initialVideoDeviceId && videoDevices.some((d) => d.deviceId === initialVideoDeviceId))
                     ? initialVideoDeviceId
                     : videoDevices[0]?.deviceId ?? null;
+                let backgroundBlurActive = false;
                 if (initialCameraOn && preferredVideoId) {
-                    sess.audioVideo.chooseVideoInputQuality(1280, 720, 15);
-                    await sess.audioVideo.startVideoInput(preferredVideoId);
+                    sess.audioVideo.chooseVideoInputQuality(1280, 720, 24);
+                    // ── Background blur (enabled by default) ─────────────────
+                    try {
+                        const isBlurSupported = await BackgroundBlurVideoFrameProcessor.isSupported();
+                        if (isBlurSupported) {
+                            const blurProcessor = await BackgroundBlurVideoFrameProcessor.create(
+                                undefined,
+                                { blurStrength: 15, logger },
+                            );
+                            if (blurProcessor) {
+                                blurProcessorRef.current = blurProcessor;
+                                const transformDevice = new DefaultVideoTransformDevice(
+                                    logger,
+                                    preferredVideoId,
+                                    [blurProcessor],
+                                );
+                                blurTransformDeviceRef.current = transformDevice;
+                                await sess.audioVideo.startVideoInput(transformDevice);
+                                backgroundBlurActive = true;
+                            } else {
+                                await sess.audioVideo.startVideoInput(preferredVideoId);
+                            }
+                        } else {
+                            // Blur not supported — use raw camera
+                            await sess.audioVideo.startVideoInput(preferredVideoId);
+                        }
+                    } catch (blurErr) {
+                        console.warn("[BackgroundBlur] Init failed, falling back to raw camera:", blurErr);
+                        await sess.audioVideo.startVideoInput(preferredVideoId);
+                    }
                 }
 
                 if (cancelled) {
@@ -797,6 +881,28 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 }
                 sess.audioVideo.start();
 
+                // If this was a reconnection, reset the reconnect counter and
+                // restore connection health once the session is back up.
+                if (isReconnectingRef.current) {
+                    isReconnectingRef.current = false;
+                    reconnectAttemptsRef.current = 0;
+                    setConnectionHealth("good");
+                    notifications.show({
+                        title: "Reconnected",
+                        message: "Your connection has been restored.",
+                        color: "teal",
+                        icon: <IconWifi size={18} />,
+                        autoClose: 3000,
+                    });
+                }
+
+                // ── Bind remote audio element ───────────────────────────
+                // Chime routes remote audio through a bound <audio> element.
+                // Without this call, neither side can hear the other.
+                if (remoteAudioRef.current) {
+                    sess.audioVideo.bindAudioElement(remoteAudioRef.current);
+                }
+
                 // Honour pre-join lobby choices
                 if (initialCameraOn) {
                     sess.audioVideo.startLocalVideoTile();
@@ -805,6 +911,7 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                     sess.audioVideo.realtimeMuteLocalAudio();
                 }
                 setNoiseCancellationOn(noiseCancellationActive);
+                setBackgroundBlurOn(backgroundBlurActive);
                 setStatus("ready");
 
                 // ── Populate device lists for settings ─────────────────────────
@@ -837,8 +944,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                     },
                 );
 
-                // Start real-time transcription after session is established
-                void startTranscription(sess);
             } catch (err) {
                 if (!cancelled) {
                     setErrorMessage((err as Error)?.message ?? "Failed to start video session.");
@@ -870,7 +975,7 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         };
         // joinInfo is stable (object created once before this component mounts)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [retryCount]);
 
     // ── Mic toggle ──────────────────────────────────────────────────────────
 
@@ -882,8 +987,12 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         } else {
             await sess.audioVideo.realtimeUnmuteLocalAudio();
         }
-        setMicOn((v) => !v);
-    }, [micOn]);
+        setMicOn((v) => {
+            const next = !v;
+            try { sessionStorage.setItem(`callMicOn_${requestId}`, String(next)); } catch { /* quota */ }
+            return next;
+        });
+    }, [micOn, requestId]);
 
     // ── Camera toggle ───────────────────────────────────────────────────────
 
@@ -897,13 +1006,32 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         } else {
             const videoDevices = await sess.audioVideo.listVideoInputDevices();
             if (videoDevices[0]?.deviceId) {
-                sess.audioVideo.chooseVideoInputQuality(1280, 720, 15);
-                await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
+                sess.audioVideo.chooseVideoInputQuality(1280, 720, 24);
+                // Re-apply background blur if it was on
+                if (backgroundBlurOn && blurProcessorRef.current) {
+                    try {
+                        const transformDevice = new DefaultVideoTransformDevice(
+                            new ConsoleLogger("Blur", LogLevel.OFF),
+                            videoDevices[0].deviceId,
+                            [blurProcessorRef.current],
+                        );
+                        blurTransformDeviceRef.current = transformDevice;
+                        await sess.audioVideo.startVideoInput(transformDevice);
+                    } catch {
+                        await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
+                    }
+                } else {
+                    await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
+                }
             }
             sess.audioVideo.startLocalVideoTile();
         }
-        setCameraOn((v) => !v);
-    }, [cameraOn]);
+        setCameraOn((v) => {
+            const next = !v;
+            try { sessionStorage.setItem(`callCamOn_${requestId}`, String(next)); } catch { /* quota */ }
+            return next;
+        });
+    }, [cameraOn, requestId, backgroundBlurOn]);
 
     // ── Toggle noise cancellation ────────────────────────────────────────────
 
@@ -986,6 +1114,144 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         }
     }, [noiseCancellationOn, selectedAudioInput]);
 
+    // ── Toggle background blur ───────────────────────────────────────────────
+
+    const toggleBackgroundBlur = useCallback(async () => {
+        const sess = sessionRef.current;
+        if (!sess || !cameraOn) return;
+
+        const currentVideoId = selectedVideoInput;
+        if (!currentVideoId) return;
+
+        if (backgroundBlurOn) {
+            // Turn OFF → swap to raw camera immediately, then clean up the
+            // old transform device in the background. Doing the swap first
+            // avoids a visible freeze while the pipeline tears down.
+            setBackgroundBlurOn(false);
+            try {
+                const oldTransform = blurTransformDeviceRef.current;
+                blurTransformDeviceRef.current = null;
+                // Clear the processor ref too — stop() destroys the
+                // underlying WASM/WebGL resources so the instance can't
+                // be reused. The next ON toggle will create a fresh one.
+                blurProcessorRef.current = null;
+                sess.audioVideo.chooseVideoInputQuality(1280, 720, 24);
+                await sess.audioVideo.startVideoInput(currentVideoId);
+                // startVideoInput replaces the track on the RTCRtpSender
+                // in-place (like replaceTrack) — no tile restart needed.
+                // Rebind the local <video> element so the PIP picks up the
+                // new (non-blurred) stream immediately.
+                if (localTileIdRef.current !== null && localVideoRef.current) {
+                    sess.audioVideo.bindVideoElement(localTileIdRef.current, localVideoRef.current);
+                    localVideoRef.current.play().catch(() => { });
+                }
+                // Clean up the old transform device async — this tears down
+                // the WASM/WebGL pipeline but the video has already switched.
+                if (oldTransform) {
+                    oldTransform.stop().catch(() => { });
+                }
+            } catch (err) {
+                console.error("Failed to disable background blur:", err);
+            }
+        } else {
+            // Turn ON → wrap camera with blur processor
+            setBackgroundBlurOn(true);
+            try {
+                let blurProcessor = blurProcessorRef.current;
+                if (!blurProcessor) {
+                    const isSupported = await BackgroundBlurVideoFrameProcessor.isSupported();
+                    if (!isSupported) {
+                        setBackgroundBlurOn(false);
+                        notifications.show({
+                            title: "Not available",
+                            message: "Background blur is not supported on this browser",
+                            color: "yellow",
+                            icon: <IconAlertCircle size={18} />,
+                        });
+                        return;
+                    }
+                    const created = await BackgroundBlurVideoFrameProcessor.create(
+                        undefined,
+                        { blurStrength: 15, logger: new ConsoleLogger("Blur", LogLevel.OFF) },
+                    );
+                    if (!created) {
+                        setBackgroundBlurOn(false);
+                        notifications.show({
+                            title: "Not available",
+                            message: "Failed to initialise background blur",
+                            color: "yellow",
+                            icon: <IconAlertCircle size={18} />,
+                        });
+                        return;
+                    }
+                    blurProcessor = created;
+                    blurProcessorRef.current = created;
+                }
+                sess.audioVideo.chooseVideoInputQuality(1280, 720, 24);
+                const transformDevice = new DefaultVideoTransformDevice(
+                    new ConsoleLogger("Blur", LogLevel.OFF),
+                    currentVideoId,
+                    [blurProcessor],
+                );
+                blurTransformDeviceRef.current = transformDevice;
+                await sess.audioVideo.startVideoInput(transformDevice);
+                // startVideoInput replaces the track on the RTCRtpSender
+                // in-place — no tile restart needed. Rebind so the PIP
+                // shows the blurred stream immediately.
+                if (localTileIdRef.current !== null && localVideoRef.current) {
+                    sess.audioVideo.bindVideoElement(localTileIdRef.current, localVideoRef.current);
+                    localVideoRef.current.play().catch(() => { });
+                }
+            } catch (err) {
+                setBackgroundBlurOn(false);
+                console.error("Background blur toggle error:", err);
+                notifications.show({
+                    title: "Error",
+                    message: "Failed to enable background blur",
+                    color: "red",
+                    icon: <IconX size={18} />,
+                });
+            }
+        }
+    }, [backgroundBlurOn, cameraOn, selectedVideoInput]);
+
+    // ── Toggle screen sharing ────────────────────────────────────────────────
+
+    const toggleScreenShare = useCallback(async () => {
+        const sess = sessionRef.current;
+        if (!sess) return;
+        // Read the ref for the latest value — avoids stale-closure issues
+        // when the observer hasn't flushed the state update yet.
+        if (screenShareOnRef.current) {
+            sess.audioVideo.stopContentShare();
+            // Eagerly reset so rapid double-clicks don't race.
+            screenShareOnRef.current = false;
+            setScreenShareOn(false);
+        } else {
+            try {
+                await sess.audioVideo.startContentShareFromScreenCapture();
+                notifications.show({
+                    title: "Screen sharing",
+                    message: "You are now sharing your screen.",
+                    color: "teal",
+                    icon: <IconScreenShare size={18} />,
+                    autoClose: 3000,
+                });
+            } catch (err) {
+                // User cancelled the screen picker or browser denied permission
+                const msg = (err as Error)?.message ?? "";
+                if (!msg.includes("Permission denied") && !msg.includes("AbortError") && !msg.includes("NotAllowedError")) {
+                    notifications.show({
+                        title: "Screen share failed",
+                        message: "Could not start screen sharing.",
+                        color: "red",
+                        icon: <IconX size={18} />,
+                    });
+                }
+            }
+        }
+    }, []);
+
     // ── Switch audio input device ────────────────────────────────────────────
 
     const switchAudioInput = useCallback(async (deviceId: string) => {
@@ -1021,8 +1287,19 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         const sess = sessionRef.current;
         if (!sess) return;
         try {
-            sess.audioVideo.chooseVideoInputQuality(1280, 720, 15);
-            await sess.audioVideo.startVideoInput(deviceId);
+            sess.audioVideo.chooseVideoInputQuality(1280, 720, 24);
+            // Apply background blur if enabled
+            if (backgroundBlurOn && blurProcessorRef.current) {
+                const transformDevice = new DefaultVideoTransformDevice(
+                    new ConsoleLogger("Blur", LogLevel.OFF),
+                    deviceId,
+                    [blurProcessorRef.current],
+                );
+                blurTransformDeviceRef.current = transformDevice;
+                await sess.audioVideo.startVideoInput(transformDevice);
+            } else {
+                await sess.audioVideo.startVideoInput(deviceId);
+            }
             setSelectedVideoInput(deviceId);
             if (!cameraOn) {
                 sess.audioVideo.startLocalVideoTile();
@@ -1031,12 +1308,15 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         } catch {
             notifications.show({ title: "Error", message: "Failed to switch camera", color: "red", icon: <IconX size={18} /> });
         }
-    }, [cameraOn]);
+    }, [cameraOn, backgroundBlurOn]);
 
     // ── Network stats polling ────────────────────────────────────────────────
+    // Always polls while the call is active so the header quality indicator
+    // stays up-to-date. When the settings modal is open, the full stats are
+    // also shown there.
 
     useEffect(() => {
-        if (status !== "ready" || !settingsOpen) return;
+        if (status !== "ready") return;
         let stopped = false;
 
         const pollStats = async () => {
@@ -1084,44 +1364,126 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         };
 
         void pollStats();
-        const interval = setInterval(() => void pollStats(), 3000);
+        const interval = setInterval(() => void pollStats(), 5000);
         return () => { stopped = true; clearInterval(interval); };
-    }, [status, settingsOpen, callDuration]);
+    }, [status, callDuration]);
+
+    // ── Browser online/offline reconnection ────────────────────────────────
+    // Detects network loss at the OS level (faster than waiting for Chime's
+    // WebSocket to time out) and triggers an automatic reconnect when the
+    // browser comes back online.
+    useEffect(() => {
+        if (status !== "ready" && !isReconnectingRef.current) return;
+
+        const handleOffline = () => {
+            // Don't overwrite if we're already reconnecting or tearing down
+            if (teardownCalledRef.current) return;
+            setConnectionHealth("reconnecting");
+            notifications.show({
+                title: "Network disconnected",
+                message: "Waiting for your connection to resume…",
+                color: "orange",
+                icon: <IconWifiOff size={18} />,
+                autoClose: false,
+                id: "network-offline",
+            });
+        };
+
+        const handleOnline = () => {
+            notifications.hide("network-offline");
+            // If the session is already dead (Chime fired audioVideoDidStop),
+            // the reconnect is being handled by the retry logic. If the session
+            // is still alive (brief blip), just clear the health warning.
+            if (sessionRef.current) {
+                setConnectionHealth("good");
+                notifications.show({
+                    title: "Back online",
+                    message: "Your network connection has been restored.",
+                    color: "teal",
+                    icon: <IconWifi size={18} />,
+                    autoClose: 3000,
+                });
+            } else if (!teardownCalledRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                // Session is dead and Chime hasn't triggered a retry yet — kick one off
+                reconnectAttemptsRef.current += 1;
+                isReconnectingRef.current = true;
+                setConnectionHealth("reconnecting");
+                setRetryCount((c) => c + 1);
+            }
+        };
+
+        window.addEventListener("offline", handleOffline);
+        window.addEventListener("online", handleOnline);
+        return () => {
+            window.removeEventListener("offline", handleOffline);
+            window.removeEventListener("online", handleOnline);
+        };
+    }, [status]);
+
+    // ── Keyboard shortcuts ─────────────────────────────────────────────────
+    // M → toggle mic, V → toggle camera, S → toggle screen share, Esc → end call
+    useEffect(() => {
+        if (status !== "ready") return;
+        const handler = (e: KeyboardEvent) => {
+            // Don't intercept when typing in chat input
+            const tag = (e.target as HTMLElement)?.tagName;
+            if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+            switch (e.key.toLowerCase()) {
+                case "m":
+                    void toggleMic();
+                    break;
+                case "v":
+                    void toggleCamera();
+                    break;
+                case "s":
+                    void toggleScreenShare();
+                    break;
+            }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [status, toggleMic, toggleCamera, toggleScreenShare]);
+
+    // ── Send chat message ────────────────────────────────────────────────
+
+    const sendChatMessage = useCallback(() => {
+        const text = chatDraft.trim();
+        if (!text || !conversationId || !recipientId) return;
+        clearTyping();
+        void sendDmMessage({
+            conversationId,
+            senderId: localUserId,
+            recipientId,
+            text,
+        });
+        setChatDraft("");
+    }, [chatDraft, conversationId, localUserId, recipientId, clearTyping]);
+
+    // ── Post-call feedback dismiss ──────────────────────────────────────────
+
+    const handleFeedbackDismiss = useCallback(() => {
+        setFeedbackOpen(false);
+        router.push(feedbackExitRouteRef.current || exitRoute);
+    }, [exitRoute, router]);
 
     // ── End call ────────────────────────────────────────────────────────────
 
     const handleEnd = useCallback(() => {
-        stoppedByUsRef.current = true;
-        const durationSeconds = Math.round(
-            (Date.now() - callStartTimeRef.current) / 1000,
-        );
-        sessionStorage.removeItem(`callStartedAt_${requestId}`);
-        const sess = sessionRef.current;
-        if (sess) {
-            void stopSession(sess);
-            sessionRef.current = null;
-        }
-        void finaliseRecording(durationSeconds);
-        void stopTranscription();
-
-        // Clean up the persistent overlay state immediately so the room
-        // disappears while the end-call API runs in the background.
-        onEnd?.();
-
-        // Navigate only AFTER the end-call API completes. This ensures
-        // the server clears the RTDB call-state node before the patient
-        // lands on /chat/connect — otherwise the stale "accepted" status
-        // would auto-redirect them back to the meet lobby.
-        endCall.mutate({ requestId }, {
-            onSettled: () => router.push(exitRoute),
-        });
-    }, [endCall, exitRoute, finaliseRecording, onEnd, requestId, router, stopTranscription]);
+        teardown("user");
+    }, [teardown]);
 
     // ── Render ──────────────────────────────────────────────────────────────
 
     if (status === "error") {
         return (
-            <Stack align="center" justify="center" h="100vh" p="xl">
+            <Stack align="center" justify="center" h="100vh" p="xl" style={{ animation: "meet-room-fade-in 0.3s ease-out" }}>
+                <style>{`
+                    @keyframes meet-room-fade-in {
+                        from { opacity: 0; }
+                        to   { opacity: 1; }
+                    }
+                `}</style>
                 <Alert
                     icon={<IconAlertCircle size={16} />}
                     color="red"
@@ -1130,6 +1492,31 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 >
                     {errorMessage ?? "Unable to access camera or microphone."}
                 </Alert>
+                <Group mt="md">
+                    <Button
+                        variant="filled"
+                        color="primary"
+                        onClick={() => {
+                            // Re-run the init effect without a full page reload
+                            setStatus("initialising");
+                            setErrorMessage(null);
+                            setRetryCount((c) => c + 1);
+                        }}
+                    >
+                        Retry
+                    </Button>
+                    <Button
+                        variant="subtle"
+                        color="gray"
+                        leftSection={<IconHome size={16} />}
+                        onClick={() => {
+                            onEnd?.();
+                            router.push(exitRoute);
+                        }}
+                    >
+                        Go back
+                    </Button>
+                </Group>
             </Stack>
         );
     }
@@ -1144,881 +1531,171 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 flexDirection: "column",
             }}
         >
+            {/* Shared keyframe animations for the room UI */}
+            <style>{`
+                @keyframes meet-room-fade-in {
+                    from { opacity: 0; }
+                    to   { opacity: 1; }
+                }
+                @keyframes meet-room-slide-up {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes meet-room-slide-down {
+                    from { opacity: 0; transform: translateY(-12px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes meet-room-scale-in {
+                    from { opacity: 0; transform: scale(0.92); }
+                    to   { opacity: 1; transform: scale(1); }
+                }
+                @keyframes meet-room-glow {
+                    0%   { transform: scale(0.92); opacity: 0.3; }
+                    50%  { transform: scale(1.08); opacity: 0.7; }
+                    100% { transform: scale(0.92); opacity: 0.3; }
+                }
+                @keyframes meet-room-float {
+                    0%, 100% { transform: translateY(0); }
+                    50%      { transform: translateY(-6px); }
+                }
+                @keyframes meet-rec-pulse {
+                    0%, 100% { opacity: 1; }
+                    50%      { opacity: 0.3; }
+                }
+            `}</style>
+
             {/* ── Header island ──────────────────────────────────── */}
-            <Box
-                style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    display: "flex",
-                    justifyContent: "center",
-                    padding: "16px 16px 0",
-                    zIndex: 10,
-                    pointerEvents: "none",
-                }}
-            >
-                <Group
-                    gap="sm"
-                    style={{
-                        background: "light-dark(rgba(255,255,255,0.85), rgba(30,30,30,0.85))",
-                        backdropFilter: "blur(24px)",
-                        WebkitBackdropFilter: "blur(24px)",
-                        border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                        borderRadius: 999,
-                        padding: "6px 18px",
-                        boxShadow: "0 8px 32px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.5)), 0 0 0 0.5px light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06)) inset",
-                        pointerEvents: "auto",
-                        minHeight: 36,
-                    }}
-                >
-                    {/* Remote user */}
-                    <Group gap={6}>
-                        <Text size="xs" fw={600} style={{ lineHeight: 1 }}>
-                            {remoteUser.name}
-                        </Text>
-                        {remoteMuted ? (
-                            <IconMicrophoneOff size={12} color="var(--mantine-color-red-4)" />
-                        ) : status === "ready" ? (
-                            <AudioWaveform levelRef={remoteAudioLevelRef} barHeight={10} barWidth={2} gap={1.5} />
-                        ) : null}
-                    </Group>
+            <RoomHeader
+                remoteUser={remoteUser}
+                remoteMuted={remoteMuted}
+                status={status}
+                isRecording={isRecording}
+                isUploadingRecording={isUploadingRecording}
+                callDuration={callDuration}
+                connectionHealth={connectionHealth}
+                networkStats={networkStats}
+                remoteAudioLevelRef={remoteAudioLevelRef}
+            />
 
-                    {/* Separator */}
-                    <Box style={{ width: 1, height: 14, background: "light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))" }} />
+            {/* ── Patients waiting queue (doctor only) ────────────── */}
+            {userKind === "doctor" && <QueueOverlay pendingQueue={pendingQueue} />}
 
-                    {/* Recording indicator — Teams style */}
-                    {isRecording && (
-                        <Group gap={6}>
+            {/* ── Video area (full) ──────────────────────────────── */}
+            <Box style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+                <RemoteVideo
+                    remoteTileId={remoteTileId}
+                    remoteUser={remoteUser}
+                    remoteMuted={remoteMuted}
+                    status={status}
+                    remoteVideoRef={remoteVideoRef}
+                    remoteAudioRef={remoteAudioRef}
+                    remoteScreenShareTileId={remoteScreenShareTileId}
+                    contentShareVideoRef={contentShareVideoRef}
+                />
+
+                {/* Local video PIP */}
+                <LocalPip
+                    localUser={localUser}
+                    cameraOn={cameraOn}
+                    micOn={micOn}
+                    localVideoRef={localVideoRef}
+                    localAudioLevelRef={localAudioLevelRef}
+                />
+
+                {/* In-call consent banner (patient only) */}
+                {consentPending && userKind === "patient" && (
+                    <ConsentBanner
+                        remoteUser={remoteUser}
+                        acceptingConsent={acceptingConsent}
+                        onAccept={() => void handleAcceptConsent()}
+                        onDecline={() => void handleDeclineConsent()}
+                    />
+                )}
+
+                {/* Reconnecting overlay */}
+                {connectionHealth === "reconnecting" && (
+                    <Box
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.55)",
+                            backdropFilter: "blur(4px)",
+                            zIndex: 20,
+                            animation: "meet-room-fade-in 0.3s ease-out",
+                        }}
+                    >
+                        <Stack align="center" gap="md">
                             <Box
                                 style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: "50%",
-                                    background: "var(--mantine-color-red-6)",
-                                    boxShadow: "0 0 6px var(--mantine-color-red-6)",
-                                    animation: "meet-rec-pulse 1.5s ease-in-out infinite",
-                                }}
-                            />
-                            <Text size="xs" fw={600} c="red.4" style={{ letterSpacing: "0.04em" }}>
-                                Recording
-                            </Text>
-                        </Group>
-                    )}
-                    {isUploadingRecording && (
-                        <Group gap={6}>
-                            <Loader size={10} color="orange" />
-                            <Text size="xs" fw={500} c="orange.4">
-                                Saving recording…
-                            </Text>
-                        </Group>
-                    )}
-
-                    {/* Separator when recording + timer both show */}
-                    {(isRecording || isUploadingRecording) && status === "ready" && (
-                        <Box style={{ width: 1, height: 14, background: "light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))" }} />
-                    )}
-
-                    {/* Call timer */}
-                    {status === "ready" && (
-                        <Group gap={6}>
-                            <IconClock size={13} color="light-dark(rgba(0,0,0,0.4), rgba(255,255,255,0.4))" />
-                            <Text
-                                size="xs"
-                                fw={500}
-                                style={{
-                                    color: "light-dark(rgba(0,0,0,0.6), rgba(255,255,255,0.7))",
-                                    fontVariantNumeric: "tabular-nums",
-                                    letterSpacing: "0.02em",
+                                    position: "relative",
+                                    animation: "meet-room-float 2.5s ease-in-out infinite",
                                 }}
                             >
-                                {formatDuration(callDuration)}
-                            </Text>
-                        </Group>
-                    )}
-                    {status === "initialising" && (
-                        <Group gap={6}>
-                            <Loader size={12} color="light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.4))" type="dots" />
-                            <Text size="xs" c="dimmed">
-                                Setting up…
-                            </Text>
-                        </Group>
-                    )}
-                </Group>
-            </Box>
-
-            {/* ── Patients waiting queue (doctor only) ────────────────── */}
-            {userKind === "doctor" && pendingQueue.length > 0 && (
-                <Box
-                    style={{
-                        position: "absolute",
-                        top: 64,
-                        right: 16,
-                        zIndex: 10,
-                        pointerEvents: "auto",
-                        maxWidth: 220,
-                    }}
-                >
-                    <Paper
-                        radius="lg"
-                        p="sm"
-                        style={{
-                            background: "light-dark(rgba(255,255,255,0.88), rgba(30,30,30,0.88))",
-                            backdropFilter: "blur(20px)",
-                            WebkitBackdropFilter: "blur(20px)",
-                            border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                            boxShadow: "0 8px 24px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.4))",
-                        }}
-                    >
-                        <Group gap={6} mb={8}>
-                            <IconUsers size={14} color="var(--mantine-color-orange-5)" />
-                            <Text size="xs" fw={600}>
-                                {pendingQueue.length} {pendingQueue.length === 1 ? "patient" : "patients"} waiting
-                            </Text>
-                        </Group>
-                        <Stack gap={6}>
-                            {pendingQueue.slice(0, 5).map((entry, idx) => (
-                                <Group key={entry.requestId} gap={8} wrap="nowrap">
-                                    <Avatar
-                                        size={24}
-                                        radius="xl"
-                                        src={entry.patientPhotoUrl ?? undefined}
-                                        color="primary"
-                                        style={{ fontSize: 10, flexShrink: 0 }}
-                                    >
-                                        {getInitials(entry.patientName)}
-                                    </Avatar>
-                                    <Text size="xs" lineClamp={1} style={{ flex: 1 }}>
-                                        {entry.patientName}
-                                    </Text>
-                                    <Badge size="xs" variant="light" color="orange" style={{ flexShrink: 0 }}>
-                                        #{idx + 1}
-                                    </Badge>
-                                </Group>
-                            ))}
-                            {pendingQueue.length > 5 && (
-                                <Text size="xs" c="dimmed" ta="center">
-                                    +{pendingQueue.length - 5} more
-                                </Text>
-                            )}
-                        </Stack>
-                    </Paper>
-                </Box>
-            )}
-
-            {/* ── Video area (full) ──────────────────────────────────── */}
-            <Box style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                {/* Remote video (full canvas) */}
-                <Box
-                    style={{
-                        position: "absolute",
-                        inset: 0,
-                        overflow: "hidden",
-                        background: remoteTileId === null
-                            ? "radial-gradient(ellipse at 50% 40%, light-dark(#e8e8f0, #1a1a2e) 0%, light-dark(#f0f0f4, #0f0f0f) 70%)"
-                            : "light-dark(#e8e8ee, #111)",
-                    }}
-                >
-                    {/* Camera-off / waiting state */}
-                    {remoteTileId === null && (
-                        <Stack
-                            align="center"
-                            justify="center"
-                            h="100%"
-                            gap="lg"
-                        >
-                            {status === "initialising" ? (
-                                <Stack align="center" gap="md">
-                                    <Loader color="primary" size="lg" />
-                                    <Text c="dimmed" size="sm">
-                                        Connecting…
-                                    </Text>
-                                </Stack>
-                            ) : (
-                                <>
-                                    {/* Glowing avatar */}
-                                    <Box
-                                        style={{
-                                            position: "relative",
-                                        }}
-                                    >
-                                        {/* Soft glow ring */}
-                                        <Box
-                                            style={{
-                                                position: "absolute",
-                                                inset: -8,
-                                                borderRadius: "50%",
-                                                background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)",
-                                            }}
-                                        />
-                                        <Avatar
-                                            size={120}
-                                            radius={999}
-                                            color="primary"
-                                            src={remoteUser.photoUrl ?? undefined}
-                                            style={{
-                                                border: "3px solid light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.15))",
-                                                boxShadow: "0 0 40px rgba(99,102,241,0.25)",
-                                            }}
-                                        >
-                                            <Text size="xl" fw={700}>
-                                                {getInitials(remoteUser.name)}
-                                            </Text>
-                                        </Avatar>
-                                        {/* Muted badge on avatar */}
-                                        {remoteMuted && (
-                                            <Box
-                                                style={{
-                                                    position: "absolute",
-                                                    bottom: 4,
-                                                    right: 4,
-                                                    width: 28,
-                                                    height: 28,
-                                                    borderRadius: "50%",
-                                                    background: "rgba(239,68,68,0.9)",
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    border: "2px solid light-dark(var(--mantine-color-body), #0f0f0f)",
-                                                }}
-                                            >
-                                                <IconMicrophoneOff size={14} color="#fff" />
-                                            </Box>
-                                        )}
-                                    </Box>
-                                    <Stack align="center" gap={6}>
-                                        <Text fw={600} size="lg">
-                                            {remoteUser.name}
-                                        </Text>
-                                        <Text c="dimmed" size="sm">
-                                            Camera is off
-                                        </Text>
-                                    </Stack>
-                                </>
-                            )}
-                        </Stack>
-                    )}
-
-                    {/* Active remote video */}
-                    <video
-                        ref={remoteVideoRef}
-                        style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                            display: remoteTileId === null ? "none" : "block",
-                        }}
-                        autoPlay
-                        playsInline
-                    />
-
-
-                </Box>
-
-                {/* Local video PIP — bottom-right */}
-                <Box
-                    pos="absolute"
-                    onMouseEnter={() => setPipHovered(true)}
-                    onMouseLeave={() => setPipHovered(false)}
-                    style={{
-                        bottom: 90,
-                        right: 16,
-                        zIndex: 10,
-                        transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
-                    }}
-                >
-                    {/* Minimize / restore toggle */}
-                    <Tooltip label={pipMinimized ? "Show self view" : "Hide self view"} position="left">
-                        <ActionIcon
-                            size={22}
-                            radius={999}
-                            variant="filled"
-                            color="dark"
-                            onClick={() => setPipMinimized((v) => !v)}
-                            style={{
-                                position: "absolute",
-                                top: pipMinimized ? -4 : 4,
-                                right: pipMinimized ? -4 : 4,
-                                zIndex: 12,
-                                border: "1.5px solid light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.15))",
-                                opacity: pipMinimized || pipHovered ? 0.85 : 0,
-                                transition: "opacity 0.15s ease",
-                                pointerEvents: pipMinimized || pipHovered ? "auto" : "none",
-                            }}
-                        >
-                            {pipMinimized ? <IconVideo size={12} /> : <IconX size={12} />}
-                        </ActionIcon>
-                    </Tooltip>
-
-                    {/* Minimised pill — small indicator (shown when minimized) */}
-                    {pipMinimized && (
-                        <Paper
-                            radius={999}
-                            onClick={() => setPipMinimized(false)}
-                            style={{
-                                width: 40,
-                                height: 40,
-                                overflow: "hidden",
-                                border: "2px solid var(--mantine-color-primary-7)",
-                                background: "radial-gradient(circle, light-dark(#e8e8f0, #1a1a2e), light-dark(#f0f0f4, #0f0f0f))",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                cursor: "pointer",
-                            }}
-                        >
-                            <IconVideo size={18} color="light-dark(rgba(0,0,0,0.4), rgba(255,255,255,0.5))" />
-                        </Paper>
-                    )}
-
-                    {/* Full PIP — always mounted to preserve Chime tile binding, hidden when minimized */}
-                    <Box style={pipMinimized ? { position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" } : undefined}>
-                        <Paper
-                            radius="md"
-                            style={{
-                                width: 200,
-                                aspectRatio: "16/9",
-                                overflow: "hidden",
-                                border: "2px solid var(--mantine-color-primary-7)",
-                                background: cameraOn ? "light-dark(#e8e8ee, #1a1a1a)" : "radial-gradient(circle, light-dark(#e8e8f0, #1a1a2e), light-dark(#f0f0f4, #0f0f0f))",
-                                position: "relative",
-                            }}
-                        >
-                            {/* Always mount the <video> so localVideoRef stays
-                                available for Chime's videoTileDidUpdate binding.
-                                Hiding via display:none keeps the ref intact when
-                                the camera is toggled off then back on. */}
-                            <video
-                                ref={localVideoRef}
-                                style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                    display: cameraOn ? "block" : "none",
-                                }}
-                                autoPlay
-                                playsInline
-                                muted
-                            />
-                            {!cameraOn && (
                                 <Box
                                     style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
+                                        position: "absolute",
+                                        inset: -12,
+                                        borderRadius: "50%",
+                                        background: "radial-gradient(circle, rgba(255,165,0,0.3) 0%, transparent 70%)",
+                                        animation: "meet-room-glow 2s ease-in-out infinite",
                                     }}
-                                >
-                                    <Avatar
-                                        size={52}
-                                        radius={999}
-                                        color="primary"
-                                        src={localUser.photoUrl ?? undefined}
-                                        style={{ border: "2px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.1))" }}
-                                    >
-                                        {getInitials(localUser.name)}
-                                    </Avatar>
-                                </Box>
-                            )}
-
-                            {/* Local name overlay — inside PIP, bottom-left */}
-                            {cameraOn && (
-                                <Box
-                                    pos="absolute"
-                                    style={{
-                                        bottom: 5,
-                                        left: 6,
-                                        background: "rgba(0,0,0,0.55)",
-                                        backdropFilter: "blur(4px)",
-                                        borderRadius: 10,
-                                        padding: "2px 7px",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 4,
-                                    }}
-                                >
-                                    <Text size="10px" fw={500} c="white" style={{ lineHeight: 1.4 }}>
-                                        {localUser.name}
-                                    </Text>
-                                    {micOn ? (
-                                        <AudioWaveform levelRef={localAudioLevelRef} barHeight={8} barWidth={2} gap={1.5} />
-                                    ) : (
-                                        <IconMicrophoneOff size={9} color="var(--mantine-color-red-4)" />
-                                    )}
-                                </Box>
-                            )}
-                        </Paper>
-
-                        {/* Name below PIP when camera is off */}
-                        {!cameraOn && (
-                            <Text
-                                size="xs"
-                                c="dimmed"
-                                ta="center"
-                                fw={500}
-                                style={{ marginTop: 6, lineHeight: 1 }}
-                            >
-                                {localUser.name}
-                            </Text>
-                        )}
-                    </Box>
-                </Box>
-
-                {/* In-call consent banner — top centre, patient-side only */}
-                {consentPending && userKind === "patient" && (
-                    <Box
-                        pos="absolute"
-                        style={{
-                            top: 16,
-                            left: "50%",
-                            transform: "translateX(-50%)",
-                            zIndex: 20,
-                            width: "min(400px, 88%)",
-                        }}
-                    >
-                        <Paper
-                            style={{
-                                background: "light-dark(rgba(255, 255, 255, 0.92), rgba(10, 10, 25, 0.92))",
-                                backdropFilter: "blur(20px)",
-                                border: "1px solid rgba(99, 102, 241, 0.4)",
-                                borderRadius: 16,
-                                padding: "14px 18px",
-                            }}
-                        >
-                            <Group gap="xs" mb={6}>
-                                <IconShieldCheck size={18} color="var(--mantine-color-indigo-4)" />
-                                <Text fw={600} size="sm">
-                                    Health Records Request
+                                />
+                                <IconWifiOff size={40} color="var(--mantine-color-orange-4)" />
+                            </Box>
+                            <Stack align="center" gap={4}>
+                                <Text fw={600} size="md" c="#fff">
+                                    Reconnecting…
                                 </Text>
-                            </Group>
-                            <Text c="dimmed" size="xs" mb="md" style={{ lineHeight: 1.5 }}>
-                                {remoteUser.name} is requesting access to your health records
-                                for this consultation.
-                            </Text>
-                            <Group gap="xs">
-                                <Button
-                                    size="xs"
-                                    color="teal"
-                                    leftSection={<IconCheck size={13} />}
-                                    loading={acceptingConsent}
-                                    onClick={() => void handleAcceptConsent()}
-                                >
-                                    Accept
-                                </Button>
-                                <Button
-                                    size="xs"
-                                    color="red"
-                                    variant="subtle"
-                                    leftSection={<IconX size={13} />}
-                                    disabled={acceptingConsent}
-                                    onClick={() => void handleDeclineConsent()}
-                                >
-                                    Decline
-                                </Button>
-                            </Group>
-                        </Paper>
-                    </Box>
-                )}
-
-                {/* Live captions overlay — bottom centre */}
-                {showCaptions && transcriptLines.length > 0 && (
-                    <Box
-                        pos="absolute"
-                        style={{
-                            bottom: 16,
-                            left: "50%",
-                            transform: "translateX(-50%)",
-                            width: "min(640px, 60%)",
-                            background: "rgba(0,0,0,0.72)",
-                            backdropFilter: "blur(8px)",
-                            borderRadius: "var(--mantine-radius-md)",
-                            padding: "10px 16px",
-                            border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                        }}
-                    >
-                        <ScrollArea h={72} offsetScrollbars={false}>
-                            <Stack gap={2}>
-                                {transcriptLines.slice(-4).map((line) => (
-                                    <Text
-                                        key={line.id}
-                                        size="sm"
-                                        c={line.isFinal ? "white" : "dimmed"}
-                                        style={{ lineHeight: 1.4 }}
-                                    >
-                                        {line.text}
-                                    </Text>
-                                ))}
+                                <Text size="sm" c="rgba(255,255,255,0.65)">
+                                    {reconnectAttemptsRef.current > 0
+                                        ? `Attempt ${reconnectAttemptsRef.current} of ${MAX_RECONNECT_ATTEMPTS}`
+                                        : "Waiting for network…"}
+                                </Text>
                             </Stack>
-                        </ScrollArea>
+                        </Stack>
                     </Box>
                 )}
             </Box>
 
-            {/* ── Controls bar (iOS island) ─────────────────────────── */}
-            <Box
-                style={{
-                    position: "absolute",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    display: "flex",
-                    justifyContent: "center",
-                    padding: "12px 16px 24px",
-                    zIndex: 10,
-                    pointerEvents: "none",
-                }}
-            >
-                <Group
-                    justify="center"
-                    gap={8}
-                    style={{
-                        background: "light-dark(rgba(255,255,255,0.85), rgba(30,30,30,0.85))",
-                        backdropFilter: "blur(24px)",
-                        WebkitBackdropFilter: "blur(24px)",
-                        border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                        borderRadius: 999,
-                        padding: "6px 10px",
-                        boxShadow: "0 8px 32px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.5)), 0 0 0 0.5px light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06)) inset",
-                        pointerEvents: "auto",
-                    }}
-                >
-                    {/* Mic */}
-                    <Tooltip label={micOn ? "Mute" : "Unmute"} position="top">
-                        <ActionIcon
-                            size={40}
-                            radius={999}
-                            variant="subtle"
-                            color="gray"
-                            onClick={() => void toggleMic()}
-                            style={{
-                                background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                                color: micOn
-                                    ? "light-dark(var(--mantine-color-text), #fff)"
-                                    : "var(--mantine-color-red-6)",
-                                transition: "background 0.15s ease, color 0.15s ease",
-                            }}
-                        >
-                            {micOn ? <IconMicrophone size={20} /> : <IconMicrophoneOff size={20} />}
-                        </ActionIcon>
-                    </Tooltip>
+            {/* Chat sidebar removed as per request */}
 
-                    {/* Camera */}
-                    <Tooltip label={cameraOn ? "Turn off camera" : "Turn on camera"} position="top">
-                        <ActionIcon
-                            size={40}
-                            radius={999}
-                            variant="subtle"
-                            color="gray"
-                            onClick={() => void toggleCamera()}
-                            style={{
-                                background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                                color: cameraOn
-                                    ? "light-dark(var(--mantine-color-text), #fff)"
-                                    : "var(--mantine-color-red-6)",
-                                transition: "background 0.15s ease, color 0.15s ease",
-                            }}
-                        >
-                            {cameraOn ? <IconVideo size={20} /> : <IconVideoOff size={20} />}
-                        </ActionIcon>
-                    </Tooltip>
+            {/* ── Controls bar ──────────────────────────────────── */}
+            <ControlBar
+                micOn={micOn}
+                cameraOn={cameraOn}
+                chatOpen={chatOpen}
+                screenShareOn={screenShareOn}
+                noiseCancellationOn={noiseCancellationOn}
+                backgroundBlurOn={backgroundBlurOn}
+                unreadCount={unreadCount}
+                userKind={userKind}
+                networkStats={networkStats}
+                audioInputs={audioInputs}
+                videoInputs={videoInputs}
+                selectedAudioInput={selectedAudioInput}
+                selectedVideoInput={selectedVideoInput}
+                onToggleMic={() => void toggleMic()}
+                onToggleCamera={() => void toggleCamera()}
+                onToggleChat={() => setChatOpen((v) => !v)}
+                onToggleScreenShare={() => void toggleScreenShare()}
+                onToggleNoiseCancellation={() => void toggleNoiseCancellation()}
+                onToggleBackgroundBlur={() => void toggleBackgroundBlur()}
+                onSwitchAudioInput={(id) => void switchAudioInput(id)}
+                onSwitchVideoInput={(id) => void switchVideoInput(id)}
+                onEnd={handleEnd}
+                onMinimize={onMinimize}
+                onNavigateDashboard={() => router.push("/doctor/dashboard")}
+            />
 
-                    {/* Settings button */}
-                    <Tooltip label="Settings" position="top">
-                        <ActionIcon
-                            size={40}
-                            radius={999}
-                            variant={settingsOpen ? "light" : "subtle"}
-                            color={settingsOpen ? "primary" : "gray"}
-                            onClick={() => setSettingsOpen((v) => !v)}
-                            style={{
-                                background: settingsOpen ? undefined : "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                                color: "light-dark(var(--mantine-color-text), #fff)",
-                                transition: "background 0.15s ease",
-                            }}
-                        >
-                            <IconSettings size={20} />
-                        </ActionIcon>
-                    </Tooltip>
-
-                    {/* Settings modal */}
-                    <Modal
-                        opened={settingsOpen}
-                        onClose={() => setSettingsOpen(false)}
-                        title="Settings"
-                        radius="lg"
-                        size="sm"
-                        centered
-                        zIndex={10000}
-                        overlayProps={{ backgroundOpacity: 0.35, blur: 4 }}
-                        styles={{
-                            header: {
-                                background: "light-dark(#fff, #1a1a1e)",
-                                borderBottom: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                            },
-                            title: { fontWeight: 700, fontSize: 14 },
-                            body: { padding: 0, background: "light-dark(#fff, #1a1a1e)" },
-                            content: { background: "light-dark(#fff, #1a1a1e)" },
-                        }}
-                    >
-                        {/* ── Devices ── */}
-                        <Box style={{ padding: "12px 16px" }}>
-                            <Text size="10px" fw={700} c="dimmed" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                                Devices
-                            </Text>
-
-                            <Stack gap="xs">
-                                <Box>
-                                    <Group gap={6} mb={4}>
-                                        <IconMicrophone size={13} color="light-dark(rgba(0,0,0,0.4), rgba(255,255,255,0.5))" />
-                                        <Text size="xs" c="dimmed">Microphone</Text>
-                                    </Group>
-                                    <Select
-                                        size="xs"
-                                        data={audioInputs}
-                                        value={selectedAudioInput}
-                                        onChange={(val) => { if (val) void switchAudioInput(val); }}
-                                        allowDeselect={false}
-                                        styles={{
-                                            input: {
-                                                background: "light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06))",
-                                                border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                                                fontSize: 12,
-                                            },
-                                            dropdown: {
-                                                background: "light-dark(rgba(255,255,255,0.98), rgba(30,30,34,0.98))",
-                                                border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                                            },
-                                            option: { fontSize: 12 },
-                                        }}
-                                    />
-                                </Box>
-
-                                <Box>
-                                    <Group gap={6} mb={4}>
-                                        <IconVideo size={13} color="light-dark(rgba(0,0,0,0.4), rgba(255,255,255,0.5))" />
-                                        <Text size="xs" c="dimmed">Camera</Text>
-                                    </Group>
-                                    <Select
-                                        size="xs"
-                                        data={videoInputs}
-                                        value={selectedVideoInput}
-                                        onChange={(val) => { if (val) void switchVideoInput(val); }}
-                                        allowDeselect={false}
-                                        styles={{
-                                            input: {
-                                                background: "light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06))",
-                                                border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                                                fontSize: 12,
-                                            },
-                                            dropdown: {
-                                                background: "light-dark(rgba(255,255,255,0.98), rgba(30,30,34,0.98))",
-                                                border: "1px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-                                            },
-                                            option: { fontSize: 12 },
-                                        }}
-                                    />
-                                </Box>
-                            </Stack>
-                        </Box>
-
-                        <Divider color="light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))" />
-
-                        {/* ── Features ── */}
-                        <Box style={{ padding: "12px 16px" }}>
-                            <Text size="10px" fw={700} c="dimmed" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                                Features
-                            </Text>
-                            <Stack gap={8}>
-                                <Group justify="space-between">
-                                    <Group gap={8}>
-                                        <IconWaveSine size={14} color={noiseCancellationOn ? "var(--mantine-color-teal-4)" : "light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.4))"} />
-                                        <Text size="xs">Noise cancellation</Text>
-                                    </Group>
-                                    <Switch
-                                        size="xs"
-                                        checked={noiseCancellationOn}
-                                        onChange={() => void toggleNoiseCancellation()}
-                                        styles={{ track: { cursor: "pointer" } }}
-                                    />
-                                </Group>
-                                <Group justify="space-between">
-                                    <Group gap={8}>
-                                        <IconWaveSine size={14} color={showCaptions ? "var(--mantine-color-violet-4)" : "light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.4))"} />
-                                        <Text size="xs">Live captions</Text>
-                                    </Group>
-                                    <Switch
-                                        size="xs"
-                                        checked={showCaptions}
-                                        onChange={() => setShowCaptions((v) => !v)}
-                                        styles={{ track: { cursor: "pointer" } }}
-                                    />
-                                </Group>
-                            </Stack>
-                        </Box>
-
-                        <Divider color="light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))" />
-
-                        {/* ── Network ── */}
-                        <Box style={{ padding: "12px 16px 14px" }}>
-                            <Text size="10px" fw={700} c="dimmed" style={{ textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                                Network
-                            </Text>
-                            {networkStats ? (() => {
-                                const qualityColor = {
-                                    excellent: "teal",
-                                    good: "green",
-                                    fair: "yellow",
-                                    poor: "red",
-                                }[networkStats.quality];
-                                const qualityPercent = {
-                                    excellent: 100,
-                                    good: 75,
-                                    fair: 45,
-                                    poor: 15,
-                                }[networkStats.quality];
-                                return (
-                                    <Stack gap={10}>
-                                        {/* Quality bar */}
-                                        <Box>
-                                            <Group justify="space-between" mb={4}>
-                                                <Group gap={6}>
-                                                    <IconWifi size={13} color={`var(--mantine-color-${qualityColor}-4)`} />
-                                                    <Text size="xs" fw={500}>Connection</Text>
-                                                </Group>
-                                                <Text size="xs" fw={600} c={`${qualityColor}.4`} style={{ textTransform: "capitalize" }}>
-                                                    {networkStats.quality}
-                                                </Text>
-                                            </Group>
-                                            <Progress
-                                                value={qualityPercent}
-                                                color={qualityColor}
-                                                size={4}
-                                                radius="xl"
-                                                style={{ background: "light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06))" }}
-                                            />
-                                        </Box>
-
-                                        {/* Stat grid */}
-                                        <Group grow gap="xs">
-                                            <Paper
-                                                radius="md"
-                                                style={{
-                                                    background: "light-dark(rgba(0,0,0,0.03), rgba(255,255,255,0.04))",
-                                                    border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                                                    padding: "8px 10px",
-                                                    textAlign: "center",
-                                                }}
-                                            >
-                                                <Text size="10px" c="dimmed" style={{ lineHeight: 1, marginBottom: 4 }}>Latency</Text>
-                                                <Text size="xs" fw={700} style={{ lineHeight: 1 }}>{networkStats.rtt} ms</Text>
-                                            </Paper>
-                                            <Paper
-                                                radius="md"
-                                                style={{
-                                                    background: "light-dark(rgba(0,0,0,0.03), rgba(255,255,255,0.04))",
-                                                    border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                                                    padding: "8px 10px",
-                                                    textAlign: "center",
-                                                }}
-                                            >
-                                                <Text size="10px" c="dimmed" style={{ lineHeight: 1, marginBottom: 4 }}>Loss</Text>
-                                                <Text size="xs" fw={700} style={{ lineHeight: 1 }}>{networkStats.packetLoss}%</Text>
-                                            </Paper>
-                                        </Group>
-
-                                        <Group grow gap="xs">
-                                            <Paper
-                                                radius="md"
-                                                style={{
-                                                    background: "light-dark(rgba(0,0,0,0.03), rgba(255,255,255,0.04))",
-                                                    border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                                                    padding: "8px 10px",
-                                                }}
-                                            >
-                                                <Group gap={4} justify="center">
-                                                    <IconArrowUp size={11} color="var(--mantine-color-teal-4)" />
-                                                    <Text size="10px" c="dimmed" style={{ lineHeight: 1 }}>Upload</Text>
-                                                </Group>
-                                                <Text size="xs" fw={700} ta="center" style={{ lineHeight: 1, marginTop: 4 }}>
-                                                    {networkStats.uplinkKbps > 1024
-                                                        ? `${(networkStats.uplinkKbps / 1024).toFixed(1)} Mbps`
-                                                        : `${networkStats.uplinkKbps} Kbps`
-                                                    }
-                                                </Text>
-                                            </Paper>
-                                            <Paper
-                                                radius="md"
-                                                style={{
-                                                    background: "light-dark(rgba(0,0,0,0.03), rgba(255,255,255,0.04))",
-                                                    border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
-                                                    padding: "8px 10px",
-                                                }}
-                                            >
-                                                <Group gap={4} justify="center">
-                                                    <IconArrowDown size={11} color="var(--mantine-color-violet-4)" />
-                                                    <Text size="10px" c="dimmed" style={{ lineHeight: 1 }}>Download</Text>
-                                                </Group>
-                                                <Text size="xs" fw={700} ta="center" style={{ lineHeight: 1, marginTop: 4 }}>
-                                                    {networkStats.downlinkKbps > 1024
-                                                        ? `${(networkStats.downlinkKbps / 1024).toFixed(1)} Mbps`
-                                                        : `${networkStats.downlinkKbps} Kbps`
-                                                    }
-                                                </Text>
-                                            </Paper>
-                                        </Group>
-                                    </Stack>
-                                );
-                            })() : (
-                                <Group gap={6} justify="center" py={8}>
-                                    <Loader size={12} color="dimmed" />
-                                    <Text size="xs" c="dimmed">Measuring…</Text>
-                                </Group>
-                            )}
-                        </Box>
-                    </Modal>
-
-                    {/* Separator + Home (doctor only) + End call */}
-                    <Box style={{ width: 1, height: 20, background: "light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))" }} />
-
-                    {userKind === "doctor" && (
-                        <Tooltip label="Go to Dashboard" position="top">
-                            <ActionIcon
-                                size={40}
-                                radius={999}
-                                variant="light"
-                                color="gray"
-                                onClick={() => {
-                                    onMinimize?.();
-                                    router.push("/doctor/dashboard");
-                                }}
-                                style={{
-                                    background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                                    color: "light-dark(rgba(0,0,0,0.7), rgba(255,255,255,0.85))",
-                                }}
-                            >
-                                <IconHome size={20} />
-                            </ActionIcon>
-                        </Tooltip>
-                    )}
-
-                    <Tooltip label="End call" position="top">
-                        <ActionIcon
-                            size={40}
-                            radius={999}
-                            color="red"
-                            variant="filled"
-                            onClick={handleEnd}
-                            style={{ boxShadow: "0 4px 16px rgba(239,68,68,0.4)" }}
-                        >
-                            <IconPhone
-                                size={20}
-                                style={{ transform: "rotate(135deg)" }}
-                            />
-                        </ActionIcon>
-                    </Tooltip>
-                </Group>
-            </Box>
+            {/* ── Post-call feedback modal ────────────────────── */}
+            <FeedbackModal
+                opened={feedbackOpen}
+                requestId={requestId}
+                onDismiss={handleFeedbackDismiss}
+            />
         </Box>
     );
 }

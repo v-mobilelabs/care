@@ -2,15 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
 import { Provider } from "@/ui/providers/provider";
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
-import { AuthProvider } from "@/ui/providers/auth-provider";
-import { QueryProvider } from "@/ui/providers/query-provider";
-import { MeetSessionProvider } from "@/lib/meet/meet-session-context";
-import { PersistentMeetOverlay } from "@/lib/meet/persistent-meet-overlay";
-import { MeetAutoRejoin } from "@/lib/meet/meet-auto-rejoin";
-import { ActiveCallIsland } from "@/lib/meet/active-call-island";
-import { WaitingQueueIsland } from "@/lib/meet/waiting-queue-island";
-import { QueuePositionIsland } from "@/lib/meet/queue-position-island";
 import "./globals.css";
+import { get } from "http";
+import { getServerUser } from "@/lib/api/server-prefetch";
+import { GetProfileUseCase } from "@/data/profile";
 
 const roboto = Roboto({
   weight: ["400", "500", "700"],
@@ -44,12 +39,13 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const nonce = crypto.randomUUID();
+  const { user, profile } = await getData(); // Ensure user data is fetched on the server for proper hydration of auth state on the client
   return (
     <html lang="en"  {...mantineHtmlProps}>
       <head>
@@ -57,21 +53,18 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
       </head>
       <body className={roboto.variable}>
-        <Provider>
-          <AuthProvider>
-            <QueryProvider>
-              <MeetSessionProvider>
-                {children}
-                <PersistentMeetOverlay />
-                <MeetAutoRejoin />
-                <ActiveCallIsland />
-                <WaitingQueueIsland />
-                <QueuePositionIsland />
-              </MeetSessionProvider>
-            </QueryProvider>
-          </AuthProvider>
+        <Provider user={user} profile={profile}>
+          {children}
         </Provider>
       </body>
     </html>
   );
+}
+
+async function getData() {
+  const user = await getServerUser();
+  const profile = await new GetProfileUseCase().execute(
+    GetProfileUseCase.validate({ userId: user?.uid }),
+  );
+  return { user, profile };
 }

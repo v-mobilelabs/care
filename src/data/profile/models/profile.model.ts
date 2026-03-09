@@ -16,6 +16,8 @@ export interface ProfileDocument {
   email?: string;
   phone?: string;
   photoUrl?: string;
+  /** Self-identified gender e.g. "man", "woman", "non-binary", "prefer-not-to-say" */
+  gender?: string;
   city?: string;
   country?: string;
   updatedAt: Timestamp;
@@ -30,20 +32,10 @@ export interface ProfileDto {
   email?: string;
   phone?: string;
   photoUrl?: string;
-  // ── Patient health fields (sourced from patients/{userId}) ────────────────
   dateOfBirth?: string;
-  sex?: "male" | "female";
-  height?: number;
-  weight?: number;
-  waistCm?: number;
-  neckCm?: number;
-  hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   country?: string;
   city?: string;
-  foodPreferences?: string[];
-  /** ISO-8601 timestamp of when the user accepted the consent terms. */
-  consentedAt?: string;
+  gender?: string;
   updatedAt: string; // ISO-8601
 }
 
@@ -67,17 +59,8 @@ export function toProfileDto(
     photoUrl: base.photoUrl,
     city: base.city,
     country: base.country,
-    // Patient health fields
     dateOfBirth: patient?.dateOfBirth,
-    sex: patient?.sex,
-    height: patient?.height,
-    weight: patient?.weight,
-    waistCm: patient?.waistCm,
-    neckCm: patient?.neckCm,
-    hipCm: patient?.hipCm,
-    activityLevel: patient?.activityLevel,
-    foodPreferences: patient?.foodPreferences,
-    consentedAt: patient?.consentedAt?.toDate().toISOString(),
+    gender: patient?.sex,
     updatedAt: base.updatedAt.toDate().toISOString(),
   };
 }
@@ -93,6 +76,7 @@ export const UpsertProfileSchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
   photoUrl: z.string().url().optional(),
+  gender: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
 });

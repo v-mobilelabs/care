@@ -9,13 +9,18 @@ export interface MeetParticipant {
 /** All data needed to render the meeting room — cached as a single query. */
 export interface MeetSessionData {
   requestId: string;
-  joinInfo: AttendeeJoinInfo;
+  /** Chime join credentials — null while the call is still pending. */
+  joinInfo: AttendeeJoinInfo | null;
   localUser: MeetParticipant;
   remoteUser: MeetParticipant;
   exitRoute: string;
   userKind: "doctor" | "patient";
   localUserId: string;
   doctorId: string | null;
+  /** DM conversation ID for in-call chat (`${doctorId}_${patientId}`). */
+  conversationId: string | null;
+  /** The patient's UID — used to derive the recipientId for sending messages. */
+  patientId: string | null;
 }
 
 /** TanStack Query key for meet session data. */

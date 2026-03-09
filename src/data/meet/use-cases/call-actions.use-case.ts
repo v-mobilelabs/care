@@ -24,10 +24,12 @@ export class RejectCallUseCase {
     await meetRepository.updateStatus(requestId, "rejected");
 
     await Promise.all([
-      // Remove the node entirely so the patient's call state returns to idle
-      // cleanly. A stale "rejected" node would cause the notification to
-      // re-fire on every page revisit.
-      rtdb.ref(`call-state/${request.patientId}`).remove(),
+      // Update patient's call state to "rejected" so they are notified in
+      // the waiting room. The patient-side listener will handle cleanup and
+      // navigation after showing the rejection notification.
+      rtdb
+        .ref(`call-state/${request.patientId}`)
+        .update({ status: "rejected" }),
       rtdb.ref(`call-requests/${doctorId}/${requestId}`).remove(),
     ]);
 
@@ -80,6 +82,9 @@ export class EndCallUseCase {
       rtdb.ref(`call-requests/${request.doctorId}/${requestId}`).remove(),
       // Restore the doctor's presence status to online once the call is over
       rtdb.ref(`presence/${request.doctorId}`).update({ status: "online" }),
+      // Write call-ended signal for both participants so the RTDB listener
+      // on the other side fires even if the client-side write was missed.
+      rtdb.ref(`call-ended/${requestId}/${userId}`).set(true),
     ]);
 
     // Recompute queue positions for remaining requests

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
 import { GetMeetingJoinInfoUseCase } from "@/data/meet";
 import { meetRepository } from "@/data/meet/repositories/meet.repository";
+import { buildConversationId } from "@/lib/messaging/conversation-id";
 import type { MeetSessionData } from "@/app/meet/[requestId]/_keys";
 
 // GET /api/meet/[requestId]/session — full session data (join info + metadata)
@@ -53,6 +54,11 @@ export const GET = WithContext(
       userKind: isDoctor ? "doctor" : "patient",
       localUserId: user.uid,
       doctorId: callRequest?.doctorId ?? null,
+      conversationId:
+        callRequest?.doctorId && callRequest?.patientId
+          ? buildConversationId(callRequest.doctorId, callRequest.patientId)
+          : null,
+      patientId: callRequest?.patientId ?? null,
     };
 
     return NextResponse.json(session);

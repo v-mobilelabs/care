@@ -1,9 +1,8 @@
-"use client";
 import dynamic from "next/dynamic";
 import { AppShell, Button, Group, Skeleton } from "@mantine/core";
 import { IconMessageChatbot } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
 import { Logo } from "../brand/logo";
+import Link from "next/link";
 
 const ColorSchemeToggle = dynamic(
   () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
@@ -14,7 +13,6 @@ const ColorSchemeToggle = dynamic(
 );
 
 export function LandingHeader() {
-  const router = useRouter();
   return (
     <AppShell.Header px="md">
       <Group h="100%" justify="space-between">
@@ -26,7 +24,8 @@ export function LandingHeader() {
             size="sm"
             radius="xl"
             leftSection={<IconMessageChatbot size={15} />}
-            onClick={() => router.push("/chat")}
+            component={Link}
+            href="/chat"
           >
             Start Assessment
           </Button>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { profileRepository } from "../repositories/profile.repository";
+import { patientRepository } from "@/data/patients";
 import { dependentRepository } from "@/data/dependents";
 import { ListConditionsUseCase, type ConditionDto } from "@/data/conditions";
 import { ListMedicationsUseCase, type MedicationDto } from "@/data/medications";
@@ -276,9 +277,10 @@ export class GetUserSnapshotUseCase extends UseCase<
   protected async run(input: GetUserSnapshotInput): Promise<UserSnapshotDto> {
     const { userId, dependentId } = input;
 
-    const [userProfile, dependentProfile, conditions, medications, soapNotes] =
+    const [userProfile, patientData, dependentProfile, conditions, medications, soapNotes] =
       await Promise.all([
         profileRepository.get(userId).catch(() => null),
+        !dependentId ? patientRepository.get(userId).catch(() => null) : Promise.resolve(null),
         dependentId
           ? dependentRepository.findById(userId, dependentId).catch(() => null)
           : Promise.resolve(null),
@@ -293,7 +295,7 @@ export class GetUserSnapshotUseCase extends UseCase<
           .catch(() => []),
       ]);
 
-    const activeProfile = dependentId ? dependentProfile : userProfile;
+    const activeProfile = dependentId ? dependentProfile : patientData;
 
     const data: Omit<UserSnapshotDto, "context"> = {
       dateOfBirth: activeProfile?.dateOfBirth,
@@ -304,9 +306,9 @@ export class GetUserSnapshotUseCase extends UseCase<
       neckCm: activeProfile?.neckCm,
       hipCm: activeProfile?.hipCm,
       activityLevel: activeProfile?.activityLevel,
-      country: activeProfile?.country,
-      city: activeProfile?.city,
-      foodPreferences: userProfile?.foodPreferences,
+      country: userProfile?.country,
+      city: userProfile?.city,
+      foodPreferences: patientData?.foodPreferences,
       conditions,
       medications,
       lastSoapNote: soapNotes[0],

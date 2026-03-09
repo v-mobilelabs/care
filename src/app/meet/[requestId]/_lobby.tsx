@@ -245,8 +245,28 @@ export function PreJoinLobby({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                animation: "lobby-fade-in 0.35s ease-out",
             }}
         >
+            {/* Lobby entrance animations */}
+            <style>{`
+                @keyframes lobby-fade-in {
+                    from { opacity: 0; }
+                    to   { opacity: 1; }
+                }
+                @keyframes lobby-slide-up {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes lobby-scale-in {
+                    from { opacity: 0; transform: scale(0.95); }
+                    to   { opacity: 1; transform: scale(1); }
+                }
+                @keyframes lobby-btn-pop {
+                    from { opacity: 0; transform: scale(0.85); }
+                    to   { opacity: 1; transform: scale(1); }
+                }
+            `}</style>
             <Stack align="center" gap="lg" style={{ maxWidth: 520, width: "100%" }} p="md">
                 {/* Video preview */}
                 <Paper
@@ -258,6 +278,7 @@ export function PreJoinLobby({
                         border: "2px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.1))",
                         background: "radial-gradient(ellipse at 50% 40%, light-dark(#e8e8f0, #1a1a2e) 0%, light-dark(#f0f0f4, #0f0f0f) 70%)",
                         position: "relative",
+                        animation: "lobby-scale-in 0.4s ease-out 0.05s both",
                     }}
                 >
                     {loading && (
@@ -437,6 +458,7 @@ export function PreJoinLobby({
                             background: "light-dark(rgba(255,255,255,0.7), rgba(255,255,255,0.04))",
                             border: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
                             padding: "14px 16px",
+                            animation: "lobby-slide-up 0.4s ease-out 0.15s both",
                         }}
                     >
                         <Stack gap="sm">
@@ -501,7 +523,7 @@ export function PreJoinLobby({
                 )}
 
                 {/* Call info */}
-                <Stack align="center" gap={6}>
+                <Stack align="center" gap={6} style={{ animation: "lobby-slide-up 0.4s ease-out 0.2s both" }}>
                     <Text fw={600} size="lg">
                         Ready to join?
                     </Text>
@@ -535,6 +557,14 @@ export function PreJoinLobby({
                         minWidth: 160,
                         boxShadow:
                             "0 2px 8px light-dark(rgba(0,0,0,0.1), rgba(0,0,0,0.3)), 0 0 0 1px rgba(99,102,241,0.25)",
+                        animation: "lobby-btn-pop 0.35s ease-out 0.3s both",
+                        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                    }}
+                    onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.currentTarget.style.transform = "scale(1.04)";
+                    }}
+                    onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.currentTarget.style.transform = "scale(1)";
                     }}
                 >
                     Join now

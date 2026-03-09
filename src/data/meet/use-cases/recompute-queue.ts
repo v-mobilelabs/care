@@ -22,36 +22,19 @@ export async function recomputeQueuePositions(doctorId: string): Promise<void> {
     .filter(([, v]) => v.status === "pending")
     .sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
 
-  const updates: Promise<void>[] = [];
-
-  // Update the public queue-size counter so patients can see how many are waiting
-  updates.push(
-    rtdb
-      .ref(`queue-size/${doctorId}`)
-      .set(pending.length)
-      .then(() => undefined),
-  );
+  // Build a single atomic multi-path update so every listener receives one
+  // consistent snapshot instead of N intermediate re-renders.
+  const flatUpdates: Record<string, unknown> = {};
+  flatUpdates[`queue-size/${doctorId}`] = pending.length;
 
   for (let i = 0; i < pending.length; i++) {
     const [reqId, entry] = pending[i];
     const position = i + 1;
-
-    updates.push(
-      rtdb
-        .ref(`call-requests/${doctorId}/${reqId}/queuePosition`)
-        .set(position)
-        .then(() => undefined),
-    );
-
+    flatUpdates[`call-requests/${doctorId}/${reqId}/queuePosition`] = position;
     if (entry.patientId) {
-      updates.push(
-        rtdb
-          .ref(`call-state/${entry.patientId}/queuePosition`)
-          .set(position)
-          .then(() => undefined),
-      );
+      flatUpdates[`call-state/${entry.patientId}/queuePosition`] = position;
     }
   }
 
-  await Promise.all(updates);
+  await rtdb.ref().update(flatUpdates);
 }

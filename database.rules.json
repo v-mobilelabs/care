@@ -45,11 +45,17 @@
     },
 
     // Patient call state — only the patient themselves can read their state.
-    // Writes are performed exclusively by the Admin SDK (server-side API routes).
+    // Reads: patient reads their own node.
+    // Writes: Admin SDK handles most writes. The patient may only set
+    // status to "ended" so the client can optimistically clear the state
+    // before the server-side end-call API completes (avoids navigation lag).
     "call-state": {
       "$patientId": {
         ".read": "auth != null && auth.uid === $patientId",
-        ".write": false
+        ".write": false,
+        "status": {
+          ".write": "auth != null && auth.uid === $patientId && newData.val() === 'ended'"
+        }
       }
     },
 
@@ -73,6 +79,103 @@
           ".read": "auth != null && auth.uid === $doctorId",
           // Any authenticated user can write (patient writes acceptance here).
           ".write": "auth != null"
+        }
+      }
+    },
+
+    // ── Direct messaging ──────────────────────────────────────────────────────
+    // Conversation data: /dm/{doctorId}_{patientId}/...
+    "dm": {
+      "$convId": {
+        // Participants can read everything under the conversation.
+        ".read": "auth != null && (data.child('info/doctorId').val() === auth.uid || data.child('info/patientId').val() === auth.uid)",
+
+        "info": {
+          // Only allow initial creation by a participant.
+          ".write": "auth != null && !data.exists() && (newData.child('doctorId').val() === auth.uid || newData.child('patientId').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['doctorId', 'patientId', 'doctorName', 'patientName', 'createdAt'])",
+          "doctorId": { ".validate": "newData.isString()" },
+          "patientId": { ".validate": "newData.isString()" },
+          "doctorName": { ".validate": "newData.isString()" },
+          "patientName": { ".validate": "newData.isString()" },
+          "createdAt": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        },
+
+        "messages": {
+          "$msgId": {
+            // Only a conversation participant can write, and senderId must match auth.uid.
+            ".write": "auth != null && newData.child('senderId').val() === auth.uid && (root.child('dm/' + $convId + '/info/doctorId').val() === auth.uid || root.child('dm/' + $convId + '/info/patientId').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['senderId', 'text', 'createdAt'])",
+            "senderId": { ".validate": "newData.isString()" },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 2000"
+            },
+            "createdAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "typing": {
+          "$uid": {
+            // Only the owner can write their own typing indicator; must be a participant.
+            ".write": "auth != null && auth.uid === $uid && (root.child('dm/' + $convId + '/info/doctorId').val() === auth.uid || root.child('dm/' + $convId + '/info/patientId').val() === auth.uid)",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+
+        "$other": { ".validate": false }
+      }
+    },
+
+    // Per-user inbox: /dm-inbox/{uid}/{conversationId}
+    "dm-inbox": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".indexOn": ["lastMessageAt"],
+        "$convId": {
+          // Owner can write to their own inbox, OR a conversation participant can
+          // update the other person's inbox (e.g. mark unread on new message).
+          ".write": "auth != null && (auth.uid === $uid || root.child('dm/' + $convId + '/info/doctorId').val() === auth.uid || root.child('dm/' + $convId + '/info/patientId').val() === auth.uid)",
+          "otherUid": { ".validate": "newData.isString()" },
+          "otherName": { ".validate": "newData.isString()" },
+          "lastMessage": { ".validate": "newData.isString()" },
+          "lastMessageAt": { ".validate": "newData.isNumber()" },
+          "unread": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
+    // ── In-app notifications ────────────────────────────────────────────────
+    // Per-user notification list: /notifications/{uid}/{notificationId}
+    // Created server-side (Admin SDK). Users can only read their own and
+    // update the `read` field.
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".indexOn": ["createdAt"],
+        "$notifId": {
+          // Users can only update the `read` field on their own notifications.
+          "read": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
+    },
+
+    // ── Call-ended signaling ────────────────────────────────────────────
+    // When either participant ends a call they write their UID here.
+    // The other participant listens and tears down their local session.
+    // Any authenticated user can read (requestIds are random UUIDs).
+    // Each user can only write under their own UID.
+    "call-ended": {
+      "$requestId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isBoolean()"
         }
       }
     },

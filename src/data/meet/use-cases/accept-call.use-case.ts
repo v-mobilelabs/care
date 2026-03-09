@@ -8,10 +8,20 @@ import { encounterRepository } from "@/data/encounters";
 import { recomputeQueuePositions } from "./recompute-queue";
 
 export class AcceptCallUseCase {
+  /**
+   * Execute the critical path: create Chime meeting/attendees, update status,
+   * and notify the patient via RTDB. Returns join info ASAP.
+   *
+   * Call `deferredWork()` on the returned result to run non-critical background
+   * tasks (consent invite, encounter creation, DM setup, queue recompute).
+   */
   async execute(params: {
     requestId: string;
     doctorId: string;
-  }): Promise<AttendeeJoinInfo> {
+  }): Promise<{
+    joinInfo: AttendeeJoinInfo;
+    deferredWork: () => Promise<void>;
+  }> {
     const { requestId, doctorId } = params;
 
     const request = await meetRepository.get(requestId);
@@ -23,90 +33,41 @@ export class AcceptCallUseCase {
         `Cannot accept a call with status "${request.status}".`,
       );
 
-    // Create the Chime meeting
+    // ── Critical path: Chime meeting + attendees (parallelised) ────────────
     const meeting = await createChimeMeeting(requestId);
     const meetingId = meeting.MeetingId!;
 
-    // Create attendees for both doctor and patient
-    const [doctorAttendee, patientAttendee] = await Promise.all([
-      createChimeAttendee(meetingId, `doctor-${doctorId}`),
-      createChimeAttendee(meetingId, `patient-${request.patientId}`),
-    ]);
+    const [doctorAttendee, patientAttendee, doctorProfileSnap] =
+      await Promise.all([
+        createChimeAttendee(meetingId, `doctor-${doctorId}`),
+        createChimeAttendee(meetingId, `patient-${request.patientId}`),
+        db.collection("profiles").doc(doctorId).get(),
+      ]);
 
-    // Store meeting data
+    const doctorPhotoUrl =
+      (doctorProfileSnap.data() as { photoUrl?: string | null } | undefined)
+        ?.photoUrl ?? null;
+
     const chimeMeetingData = JSON.stringify({
       meeting,
       patientAttendee,
       doctorAttendee,
     });
 
-    // Fetch doctor's photo URL to store alongside the call request
-    const doctorProfileSnap = await db
-      .collection("profiles")
-      .doc(doctorId)
-      .get();
-    const doctorPhotoUrl =
-      (doctorProfileSnap.data() as { photoUrl?: string | null } | undefined)
-        ?.photoUrl ?? null;
+    // ── Critical: persist status + notify patient (parallel) ───────────────
+    const conversationId = `${doctorId}_${request.patientId}`;
 
-    await meetRepository.updateStatus(requestId, "accepted", {
-      chimeMeetingId: meetingId,
-      chimeMeetingData,
-      doctorPhotoUrl,
-    });
-
-    // Send a consent invite to the patient (source: "call") so they can
-    // explicitly accept or decline the doctor's access to their health records.
-    // Only create the invite if no accepted relationship already exists —
-    // we don't want to downgrade an existing accepted connection back to pending.
-    const existing = await doctorPatientRepository.get(
-      doctorId,
-      request.patientId,
-    );
-    if (existing?.status !== "accepted") {
-      const patientProfileSnap = await db
-        .collection("profiles")
-        .doc(request.patientId)
-        .get();
-      const patientName = patientProfileSnap.exists
-        ? (patientProfileSnap.data() as { name?: string }).name
-        : undefined;
-
-      await doctorPatientRepository.invite({
-        doctorId,
-        patientId: request.patientId,
-        source: "call",
-        patientName,
-      });
-      // Notify the patient inside the active meeting room via RTDB so they can
-      // accept right from the call UI.
-      // Path: /in-call-consent/{patientId}/{requestId} — scoped to patient so
-      // RTDB security rules can allow only that patient to read/write.
-      await rtdb.ref(`in-call-consent/${request.patientId}/${requestId}`).set({
-        doctorId,
-        status: "pending",
-      });
-    }
-
-    // Create an encounter record via the encounters repository
-    await encounterRepository.create({
-      patientId: request.patientId,
-      patientName: request.patientName,
-      patientPhotoUrl: request.patientPhotoUrl,
-      doctorId,
-      doctorName: request.doctorName,
-      doctorPhotoUrl,
-      requestId,
-      chimeMeetingId: meetingId,
-    });
-
-    // Update RTDB — notify patient that call was accepted + mark doctor as busy
     await Promise.all([
+      meetRepository.updateStatus(requestId, "accepted", {
+        chimeMeetingId: meetingId,
+        chimeMeetingData,
+        doctorPhotoUrl,
+      }),
       rtdb.ref(`call-state/${request.patientId}`).update({
         status: "accepted",
         chimeMeetingId: meetingId,
         requestId,
-        // Patient's join token
+        conversationId,
         attendeeId: patientAttendee.AttendeeId,
         joinToken: patientAttendee.JoinToken,
         meeting: {
@@ -115,19 +76,14 @@ export class AcceptCallUseCase {
           MediaPlacement: meeting.MediaPlacement,
         },
       }),
-      // Remove from doctor's call queue
       rtdb.ref(`call-requests/${doctorId}/${requestId}`).update({
         status: "accepted",
       }),
-      // Mark the doctor as busy for the duration of the call
       rtdb.ref(`presence/${doctorId}`).update({ status: "busy" }),
     ]);
 
-    // Recompute queue positions for remaining pending requests
-    await recomputeQueuePositions(doctorId);
-
-    // Return doctor's join info
-    return {
+    // ── Build join info that the doctor needs immediately ───────────────────
+    const joinInfo: AttendeeJoinInfo = {
       meeting: {
         MeetingId: meeting.MeetingId!,
         MediaRegion: meeting.MediaRegion!,
@@ -142,5 +98,95 @@ export class AcceptCallUseCase {
       },
       requestId,
     };
+
+    // ── Deferred work — runs after the HTTP response is sent ───────────────
+    const deferredWork = async () => {
+      try {
+        // Consent invite
+        const existing = await doctorPatientRepository.get(
+          doctorId,
+          request.patientId,
+        );
+        if (existing?.status !== "accepted") {
+          const patientProfileSnap = await db
+            .collection("profiles")
+            .doc(request.patientId)
+            .get();
+          const patientName = patientProfileSnap.exists
+            ? (patientProfileSnap.data() as { name?: string }).name
+            : undefined;
+
+          await doctorPatientRepository.invite({
+            doctorId,
+            patientId: request.patientId,
+            source: "call",
+            patientName,
+          });
+          await rtdb
+            .ref(`in-call-consent/${request.patientId}/${requestId}`)
+            .set({ doctorId, status: "pending" });
+        }
+
+        // Encounter creation
+        await encounterRepository.create({
+          patientId: request.patientId,
+          patientName: request.patientName,
+          patientPhotoUrl: request.patientPhotoUrl,
+          doctorId,
+          doctorName: request.doctorName,
+          doctorPhotoUrl,
+          requestId,
+          chimeMeetingId: meetingId,
+        });
+
+        // DM conversation setup
+        const dmInfoSnap = await rtdb.ref(`dm/${conversationId}/info`).get();
+        if (!dmInfoSnap.exists()) {
+          const patientProfileSnap2 = await db
+            .collection("profiles")
+            .doc(request.patientId)
+            .get();
+          const patientNameForDm = patientProfileSnap2.exists
+            ? ((patientProfileSnap2.data() as { name?: string }).name ??
+              request.patientName)
+            : request.patientName;
+          const doctorNameForDm =
+            (doctorProfileSnap.data() as { name?: string } | undefined)?.name ??
+            request.doctorName;
+
+          const dmUpdates: Record<string, unknown> = {};
+          dmUpdates[`dm/${conversationId}/info`] = {
+            doctorId,
+            patientId: request.patientId,
+            doctorName: doctorNameForDm,
+            patientName: patientNameForDm,
+            createdAt: { ".sv": "timestamp" },
+          };
+          dmUpdates[`dm-inbox/${doctorId}/${conversationId}`] = {
+            otherUid: request.patientId,
+            otherName: patientNameForDm,
+            lastMessage: "",
+            lastMessageAt: { ".sv": "timestamp" },
+            unread: false,
+          };
+          dmUpdates[`dm-inbox/${request.patientId}/${conversationId}`] = {
+            otherUid: doctorId,
+            otherName: doctorNameForDm,
+            lastMessage: "",
+            lastMessageAt: { ".sv": "timestamp" },
+            unread: false,
+          };
+          await rtdb.ref().update(dmUpdates);
+        }
+
+        // Queue recomputation
+        await recomputeQueuePositions(doctorId);
+      } catch (err) {
+        // Non-critical — log but don't fail the call
+        console.error("[AcceptCallUseCase] deferred work failed:", err);
+      }
+    };
+
+    return { joinInfo, deferredWork };
   }
 }

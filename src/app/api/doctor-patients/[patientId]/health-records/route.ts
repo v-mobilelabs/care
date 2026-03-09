@@ -7,6 +7,7 @@ import { ListMedicationsUseCase } from "@/data/medications";
 import { ListAssessmentsUseCase } from "@/data/assessments";
 import { ListBloodTestsUseCase } from "@/data/blood-tests";
 import { profileRepository } from "@/data/profile";
+import { patientRepository } from "@/data/patients";
 
 // GET /api/doctor-patients/[patientId]/health-records
 // Returns the full health record portfolio for a patient the doctor
@@ -32,6 +33,7 @@ export const GET = WithContext(
       assessments,
       bloodTests,
       profile,
+      patient,
     ] = await Promise.all([
       new ListConditionsUseCase().execute(
         ListConditionsUseCase.validate({ userId: patientId }),
@@ -49,20 +51,21 @@ export const GET = WithContext(
         ListBloodTestsUseCase.validate({ userId: patientId }),
       ),
       profileRepository.get(patientId),
+      patientRepository.get(patientId),
     ]);
 
     return NextResponse.json({
       patientId,
       patientName: link.patientName ?? profile?.name,
-      profile: profile
+      profile: patient
         ? {
-            dateOfBirth: profile.dateOfBirth,
-            sex: profile.sex,
-            height: profile.height,
-            weight: profile.weight,
-            country: profile.country,
-            city: profile.city,
-            foodPreferences: profile.foodPreferences,
+            dateOfBirth: patient.dateOfBirth,
+            sex: patient.sex,
+            height: patient.height,
+            weight: patient.weight,
+            country: profile?.country,
+            city: profile?.city,
+            foodPreferences: patient.foodPreferences,
           }
         : null,
       conditions,

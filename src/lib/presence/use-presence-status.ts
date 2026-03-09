@@ -6,11 +6,14 @@
  *
  * Returns `{ online: false, lastSeen: null, kind: null }` while loading or
  * when the uid is null/undefined.
+ *
+ * Note: Requires Firebase Auth to be signed in, otherwise RTDB reads will
+ * fail with permission denied (database rules require auth != null).
  */
 "use client";
 import { useEffect, useState } from "react";
 import { ref, onValue } from "firebase/database";
-import { getClientDatabase } from "@/lib/firebase/client";
+import { getClientDatabase, getClientAuth } from "@/lib/firebase/client";
 import type { UserKind } from "@/lib/auth/jwt";
 
 export interface PresenceStatus {
@@ -44,29 +47,39 @@ const INITIAL: PresenceStatus = {
   loading: true,
 };
 
-export function usePresenceStatus(
-  uid: string | null | undefined,
-): PresenceStatus {
+export function usePresenceStatus(uid: string): PresenceStatus {
   const [status, setStatus] = useState<PresenceStatus>(INITIAL);
 
+  // Then subscribe to presence data
   useEffect(() => {
     if (!uid) {
+      console.log("usePresenceStatus: no uid provided");
       setStatus(INITIAL);
       return;
     }
 
-    // Reset to loading when uid changes so we don't flash stale state.
     setStatus(INITIAL);
 
     const db = getClientDatabase();
     const presenceRef = ref(db, `presence/${uid}`);
 
-    const unsubscribe = onValue(presenceRef, (snap) => {
-      const data = snap.val() as Omit<PresenceStatus, "loading"> | null;
-      setStatus(
-        data ? { ...data, loading: false } : { ...INITIAL, loading: false },
-      );
-    });
+    const unsubscribe = onValue(
+      presenceRef,
+      (snap) => {
+        const data = snap.val() as Omit<PresenceStatus, "loading"> | null;
+        setStatus(
+          data ? { ...data, loading: false } : { ...INITIAL, loading: false },
+        );
+      },
+      (error) => {
+        console.error(
+          "usePresenceStatus: error reading presence for uid",
+          uid,
+          error,
+        );
+        setStatus({ ...INITIAL, loading: false });
+      },
+    );
 
     return unsubscribe;
   }, [uid]);

@@ -1,8 +1,11 @@
-import { Box, Group, Loader, Skeleton, Stack, Text } from "@mantine/core";
+import { Box, Group, Skeleton, Stack, Text } from "@mantine/core";
 
 /**
  * Full-screen skeleton that mirrors the MeetingRoom layout so the transition
  * from loading → ready feels seamless. Matches the dark-chrome video-call UI.
+ *
+ * Uses CSS keyframe animations for a polished, alive feeling instead of
+ * static skeletons.
  */
 export default function MeetLoading() {
     return (
@@ -13,8 +16,42 @@ export default function MeetLoading() {
                 background: "light-dark(#f5f5f7, #0f0f0f)",
                 display: "flex",
                 flexDirection: "column",
+                animation: "meet-fade-in 0.3s ease-out",
             }}
         >
+            {/* Keyframe animations */}
+            <style>{`
+                @keyframes meet-fade-in {
+                    from { opacity: 0; }
+                    to   { opacity: 1; }
+                }
+                @keyframes meet-skeleton-pulse {
+                    0%, 100% { opacity: 0.4; }
+                    50%      { opacity: 0.8; }
+                }
+                @keyframes meet-glow-ring {
+                    0%   { transform: scale(0.92); opacity: 0.3; }
+                    50%  { transform: scale(1.08); opacity: 0.7; }
+                    100% { transform: scale(0.92); opacity: 0.3; }
+                }
+                @keyframes meet-float {
+                    0%, 100% { transform: translateY(0); }
+                    50%      { transform: translateY(-6px); }
+                }
+                @keyframes meet-slide-up {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes meet-dot-bounce {
+                    0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+                    40%           { transform: scale(1);   opacity: 1; }
+                }
+                @keyframes meet-bar-shimmer {
+                    from { transform: translateX(-100%); }
+                    to   { transform: translateX(200%); }
+                }
+            `}</style>
+
             {/* ── Header island skeleton ─────────────────────────── */}
             <Box
                 style={{
@@ -27,6 +64,7 @@ export default function MeetLoading() {
                     padding: "16px 16px 0",
                     zIndex: 10,
                     pointerEvents: "none",
+                    animation: "meet-slide-up 0.5s ease-out 0.1s both",
                 }}
             >
                 <Group
@@ -43,7 +81,7 @@ export default function MeetLoading() {
                         minHeight: 36,
                     }}
                 >
-                    <Skeleton height={12} width={80} radius="xl" />
+                    <Skeleton height={12} width={80} radius="xl" animate />
                     <Box
                         style={{
                             width: 1,
@@ -52,7 +90,21 @@ export default function MeetLoading() {
                         }}
                     />
                     <Group gap={6}>
-                        <Loader size={12} color="light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.4))" type="dots" />
+                        {/* Animated connecting dots */}
+                        <Group gap={3}>
+                            {[0, 1, 2].map((i) => (
+                                <Box
+                                    key={i}
+                                    style={{
+                                        width: 5,
+                                        height: 5,
+                                        borderRadius: "50%",
+                                        background: "light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.4))",
+                                        animation: `meet-dot-bounce 1.4s ease-in-out ${i * 0.16}s infinite`,
+                                    }}
+                                />
+                            ))}
+                        </Group>
                         <Text size="xs" c="dimmed">
                             Setting up…
                         </Text>
@@ -60,7 +112,7 @@ export default function MeetLoading() {
                 </Group>
             </Box>
 
-            {/* ── Video area — centered avatar placeholder ────────── */}
+            {/* ── Video area — animated avatar placeholder ────────── */}
             <Box style={{ flex: 1, position: "relative", overflow: "hidden" }}>
                 <Box
                     style={{
@@ -72,28 +124,87 @@ export default function MeetLoading() {
                     }}
                 >
                     <Stack align="center" justify="center" h="100%" gap="md">
-                        <Loader color="primary" size="lg" />
-                        <Text c="dimmed" size="sm">
+                        {/* Outer glow ring */}
+                        <Box
+                            style={{
+                                position: "relative",
+                                animation: "meet-float 3s ease-in-out infinite",
+                            }}
+                        >
+                            <Box
+                                style={{
+                                    position: "absolute",
+                                    inset: -16,
+                                    borderRadius: "50%",
+                                    background: "radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)",
+                                    animation: "meet-glow-ring 2.5s ease-in-out infinite",
+                                }}
+                            />
+                            <Box
+                                style={{
+                                    width: 96,
+                                    height: 96,
+                                    borderRadius: "50%",
+                                    background: "light-dark(rgba(99,102,241,0.12), rgba(99,102,241,0.15))",
+                                    border: "2px solid light-dark(rgba(99,102,241,0.2), rgba(99,102,241,0.25))",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    animation: "meet-skeleton-pulse 2s ease-in-out infinite",
+                                }}
+                            >
+                                {/* Inner shimmer effect */}
+                                <Box
+                                    style={{
+                                        width: 40,
+                                        height: 4,
+                                        borderRadius: 2,
+                                        background: "light-dark(rgba(99,102,241,0.2), rgba(99,102,241,0.25))",
+                                        overflow: "hidden",
+                                        position: "relative",
+                                    }}
+                                >
+                                    <Box
+                                        style={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            background: "linear-gradient(90deg, transparent, rgba(99,102,241,0.4), transparent)",
+                                            animation: "meet-bar-shimmer 1.8s ease-in-out infinite",
+                                        }}
+                                    />
+                                </Box>
+                            </Box>
+                        </Box>
+                        <Text
+                            c="dimmed"
+                            size="sm"
+                            style={{
+                                animation: "meet-skeleton-pulse 2s ease-in-out infinite 0.3s",
+                            }}
+                        >
                             Connecting…
                         </Text>
                     </Stack>
                 </Box>
 
-                {/* ── Local PIP skeleton (bottom-right) ──────────── */}
+                {/* ── Local PIP skeleton (bottom-left) ──────────── */}
                 <Box
                     style={{
                         position: "absolute",
                         bottom: 90,
-                        right: 16,
+                        left: 16,
                         zIndex: 10,
+                        animation: "meet-slide-up 0.5s ease-out 0.3s both",
                     }}
                 >
-                    <Skeleton
-                        width={72}
-                        height={72}
-                        circle
+                    <Box
                         style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: "50%",
+                            background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
                             border: "2px solid light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.15))",
+                            animation: "meet-skeleton-pulse 2s ease-in-out infinite 0.5s",
                         }}
                     />
                 </Box>
@@ -111,6 +222,7 @@ export default function MeetLoading() {
                     padding: "12px 16px 24px",
                     zIndex: 10,
                     pointerEvents: "none",
+                    animation: "meet-slide-up 0.5s ease-out 0.2s both",
                 }}
             >
                 <Group
@@ -127,23 +239,28 @@ export default function MeetLoading() {
                             "0 8px 32px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.5)), 0 0 0 0.5px light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06)) inset",
                     }}
                 >
-                    {/* Mic */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* Camera */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* Captions */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* Settings */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* Record */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* Network */}
-                    <Skeleton width={40} height={40} circle />
-                    {/* End call */}
-                    <Skeleton
-                        width={52}
-                        height={40}
-                        radius={999}
+                    {/* Control button skeletons with staggered animation */}
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <Box
+                            key={i}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: "50%",
+                                background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
+                                animation: `meet-skeleton-pulse 2s ease-in-out ${i * 0.1}s infinite`,
+                            }}
+                        />
+                    ))}
+                    {/* End call skeleton */}
+                    <Box
+                        style={{
+                            width: 52,
+                            height: 40,
+                            borderRadius: 999,
+                            background: "light-dark(rgba(239,68,68,0.15), rgba(239,68,68,0.2))",
+                            animation: "meet-skeleton-pulse 2s ease-in-out 0.6s infinite",
+                        }}
                     />
                 </Group>
             </Box>

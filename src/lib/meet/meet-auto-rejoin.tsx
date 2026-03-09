@@ -119,8 +119,13 @@ export function MeetAutoRejoin() {
                 const sessionData = (await res.json()) as MeetSessionData;
                 if (cancelled) return;
 
+                // Restore mic/camera preferences persisted by the room on toggle.
+                // Defaults to true if not found (first join).
+                const micOn = sessionStorage.getItem(`callMicOn_${requestId}`) !== "false";
+                const cameraOn = sessionStorage.getItem(`callCamOn_${requestId}`) !== "false";
+
                 // Double-check overlay hasn't been started in the meantime
-                startMeet(sessionData);
+                startMeet(sessionData, { micOn, cameraOn });
             } catch {
                 // Network error — user can manually rejoin via Dynamic Island or /meet page
                 rejoinAttemptedRef.current = null;

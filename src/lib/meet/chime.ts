@@ -9,8 +9,6 @@ import {
   DeleteMeetingCommand,
   GetMeetingCommand,
   ListAttendeesCommand,
-  StartMeetingTranscriptionCommand,
-  StopMeetingTranscriptionCommand,
 } from "@aws-sdk/client-chime-sdk-meetings";
 
 function getChimeClient(): ChimeSDKMeetingsClient {
@@ -106,32 +104,4 @@ export async function getChimeMeetingAttendeeCount(
     }
     throw err;
   }
-}
-
-// ── Real-time transcription ───────────────────────────────────────────────────
-
-export async function startMeetingTranscription(
-  meetingId: string,
-): Promise<void> {
-  const client = getChimeClient();
-  await client.send(
-    new StartMeetingTranscriptionCommand({
-      MeetingId: meetingId,
-      TranscriptionConfiguration: {
-        EngineTranscribeSettings: {
-          LanguageCode: "en-US",
-          VocabularyFilterMethod: "mask",
-        },
-      },
-    }),
-  );
-}
-
-export async function stopMeetingTranscription(
-  meetingId: string,
-): Promise<void> {
-  const client = getChimeClient();
-  await client.send(
-    new StopMeetingTranscriptionCommand({ MeetingId: meetingId }),
-  );
 }

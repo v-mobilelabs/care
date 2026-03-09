@@ -11,3 +11,4 @@ export type {
   GetUserSnapshotInput,
   RequiredProfileField,
 } from "./use-cases/get-user-snapshot.use-case";
+export { GetProfileUseCase } from "./use-cases/get-profile.use-case";

@@ -1,10 +1,8 @@
 "use client";
 import {
   AppShell,
-  Avatar,
   Box,
   Burger,
-  Divider,
   Group,
   Menu,
   NavLink,
@@ -12,20 +10,23 @@ import {
   Skeleton,
   Text,
 } from "@mantine/core";
-import { Provider } from "../providers/provider";
 import { PortalFooter } from "../footers/portal.footer";
 import { useDisclosure } from "@mantine/hooks";
 import { Logo } from "../brand/logo";
 import dynamic from "next/dynamic";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { type ReactNode, useEffect } from "react";
 import { BreadcrumbsBar } from "../breadcrumbs";
-import { useAuth } from "@/ui/providers/auth-provider";
-import { getInitials } from "@/lib/get-initials";
-import { IconLogout, IconUser } from "@tabler/icons-react";
-import { modals } from "@mantine/modals";
-import { usePresenceStatus } from "@/lib/presence/use-presence-status";
+import { UserCard } from "../user-card";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { useCurrentProfile } from "@/lib/auth/use-current-profile";
+import { SignOutButton } from "../sign-out-button";
+import { IconLogout } from "@tabler/icons-react";
+import { Credits } from "../credits";
+import { MessagesButton } from "../messaging/messages-button";
+import { NotificationsButton } from "../notifications/notifications-button";
+import { MessagingSidebar } from "../messaging/messaging-drawer";
+import { useMessaging } from "../providers/messaging-provider";
 
 const ColorSchemeToggle = dynamic(
   () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
@@ -42,249 +43,172 @@ type MenuItem = {
   children?: MenuItem[];
 };
 
+type MenuGroup = {
+  navigation: MenuItem[];
+  header: MenuItem[];
+  profile: MenuItem[];
+};
+
+/* ── Main PortalLayout ─────────────────────────────────────────────────────── */
+
 export function PortalLayout({
   children,
   menus,
-  application,
-  profileHref,
-  avatarSrc,
-  avatarName,
-  headerExtra,
 }: Readonly<{
   children: React.ReactNode;
-  menus: MenuItem[];
+  menus: MenuGroup;
   application?: {
     id: string;
     name: string;
     url: string;
     icon: ReactNode;
   };
-  profileHref?: string;
-  avatarSrc?: string | null;
-  avatarName?: string | null;
-  /** Extra element rendered in the header between logo and user controls. */
-  headerExtra?: ReactNode;
 }>) {
   const [opened, { toggle, close }] = useDisclosure();
+  const { isOpen } = useMessaging()
   const pathName = usePathname();
 
-  // Close the mobile sidebar whenever the route changes (client-side nav).
   useEffect(() => {
     close();
   }, [pathName, close]);
-  const router = useRouter();
-  const { user } = useAuth();
-  const initials = getInitials(
-    avatarName ?? user?.displayName ?? null,
-    user?.email ?? null,
-  );
-  const photoSrc = avatarSrc ?? user?.photoURL ?? undefined;
-  const { online, loading: presenceLoading } = usePresenceStatus(user?.uid);
 
-  // Derive the outline color:
-  //  • loading / no user → neutral (no red flash while RTDB is connecting)
-  //  • online → teal
-  //  • offline → red
-  const outlineColor = (() => {
-    if (presenceLoading || !user) return "var(--mantine-color-gray-5)";
-    return online ? "var(--mantine-color-teal-5)" : "var(--mantine-color-red-5)";
-  })();
-
-  function doSignOut() {
-    modals.closeAll();
-    fetch("/api/doctors/me/availability", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ availability: "unavailable" }),
-    }).finally(() => {
-      fetch("/api/auth/session", { method: "DELETE" }).finally(() => {
-        router.push("/auth/login");
-      });
-    });
-  }
-
-  function handleSignOut() {
-    modals.openConfirmModal({
-      title: "Sign out",
-      children: "Are you sure you want to sign out?",
-      labels: { confirm: "Sign out", cancel: "Cancel" },
-      confirmProps: { color: "red", leftSection: <IconLogout size={14} /> },
-      onConfirm: doSignOut,
-    });
-  }
+  const { data: profile } = useCurrentProfile();
+  const { data: user } = useCurrentUser();
 
   const Header = (
-    <AppShell.Header px={{ base: "sm", md: "md" }} style={
-      {
-        // 30 % secondary zone — subtle brand tint for structural chrome
-        backgroundColor:
-          "light-dark(var(--mantine-color-white), var(--mantine-color-dark-9))",
-        borderBottom:
-          "1px solid light-dark(var(--mantine-color-primary-1), rgba(107,79,248,0.12))",
-      }
-    }>
-      <Group justify="space-between">
-        <Group py="sm">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" />
+    <AppShell.Header
+      px={{ base: "sm", md: "md" }}
+      style={{
+        background: "light-dark(rgba(255,255,255,0.7), rgba(30,32,40,0.7))",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+      }}
+    >
+      <Group justify="space-between" style={{ height: "100%" }}>
+        <Group gap="sm">
+          <Burger
+            opened={opened}
+            onClick={toggle}
+            hiddenFrom="md"
+            size="sm"
+          />
           <Logo />
         </Group>
-        <Group gap="xs">
-          {headerExtra}
+        <Group gap="sm">
+          {menus.header.map((menu) => (
+            <NavLink
+              key={menu.label}
+              label={menu.label}
+              href={menu.href}
+              leftSection={menu.icon}
+            />
+          ))}
+          <Credits />
+          <NotificationsButton />
+          <MessagesButton />
           <ColorSchemeToggle />
-          <Menu shadow="md" width={200} position="bottom-end" withArrow>
+          <Menu
+            shadow="md"
+            width={240}
+            offset={8}
+            position="bottom-end"
+            withArrow
+          >
             <Menu.Target>
-              <Avatar
-                src={photoSrc ?? null}
-                size="sm"
-                radius="xl"
-                color="primary"
-                imageProps={{
-                  onError: (e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; },
-                }}
-                style={{
-                  cursor: "pointer",
-                  outline: `2px solid ${outlineColor}`,
-                  outlineOffset: "2px",
-                }}
-              >
-                {initials}
-              </Avatar>
+              <UserCard name={profile?.name} image={profile?.photoUrl} uid={profile?.userId} />
             </Menu.Target>
             <Menu.Dropdown>
               <Menu.Label>
-                <Text size="xs" fw={500} truncate>{avatarName ?? user?.displayName ?? user?.email ?? "Account"}</Text>
-                {avatarName && <Text size="xs" c="dimmed" truncate>{user?.email}</Text>}
+                <Text size="xs" fw={500} truncate>
+                  {profile?.name ?? "Unknown User"}
+                </Text>
+                <Text size="xs" c="dimmed" truncate>
+                  {user?.email}
+                </Text>
               </Menu.Label>
-              <Divider />
-              {profileHref && (
+              <Menu.Divider />
+              {menus.profile.map((menu) => (
                 <Menu.Item
-                  leftSection={<IconUser size={14} />}
-                  component={Link}
-                  href={profileHref}
+                  key={menu.label}
+                  leftSection={menu.icon}
+                  component="a"
+                  href={menu.href}
                 >
-                  My profile
+                  {menu.label}
                 </Menu.Item>
-              )}
-              <Menu.Item
-                leftSection={<IconLogout size={14} />}
-                color="red"
-                onClick={handleSignOut}
-              >
-                Sign out
+              ))}
+              <Menu.Item leftSection={<IconLogout size={16} />} color="red">
+                <SignOutButton />
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </Group>
       </Group>
-    </AppShell.Header>
+    </AppShell.Header >
   );
+
   return (
-    <Provider>
-      <AppShell
-        header={{ height: 60 }}
-        navbar={{
-          width: { base: 260, md: 280 },
-          breakpoint: "md",
-          collapsed: { mobile: !opened },
+    <AppShell
+      header={{ height: 56 }}
+      navbar={{
+        width: { base: 260, md: 260 },
+        breakpoint: "md",
+        collapsed: { mobile: !opened },
+      }}
+      aside={{
+        width: { base: 360, md: 360 },
+        breakpoint: "md",
+        collapsed: { mobile: !isOpen, desktop: !isOpen },
+      }}
+    >
+      {Header}
+      <AppShell.Navbar
+        style={{
+          background: "light-dark(rgba(248,249,250,0.6), rgba(26,27,30,0.6))",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderRight: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
         }}
-        padding={{ base: "sm", md: "md" }}
       >
-        {Header}
-        <AppShell.Navbar
-          style={
-            {
-              // 30 % secondary zone — brand-tinted sidebar
-              backgroundColor:
-                "light-dark(var(--mantine-color-primary-0), var(--mantine-color-dark-9))",
-              borderRight:
-                "1px solid light-dark(var(--mantine-color-primary-1), rgba(107,79,248,0.12))",
-            }
-          }
+        <AppShell.Section
+          grow
+          component={ScrollArea}
         >
-          <AppShell.Section grow component={ScrollArea}>
-            {menus?.map((menu) => {
-              // Check if this menu has children (is a group)
-              if (menu.children && menu.children.length > 0) {
-                // This is a menu group with children
-                const isGroupActive = menu.children.some((child) =>
-                  pathName === child.href || pathName.startsWith(child.href + '/')
-                );
-
-                return (
-                  <NavLink
-                    key={menu.label}
-                    label={menu.label}
-                    leftSection={menu.icon}
-                    p="sm"
-                    defaultOpened={isGroupActive}
-                    childrenOffset={28}
-                  >
-                    {menu.children.map((child) => {
-                      const isChildActive = pathName === child.href ||
-                        (child.href !== '/' && pathName.startsWith(child.href + '/'));
-
-                      return (
-                        <NavLink
-                          key={child.label}
-                          label={child.label}
-                          leftSection={child.icon}
-                          component={Link}
-                          href={child.href}
-                          active={isChildActive}
-                          variant="filled"
-                        />
-                      );
-                    })}
-                  </NavLink>
-                );
-              }
-
-              // Regular menu item (no children)
-              let isActive = false;
-
-              if (pathName === menu.href) {
-                // Exact match
-                isActive = true;
-              } else if (menu.href !== '/' && pathName.startsWith(menu.href + '/')) {
-                // Child route match - check if any other menu has a more specific match
-                const hasMoreSpecificMatch = menus.some(
-                  (otherMenu) =>
-                    otherMenu.href !== menu.href &&
-                    otherMenu.href.length > menu.href.length &&
-                    (pathName === otherMenu.href || pathName.startsWith(otherMenu.href + '/'))
-                );
-                isActive = !hasMoreSpecificMatch;
-              }
-
-              return (
-                <NavLink
-                  p="sm"
-                  key={menu.label}
-                  label={menu.label}
-                  leftSection={menu.icon}
-                  component={Link}
-                  href={menu.href}
-                  active={isActive}
-                  variant="filled"
-                />
-              );
+          <Box
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+            }}
+          >
+            {menus.navigation.map((menu) => {
+              const isActive = pathName === menu.href || pathName.startsWith(menu.href + "/");
+              return <NavLink variant="light" color="primary" key={menu.label} label={menu.label} href={menu.href} leftSection={menu.icon} active={isActive} />
             })}
-          </AppShell.Section>
-          <AppShell.Section>
-            <PortalFooter />
-          </AppShell.Section>
-        </AppShell.Navbar>
-        <AppShell.Main style={{
-          // 60 % dominant zone — neutral page background
-          backgroundColor:
-            "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
-        }}>
-          <Box pb={{ base: "sm", md: "md" }}>
-            <BreadcrumbsBar menus={menus} />
           </Box>
+        </AppShell.Section>
+        <AppShell.Section>
+          <PortalFooter />
+        </AppShell.Section>
+      </AppShell.Navbar>
+      <MessagingSidebar />
+      <AppShell.Main
+        style={{
+          background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
+        }}
+      >
+        <Box
+          pt={{ base: "sm", md: "md" }}
+          pb={{ base: 0, md: "md" }}
+        >
+          <BreadcrumbsBar menus={menus.navigation} />
+        </Box>
+        <Box>
           {children}
-        </AppShell.Main>
-      </AppShell>
-    </Provider>
+        </Box>
+      </AppShell.Main>
+    </AppShell>
   );
 }

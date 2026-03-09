@@ -202,7 +202,16 @@ export const theme: MantineThemeOverride = createTheme({
 
     // Surfaces
     Paper: {
-      defaultProps: { radius: "lg", shadow: "xs" },
+      defaultProps: {
+        radius: "lg",
+        shadow: "xs",
+        withBorder: true,
+        style: {
+          background: "light-dark(rgba(255,255,255,0.55), rgba(30,32,40,0.45))",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+        },
+      },
     },
     Card: {
       defaultProps: {
@@ -210,6 +219,11 @@ export const theme: MantineThemeOverride = createTheme({
         shadow: "xs",
         padding: "lg",
         withBorder: true,
+        style: {
+          background: "light-dark(rgba(255,255,255,0.55), rgba(30,32,40,0.45))",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+        },
       },
     },
 
@@ -217,9 +231,8 @@ export const theme: MantineThemeOverride = createTheme({
     Modal: {
       defaultProps: {
         radius: "lg",
-        // Mobile: tighter padding; ≥sm: full xl
         padding: { base: "md", sm: "xl" },
-        overlayProps: { blur: 3, backgroundOpacity: 0.35 },
+        overlayProps: { blur: 8, backgroundOpacity: 0.25 },
         transitionProps: { transition: "fade", duration: 150 },
         centered: true,
       },
@@ -227,7 +240,7 @@ export const theme: MantineThemeOverride = createTheme({
     Drawer: {
       defaultProps: {
         padding: "xl",
-        overlayProps: { blur: 3, backgroundOpacity: 0.35 },
+        overlayProps: { blur: 8, backgroundOpacity: 0.25 },
       },
     },
     Tooltip: {
@@ -238,7 +251,21 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
     Popover: {
-      defaultProps: { radius: "md", shadow: "md" },
+      defaultProps: {
+        radius: "md",
+        shadow: "md",
+        style: {
+          background: "light-dark(rgba(255,255,255,0.55), rgba(30,32,40,0.45))",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+        },
+      },
+    },
+    Menu: {
+      defaultProps: {
+        radius: "md",
+        shadow: "md",
+      },
     },
 
     // Actions
@@ -309,7 +336,7 @@ export const theme: MantineThemeOverride = createTheme({
       defaultProps: { radius: "md", size: "lg", variant: "light" },
     },
     Avatar: {
-      defaultProps: { radius: "xl", size: "lg", color: "primary" },
+      defaultProps: { color: "primary" },
     },
     ThemeIcon: {
       defaultProps: { radius: "md", variant: "light", color: "primary" },

@@ -365,7 +365,7 @@ export default function HomePage() {
       <Divider />
 
       {/* ── CTA banner ── */}
-      <Box py={{ base: 60, sm: 80 }} style={{ background: "light-dark(var(--mantine-color-primary-6), var(--mantine-color-primary-9))" }}>
+      <Box py={{ base: 60, sm: 80 }}>
         <Container size="sm">
           <Stack align="center" gap="lg">
             <ThemeIcon size={64} radius="xl" color="white" variant="white">
@@ -387,7 +387,7 @@ export default function HomePage() {
       </Box>
 
       {/* ── Stats ── */}
-      <Box py="xl" style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))" }}>
+      <Box py="xl">
         <Container size="lg">
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
             {STATS.map(({ icon: Icon, value, label }) => (

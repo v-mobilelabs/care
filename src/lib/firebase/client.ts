@@ -1,5 +1,6 @@
 // Firebase client-side SDK — safe to import in browser/client components.
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
 import { getDatabase, type Database } from "firebase/database";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
@@ -20,6 +21,11 @@ function getClientApp(): FirebaseApp {
 }
 
 export const firebaseApp = getClientApp();
+
+/** Firebase Auth client instance (singleton). */
+export function getClientAuth(): Auth {
+  return getAuth(firebaseApp);
+}
 
 /** Firebase Realtime Database client instance (singleton). */
 export function getClientDatabase(): Database {

@@ -88,15 +88,6 @@ export const meetRepository = {
     });
   },
 
-  // ── Append transcript text ─────────────────────────────────────────────────
-
-  async saveTranscript(requestId: string, transcript: string): Promise<void> {
-    await db.collection(COL).doc(requestId).update({
-      transcript,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  },
-
   // ── List pending for doctor ───────────────────────────────────────────────
 
   async listPendingForDoctor(doctorId: string): Promise<CallRequestDto[]> {
