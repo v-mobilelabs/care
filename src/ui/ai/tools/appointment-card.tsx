@@ -2,7 +2,7 @@
 import { Badge, Box, Collapse, Group, Paper, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCalendar, IconChevronDown } from "@tabler/icons-react";
-import type { AppointmentInput } from "@/app/(portal)/chat/_types";
+import type { AppointmentInput } from "@/app/(portal)/patient/_types";
 
 export interface AppointmentCardProps {
     data: AppointmentInput;

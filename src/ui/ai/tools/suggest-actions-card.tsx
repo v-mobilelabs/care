@@ -1,7 +1,7 @@
 "use client";
 import { Box, Button, Group, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconChecklist } from "@tabler/icons-react";
-import type { SuggestActionsInput, SuggestActionItem } from "@/app/(portal)/chat/_types";
+import type { SuggestActionsInput, SuggestActionItem } from "@/app/(portal)/patient/_types";
 
 export interface SuggestActionsCardProps {
     data: SuggestActionsInput;

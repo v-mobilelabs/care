@@ -10,7 +10,7 @@ import type { MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 export const GET = WithContext(
   async ({ user }, { requestId }: { requestId: string }) => {
     const isDoctor = user.kind === "doctor";
-    const fallback = isDoctor ? "/doctor/dashboard" : "/chat/connect";
+    const fallback = isDoctor ? "/doctor/dashboard" : "/patient/connect";
 
     const [joinInfo, callRequest] = await Promise.all([
       new GetMeetingJoinInfoUseCase().execute({

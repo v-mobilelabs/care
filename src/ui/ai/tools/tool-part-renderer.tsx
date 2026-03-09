@@ -19,8 +19,8 @@ import type {
     ProviderInput,
     SoapNoteInput,
     SuggestActionsInput,
-} from "@/app/(portal)/chat/_types";
-import { extractToolInput, getToolPartName, getToolPartState } from "@/app/(portal)/chat/_types";
+} from "@/app/(portal)/patient/_types";
+import { extractToolInput, getToolPartName, getToolPartState } from "@/app/(portal)/patient/_types";
 import { AppointmentCard } from "./appointment-card";
 import { AssessmentCompleteCard } from "./assessment-card";
 import { ConditionCard } from "./condition-card";

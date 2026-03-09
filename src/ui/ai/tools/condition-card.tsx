@@ -2,8 +2,8 @@
 import { Badge, Box, Button, Collapse, Divider, Group, Paper, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCheck, IconChevronDown, IconCircleCheck, IconMessageQuestion, IconQuestionMark, IconAlertTriangle, IconStethoscope } from "@tabler/icons-react";
-import { SEVERITY_COLOR } from "@/app/(portal)/chat/_types";
-import type { ConditionInput } from "@/app/(portal)/chat/_types";
+import { SEVERITY_COLOR } from "@/app/(portal)/patient/_types";
+import type { ConditionInput } from "@/app/(portal)/patient/_types";
 
 export interface ConditionCardProps {
     data: ConditionInput;

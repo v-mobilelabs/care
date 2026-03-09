@@ -27,6 +27,7 @@ import { MessagesButton } from "../messaging/messages-button";
 import { NotificationsButton } from "../notifications/notifications-button";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
 import { useMessaging } from "../providers/messaging-provider";
+import Link from "next/link";
 
 const ColorSchemeToggle = dynamic(
   () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
@@ -184,8 +185,9 @@ export function PortalLayout({
             }}
           >
             {menus.navigation.map((menu) => {
-              const isActive = pathName === menu.href || pathName.startsWith(menu.href + "/");
-              return <NavLink variant="light" color="primary" key={menu.label} label={menu.label} href={menu.href} leftSection={menu.icon} active={isActive} />
+              // Exact match only - don't activate parent paths when on child routes
+              const isActive = pathName === menu.href;
+              return <NavLink component={Link} variant="filled" color="primary" key={menu.label} label={menu.label} href={menu.href} leftSection={menu.icon} active={isActive} />
             })}
           </Box>
         </AppShell.Section>

@@ -2,8 +2,8 @@
 import { Alert, Badge, Box, Collapse, Group, Paper, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconAlertTriangle, IconChevronDown, IconFlask } from "@tabler/icons-react";
-import { PRIORITY_COLOR } from "@/app/(portal)/chat/_types";
-import type { ProcedureInput } from "@/app/(portal)/chat/_types";
+import { PRIORITY_COLOR } from "@/app/(portal)/patient/_types";
+import type { ProcedureInput } from "@/app/(portal)/patient/_types";
 
 export interface ProcedureCardProps {
     data: ProcedureInput;

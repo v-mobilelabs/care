@@ -1,5 +1,5 @@
 "use client";
-import { useCreditsQuery } from "@/app/(portal)/chat/_query";
+import { useCreditsQuery } from "@/app/(portal)/patient/_query";
 import { Badge, Tooltip } from "@mantine/core";
 import { IconBolt } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
@@ -35,7 +35,7 @@ export function Credits() {
                 variant="light"
                 size="sm"
                 style={{ cursor: "pointer" }}
-                onClick={() => router.push("/chat/usage")}
+                onClick={() => router.push("/patient/usage")}
             >
                 {remaining}
             </Badge>

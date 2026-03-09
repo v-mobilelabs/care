@@ -29,8 +29,7 @@ export function NotificationsButton() {
                 offset={4}
             >
                 <ActionIcon
-                    variant={"subtle"}
-                    color={"gray"}
+                    variant={"light"}
                     size="lg"
                     radius="xl"
                     onClick={handleClick}

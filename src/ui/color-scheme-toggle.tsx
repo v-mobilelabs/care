@@ -19,11 +19,10 @@ export default function ColorSchemeToggle() {
       onClick={() =>
         setColorScheme(computedColorScheme === "light" ? "dark" : "light")
       }
-      variant="outline"
+      variant="light"
       size="lg"
       aria-label="Toggle color scheme"
       radius="xl"
-      color="lime"
     >
       <AnimatePresence mode="wait" initial={false}>
         {computedColorScheme === "dark" ? (

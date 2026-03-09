@@ -1,7 +1,7 @@
 import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
-import { chatKeys } from "@/app/(portal)/chat/_keys";
+import { chatKeys } from "@/app/(portal)/patient/_keys";
 import { GetPatientProfileUseCase } from "@/data/patients";
 import { ProfilePageContent } from "./_content";
 

@@ -1,7 +1,7 @@
 "use client";
 import { Box, Skeleton } from "@mantine/core";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { ProfileContent } from "@/app/(portal)/chat/profile/_content";
+import { ProfileContent } from "@/app/(portal)/patient/profile/_content";
 import { DoctorProfileContent } from "./_doctor-content";
 
 /**

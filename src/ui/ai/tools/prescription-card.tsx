@@ -4,8 +4,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconBookmark, IconBookmarkFilled, IconCapsule, IconCheck, IconChevronDown, IconClipboardHeart } from "@tabler/icons-react";
 import { useState } from "react";
-import { useAddMedicationMutation } from "@/app/(portal)/chat/_query";
-import type { PrescriptionInput } from "@/app/(portal)/chat/_types";
+import { useAddMedicationMutation } from "@/app/(portal)/patient/_query";
+import type { PrescriptionInput } from "@/app/(portal)/patient/_types";
 
 export interface PrescriptionCardProps {
     data: PrescriptionInput;

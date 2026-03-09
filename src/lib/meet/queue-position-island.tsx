@@ -53,7 +53,7 @@ export function QueuePositionIsland() {
                 }
             `}</style>
             <UnstyledButton
-                onClick={() => router.push("/chat/connect")}
+                onClick={() => router.push("/patient/connect")}
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
                 aria-label={isNext ? "You're next in queue" : `#${pos} in queue`}

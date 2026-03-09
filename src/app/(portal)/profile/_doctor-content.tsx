@@ -20,7 +20,7 @@ import { type DoctorProfileDto } from "@/data/doctors";
 import { type ProfileDto } from "@/data/profile";
 import { colors } from "@/ui/tokens";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { AvatarUpload } from "@/app/(portal)/chat/profile/_sections/avatar-upload";
+import { AvatarUpload } from "@/app/(portal)/patient/profile/_sections/avatar-upload";
 import { getInitials } from "@/lib/get-initials";
 import { iosCard, iosLargeTitle, iosSubtitle, ios, allKeyframes } from "@/ui/ios";
 

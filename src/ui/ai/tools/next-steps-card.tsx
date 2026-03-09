@@ -2,7 +2,7 @@
 import { Alert, Box, Collapse, Group, List, Paper, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconAlertTriangle, IconChecklist, IconChevronDown } from "@tabler/icons-react";
-import type { NextStepsInput } from "@/app/(portal)/chat/_types";
+import type { NextStepsInput } from "@/app/(portal)/patient/_types";
 
 export interface NextStepsCardProps {
     data: NextStepsInput;

@@ -1,50 +1,171 @@
 "use client";
-import { Box, Group, ScrollArea, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconRuler } from "@tabler/icons-react";
+import { Box } from "@mantine/core";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
-import { useProfileQuery, useUpsertProfileMutation } from "@/app/(portal)/chat/_query";
-import { HealthInfoSection } from "@/app/(portal)/chat/profile/_sections/health-info";
+import { useChatContext } from "@/app/(portal)/patient/_context/chat-context";
+import { useMessages } from "@/app/(portal)/patient/_hooks/use-messages";
+import { useFilePersonCheck } from "@/app/(portal)/patient/_hooks/use-file-person-check";
+import { enhanceXrayImage } from "@/app/(portal)/patient/_hooks/use-opg-enhance";
+import { Messages } from "@/app/(portal)/patient/_components/messages";
+import { InputBar } from "@/app/(portal)/patient/_components/input-bar";
+import { useUploadFileMutation, useProfileQuery } from "@/app/(portal)/patient/_query";
+import { useActiveProfile } from "@/app/(portal)/patient/_context/active-profile-context";
+import { getInitials } from "@/lib/get-initials";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 
-export function PatientPageContent() {
-    const { data: healthProfile } = useProfileQuery();
-    const upsertProfile = useUpsertProfileMutation();
+// ── Chat content (client) ─────────────────────────────────────────────────────
 
+export function ChatContent() {
+    const { sessionId, onSelectSession } = useChatContext();
+    const { activeDependentId } = useActiveProfile();
+    const uploadFile = useUploadFileMutation();
+    const { data: profile } = useProfileQuery();
+    const { data: user } = useCurrentUser();
+    const userInitials = getInitials(profile?.name ?? profile?.name, user?.email);
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // ── Messages hook ─────────────────────────────────────────────────────────
+    const {
+        messages, sendMessage, setPendingAttachments, status, isLoading,
+        answeredIds, pendingFreeTextId,
+        phraseIdx, phraseFading,
+        editingId, editingText, setEditingText,
+        handleEditStart, handleEditCancel, handleEditSubmit, handleEditKeyDown,
+        handleAnswer,
+        error, regenerate,
+    } = useMessages(sessionId);
+
+    // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
+    const [input, setInput] = useState("");
+    // True while file uploads are in-flight (before the AI stream starts).
+    const [isUploading, setIsUploading] = useState(false);
+
+    // ── Pending send — used after a profile switch to auto-send in the new session ──
+    const [pendingSend, setPendingSend] = useState<{
+        text: string;
+        files?: FileList;
+    } | null>(null);
+    // Tracks the new session ID we're navigating to so we only fire once
+    const pendingSessionRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (pendingSend && pendingSessionRef.current === sessionId) {
+            const { text, files } = pendingSend;
+            pendingSessionRef.current = null;
+            setPendingSend(null);
+            void (async () => {
+                if (files && files.length > 0) {
+                    setIsUploading(true);
+                    const results = await Promise.all(
+                        Array.from(files).map(async (f) => {
+                            const enhanced = await enhanceXrayImage(f);
+                            return uploadFile.mutateAsync({ sessionId, file: enhanced, dependentId: activeDependentId });
+                        }),
+                    ).catch(() => []);
+                    setIsUploading(false);
+                    setPendingAttachments(
+                        results
+                            .filter((r) => r.downloadUrl)
+                            .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
+                    );
+                }
+                void sendMessage({ text, files });
+            })();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId, pendingSend]);
+
+    // ── Person-check hook ─────────────────────────────────────────────────────
+    const { checkAndSend, isChecking } = useFilePersonCheck({
+        onProceedNormal: (text, files) => {
+            void (async () => {
+                if (files && files.length > 0) {
+                    setIsUploading(true);
+                    const results = await Promise.all(
+                        Array.from(files).map(async (f) => {
+                            const enhanced = await enhanceXrayImage(f);
+                            return uploadFile.mutateAsync({ sessionId, file: enhanced, dependentId: activeDependentId });
+                        }),
+                    ).catch(() => []);
+                    setIsUploading(false);
+                    setPendingAttachments(
+                        results
+                            .filter((r) => r.downloadUrl)
+                            .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
+                    );
+                }
+                void sendMessage({ text, files });
+            })();
+        },
+        onProceedAsNewProfile: (text, files, newSessionId) => {
+            // Store the pending send, then navigate to the new session.
+            // The effect above will fire once sessionId updates and auto-send.
+            pendingSessionRef.current = newSessionId;
+            setPendingSend({ text, files });
+            onSelectSession(newSessionId);
+        },
+    });
+
+    // Auto-submit a pre-filled message from the ?message= param (e.g. "Create diet plan" shortcut).
+    const autoSentRef = useRef(false);
+    useEffect(() => {
+        const preset = searchParams.get("message");
+        if (!preset || autoSentRef.current) return;
+        autoSentRef.current = true;
+        // Strip ?message= from the URL immediately so a page reload won't re-send.
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("message");
+        router.replace(`/patient?${params.toString()}`);
+        void sendMessage({ text: preset });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-            {/* Page header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
-                <Group gap="sm">
-                    <ThemeIcon size={34} radius="md" color="teal" variant="light">
-                        <IconRuler size={18} />
-                    </ThemeIcon>
-                    <Box>
-                        <Title order={5} lh={1.2}>Physical Details</Title>
-                        <Text size="xs" c="dimmed">Your body metrics, used to personalise AI assessments</Text>
-                    </Box>
-                </Group>
-            </Box>
+            {/* Message thread */}
+            <Messages
+                messages={messages}
+                isLoading={isLoading}
+                preparingLabel={isChecking ? "Scanning file…" : isUploading ? "Enhancing & uploading…" : undefined}
+                chatStatus={status}
+                userPhotoURL={profile?.photoUrl ?? user?.photoURL}
+                userInitials={userInitials}
+                answeredIds={answeredIds}
+                editingId={editingId}
+                editingText={editingText}
+                phraseIdx={phraseIdx}
+                phraseFading={phraseFading}
+                error={error}
+                onRetry={regenerate}
+                onAnswer={handleAnswer}
+                onEditStart={handleEditStart}
+                onEditChange={setEditingText}
+                onEditKeyDown={handleEditKeyDown}
+                onEditCancel={handleEditCancel}
+                onEditSubmit={handleEditSubmit}
+                onStarterSelect={setInput}
+                onLearnMore={(text) => { void sendMessage({ text }); }}
+            />
 
-            {/* Scrollable content */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={600} mx="auto">
-                        <Stack gap="md">
-                            <HealthInfoSection
-                                healthProfile={healthProfile}
-                                upsertProfile={upsertProfile}
-                            />
-                        </Stack>
-                    </Box>
-                </ScrollArea>
-            </Box>
+            {/* Input bar */}
+            <InputBar
+                input={input}
+                onInputChange={setInput}
+                isLoading={isLoading}
+                isUploading={isUploading || isChecking}
+                pendingFreeTextId={pendingFreeTextId}
+                messages={messages}
+                status={status}
+                onSend={(text, files) => {
+                    // Gate every file send through the person-check flow.
+                    // If no files (or no visual files), it proceeds immediately.
+                    void checkAndSend(text, files);
+                }}
+                onAnswerFreeText={handleAnswer}
+            />
         </Box>
     );
 }

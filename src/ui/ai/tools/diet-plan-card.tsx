@@ -4,9 +4,9 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconBookmark, IconBookmarkFilled, IconCheck, IconChevronDown, IconClock, IconFlame, IconSalad, IconScale } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { useAddDietPlanMutation, useDietPlansQuery } from "@/app/(portal)/chat/_query";
-import { useChatContext } from "@/app/(portal)/chat/_context/chat-context";
-import type { DietPlanInput } from "@/app/(portal)/chat/_types";
+import { useAddDietPlanMutation, useDietPlansQuery } from "@/app/(portal)/patient/_query";
+import { useChatContext } from "@/app/(portal)/patient/_context/chat-context";
+import type { DietPlanInput } from "@/app/(portal)/patient/_types";
 
 export interface DietPlanCardProps {
     data: DietPlanInput;

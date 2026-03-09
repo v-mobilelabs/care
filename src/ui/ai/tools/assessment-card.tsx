@@ -2,8 +2,8 @@
 import { Badge, Box, Collapse, Divider, Group, List, Paper, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconChevronDown, IconCircleCheck, IconShieldCheck } from "@tabler/icons-react";
-import { RISK_COLOR } from "@/app/(portal)/chat/_types";
-import type { AssessmentInput } from "@/app/(portal)/chat/_types";
+import { RISK_COLOR } from "@/app/(portal)/patient/_types";
+import type { AssessmentInput } from "@/app/(portal)/patient/_types";
 
 export interface AssessmentCardProps {
     data: AssessmentInput;

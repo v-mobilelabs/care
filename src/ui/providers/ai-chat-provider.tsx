@@ -3,7 +3,7 @@ import { createContext, useContext, useCallback, useMemo, type ReactNode } from 
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { chatKeys } from "@/app/(portal)/chat/_keys";
+import { chatKeys } from "@/app/(portal)/patient/_keys";
 import type { SessionDto } from "@/data/sessions/models/session.model";
 
 interface AIChatContextValue {
@@ -85,7 +85,7 @@ export function AIChatProvider({
   const newSession = useCallback(
     async (title?: string) => {
       const session = await createSessionMutation.mutateAsync(title);
-      router.push(`/chat?id=${session.id}`);
+      router.push(`/patient?id=${session.id}`);
     },
     [createSessionMutation, router],
   );
@@ -93,7 +93,7 @@ export function AIChatProvider({
   // Switch to existing session
   const switchSession = useCallback(
     (id: string) => {
-      router.push(`/chat?id=${id}`);
+      router.push(`/patient?id=${id}`);
     },
     [router],
   );

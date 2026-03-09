@@ -3,9 +3,9 @@ import { ActionIcon, Badge, Box, Collapse, Divider, Group, List, Paper, Stack, T
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconChevronDown, IconCopy, IconNotes } from "@tabler/icons-react";
-import { RISK_COLOR } from "@/app/(portal)/chat/_types";
-import type { SoapNoteInput } from "@/app/(portal)/chat/_types";
-import { parseInline, MarkdownContent } from "@/app/(portal)/chat/_components/markdown";
+import { RISK_COLOR } from "@/app/(portal)/patient/_types";
+import type { SoapNoteInput } from "@/app/(portal)/patient/_types";
+import { parseInline, MarkdownContent } from "@/app/(portal)/patient/_components/markdown";
 
 export interface SoapNoteCardProps {
     data: SoapNoteInput;

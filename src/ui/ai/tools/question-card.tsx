@@ -2,7 +2,7 @@
 import { Badge, Button, Chip, Group, Paper, Slider, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconCheck, IconQuestionMark, IconX, IconAlertTriangle, IconThermometer, IconFlame, IconScale, IconMoodSmile, IconMoodSad, IconHeartbeat, IconDroplet, IconClock } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
-import type { AskQuestionInput } from "@/app/(portal)/chat/_types";
+import type { AskQuestionInput } from "@/app/(portal)/patient/_types";
 
 export interface QuestionCardProps {
     data: AskQuestionInput;

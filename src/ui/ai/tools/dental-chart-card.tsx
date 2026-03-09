@@ -2,7 +2,7 @@
 import { Badge, Box, Group, Paper, Stack, Text, ThemeIcon, useMantineColorScheme } from "@mantine/core";
 import { IconDental, IconShieldCheck } from "@tabler/icons-react";
 import { useState } from "react";
-import type { DentalChartInput, DentalCondition, DentalFinding, DentalMeasurements } from "@/app/(portal)/chat/_types";
+import type { DentalChartInput, DentalCondition, DentalFinding, DentalMeasurements } from "@/app/(portal)/patient/_types";
 
 // ── Constants & Configurations ───────────────────────────────────────────────
 

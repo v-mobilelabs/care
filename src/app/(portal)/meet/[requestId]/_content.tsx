@@ -27,7 +27,7 @@ import { meetSessionKey, type MeetSessionData } from "./_keys";
 import { useMeetSession } from "@/lib/meet/meet-session-context";
 import { useCallState } from "@/lib/meet/use-call-state";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { useCancelCall } from "@/app/(portal)/chat/connect/_query";
+import { useCancelCall } from "@/app/(portal)/patient/connect/_query";
 import { getClientDatabase } from "@/lib/firebase/client";
 
 export function MeetContent({

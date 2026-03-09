@@ -25,7 +25,7 @@ export function LandingHeader() {
             radius="xl"
             leftSection={<IconMessageChatbot size={15} />}
             component={Link}
-            href="/chat"
+            href="/patient"
           >
             Start Assessment
           </Button>

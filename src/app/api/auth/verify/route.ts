@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
 
       destination = "/doctor";
     } else {
-      destination = "/chat";
+      destination = "/patient";
     }
 
     const destUrl = new URL(destination, APP_URL);

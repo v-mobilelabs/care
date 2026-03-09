@@ -1,8 +1,8 @@
 "use client";
 import { Badge, Box, Group, Paper, Text, ThemeIcon } from "@mantine/core";
 import { IconStethoscope } from "@tabler/icons-react";
-import { URGENCY_COLOR } from "@/app/(portal)/chat/_types";
-import type { ProviderInput } from "@/app/(portal)/chat/_types";
+import { URGENCY_COLOR } from "@/app/(portal)/patient/_types";
+import type { ProviderInput } from "@/app/(portal)/patient/_types";
 
 export interface ProviderCardProps {
     data: ProviderInput;

@@ -24,7 +24,7 @@ function isPublic(pathname: string): boolean {
 // API routes (/api/**) are NOT blocked here; kind enforcement for APIs is
 // done by WithContext({ kind }) at the handler level.
 const DOCTOR_ZONE_PREFIX = "/doctor/";
-const USER_ZONE_PREFIXES = ["/chat"];
+const USER_ZONE_PREFIXES = ["/patient"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -56,7 +56,7 @@ export async function proxy(request: NextRequest) {
   // User (non-doctor) trying to access the doctor zone → redirect to their portal.
   if (payload.kind === "user" && pathname.startsWith(DOCTOR_ZONE_PREFIX)) {
     const chatUrl = request.nextUrl.clone();
-    chatUrl.pathname = "/chat";
+    chatUrl.pathname = "/patient";
     chatUrl.search = "";
     return NextResponse.redirect(chatUrl);
   }

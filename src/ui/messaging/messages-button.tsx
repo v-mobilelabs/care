@@ -25,8 +25,8 @@ export function MessagesButton() {
                 offset={4}
             >
                 <ActionIcon
-                    variant={"filled"}
-                    color={isOpen ? "primary" : "gray"}
+                    variant={isOpen ? "filled" : "light"}
+                    color="primary"
                     size="lg"
                     radius="xl"
                     onClick={toggle}

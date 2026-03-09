@@ -3,7 +3,7 @@ import { Badge, Box, Collapse, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon,
 import { useDisclosure } from "@mantine/hooks";
 import { IconChevronDown, IconClock, IconDroplet, IconFlame, IconFlask, IconHeartbeat, IconLungs } from "@tabler/icons-react";
 import { type ReactNode } from "react";
-import type { LogVitalsInput } from "@/app/(portal)/chat/_types";
+import type { LogVitalsInput } from "@/app/(portal)/patient/_types";
 
 export interface LogVitalsCardProps {
     data: LogVitalsInput;

@@ -2,7 +2,7 @@
 import { ActionIcon, Badge, Box, Collapse, Divider, Group, List, Paper, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCapsule, IconChevronDown, IconHeartbeat, IconNotes } from "@tabler/icons-react";
-import type { PatientSummaryInput } from "@/app/(portal)/chat/_types";
+import type { PatientSummaryInput } from "@/app/(portal)/patient/_types";
 
 export interface PatientSummaryCardProps {
     data: PatientSummaryInput;
