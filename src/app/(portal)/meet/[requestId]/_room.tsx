@@ -474,14 +474,15 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
             color: reason === "chime-kicked" ? "yellow" : "gray",
         });
 
-        // Clean up overlay
-        onEnd?.();
-
         // Show feedback modal for normal call ends (not kicked scenarios).
         // For kicks, navigate immediately since it's not the user's choice.
         if (reason === "chime-kicked") {
+            // Clean up overlay immediately for kicks
+            onEnd?.();
             router.push(exitRoute);
         } else {
+            // For normal ends, show feedback modal first
+            // onEnd() will be called after the modal is dismissed
             feedbackExitRouteRef.current = exitRoute;
             feedbackReasonRef.current = reason;
             setFeedbackOpen(true);
@@ -1464,8 +1465,10 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
 
     const handleFeedbackDismiss = useCallback(() => {
         setFeedbackOpen(false);
+        // Clean up overlay state before navigating
+        onEnd?.();
         router.push(feedbackExitRouteRef.current || exitRoute);
-    }, [exitRoute, router]);
+    }, [exitRoute, onEnd, router]);
 
     // ── End call ────────────────────────────────────────────────────────────
 

@@ -27,7 +27,7 @@ import type { IncomingCallEntry } from "@/lib/meet/use-doctor-call-queue";
 import type { AttendeeJoinInfo } from "@/data/meet";
 import { getInitials } from "@/lib/get-initials";
 import { useMeetSession } from "@/lib/meet/meet-session-context";
-import { meetSessionKey, type MeetSessionData } from "@/app/meet/[requestId]/_keys";
+import { meetSessionKey, type MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 import { buildConversationId } from "@/lib/messaging/conversation-id";
 import { useCallRingtone } from "@/lib/meet/use-call-ringtone";
 

@@ -3,7 +3,7 @@ import { WithContext } from "@/lib/api/with-context";
 import { GetMeetingJoinInfoUseCase } from "@/data/meet";
 import { meetRepository } from "@/data/meet/repositories/meet.repository";
 import { buildConversationId } from "@/lib/messaging/conversation-id";
-import type { MeetSessionData } from "@/app/meet/[requestId]/_keys";
+import type { MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 
 // GET /api/meet/[requestId]/session — full session data (join info + metadata)
 // Used as a TanStack Query fallback when the SSR-hydrated cache is empty.

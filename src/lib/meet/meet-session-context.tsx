@@ -15,7 +15,7 @@
  *  - `endMeet()`              → terminate the session and clean up overlay state
  */
 import { createContext, useContext, useState, type ReactNode } from "react";
-import type { MeetSessionData } from "@/app/meet/[requestId]/_keys";
+import type { MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ import { Box, Center, Group, Stack, Text } from "@mantine/core";
 import { useMeetSession } from "./meet-session-context";
 
 const MeetingRoom = dynamic(
-    () => import("@/app/meet/[requestId]/_room").then((m) => ({ default: m.MeetingRoom })),
+    () => import("@/app/(portal)/meet/[requestId]/_room").then((m) => ({ default: m.MeetingRoom })),
     {
         ssr: false,
         loading: () => (

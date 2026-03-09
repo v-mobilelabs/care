@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
 import { getInitials } from "@/lib/get-initials";
-import { meetSessionKey, type MeetSessionData } from "@/app/meet/[requestId]/_keys";
+import { meetSessionKey, type MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 import { useMeetSession } from "@/lib/meet/meet-session-context";
 
 // ── Timer helper ──────────────────────────────────────────────────────────────

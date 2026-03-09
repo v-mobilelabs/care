@@ -22,7 +22,7 @@ import { usePathname } from "next/navigation";
 import { firebaseApp, getClientDatabase } from "@/lib/firebase/client";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useMeetSession } from "./meet-session-context";
-import type { MeetSessionData } from "@/app/meet/[requestId]/_keys";
+import type { MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 
 /** Minimal shape of the RTDB call-requests entry (doctor side). */
 interface RtdbCallEntry {

@@ -100,6 +100,36 @@ export function MeetContent({
         }
     }, [callState.status, session, router, user?.uid]);
 
+    // Call ended (before patient joined) — navigate back
+    useEffect(() => {
+        if (
+            session &&
+            callState.status === "ended" &&
+            user?.uid &&
+            !joined
+        ) {
+            notifications.show({
+                title: "Call ended",
+                message: "The call has been ended by the doctor.",
+                color: "gray",
+                icon: <IconX size={18} />,
+            });
+            // Clean up the ended status from RTDB and navigate back
+            const cleanupAndNavigate = async () => {
+                try {
+                    const db = getClientDatabase();
+                    await remove(ref(db, `call-state/${user.uid}`));
+                } catch (err) {
+                    console.warn("[MeetContent] Failed to cleanup ended state:", err);
+                }
+                router.push(session.exitRoute);
+            };
+            // Wait 1.5s for user to see the notification, then cleanup and navigate
+            const timer = setTimeout(() => void cleanupAndNavigate(), 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [callState.status, session, router, user?.uid, joined]);
+
     // ── If the overlay already has this session active but hidden, expand it.
     useEffect(() => {
         if (
