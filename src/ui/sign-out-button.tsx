@@ -10,6 +10,7 @@ export function SignOutButton() {
 
     async function handleSignOut() {
         await signOut();
+        modals.closeAll();
         router.replace("/auth/login");
     }
 
