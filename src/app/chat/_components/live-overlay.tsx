@@ -78,47 +78,38 @@ export function LiveOverlay({ livePhase, liveAIText, liveTranscript, onClose }: 
                 />
                 {/* Core orb */}
                 <motion.div
-                    animtransition: "background 0.6s ease, box-shadow 0.6s ease",
+                    style={{
+                        width: 140,
+                        height: 140,
+                        borderRadius: "50%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: (() => {
+                            if (livePhase === "speaking") return "linear-gradient(135deg, var(--mantine-color-teal-5), var(--mantine-color-cyan-4))";
+                            if (livePhase === "listening") return "linear-gradient(135deg, var(--mantine-color-primary-5), var(--mantine-color-violet-5))";
+                            return "linear-gradient(135deg, var(--mantine-color-violet-5), var(--mantine-color-grape-5))";
+                        })(),
+                        boxShadow: (() => {
+                            if (livePhase === "speaking") return "0 0 60px rgba(32,201,151,0.45)";
+                            if (livePhase === "listening") return "0 0 60px rgba(99,102,241,0.45)";
+                            return "0 0 40px rgba(168,85,247,0.35)";
+                        })(),
+                        animation: livePhase === "listening"
+                            ? "live-pulse 1.8s ease-in-out infinite"
+                            : livePhase === "thinking"
+                                ? "live-pulse 0.7s ease-in-out infinite"
+                                : "none",
+                        transition: "background 0.6s ease, box-shadow 0.6s ease",
                     }}
                 >
-                {(() => {
-                    if (livePhase === "speaking") return <IconWaveSine size={52} color="white" />;
-                    if (livePhase === "thinking") return <IconRobot size={52} color="white" />;
-                    return <IconMicrophone size={52} color="white" />;
-                })()}
-            </motion.div
-                    style={{
-                width: 140,
-                height: 140,
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: (() => {
-                    if (livePhase === "speaking") return "linear-gradient(135deg, var(--mantine-color-teal-5), var(--mantine-color-cyan-4))";
-                    if (livePhase === "listening") return "linear-gradient(135deg, var(--mantine-color-primary-5), var(--mantine-color-violet-5))";
-                    return "linear-gradient(135deg, var(--mantine-color-violet-5), var(--mantine-color-grape-5))";
-                })(),
-                boxShadow: (() => {
-                    if (livePhase === "speaking") return "0 0 60px rgba(32,201,151,0.45)";
-                    if (livePhase === "listening") return "0 0 60px rgba(99,102,241,0.45)";
-                    return "0 0 40px rgba(168,85,247,0.35)";
-                })(),
-                animation: livePhase === "listening"
-                    ? "live-pulse 1.8s ease-in-out infinite"
-                    : livePhase === "thinking"
-                        ? "live-pulse 0.7s ease-in-out infinite"
-                        : "none",
-                transition: "background 0.6s ease, box-shadow 0.6s ease",
-            }}
-                >
-            {(() => {
-                if (livePhase === "speaking") return <IconWaveSine size={52} color="white" />;
-                if (livePhase === "thinking") return <IconRobot size={52} color="white" />;
-                return <IconMicrophone size={52} color="white" />;
-            })()}
-        </Box>
-            </Box >
+                    {(() => {
+                        if (livePhase === "speaking") return <IconWaveSine size={52} color="white" />;
+                        if (livePhase === "thinking") return <IconRobot size={52} color="white" />;
+                        return <IconMicrophone size={52} color="white" />;
+                    })()}
+                </motion.div>
+            </Box>
 
             <Text fw={700} size="xl" mb={8}>
                 {(() => {

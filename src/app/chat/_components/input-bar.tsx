@@ -28,8 +28,8 @@ import type { UIMessage } from "ai";
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
-import { useMic } from "@/app/chat/_hooks/use-mic";
-import { useLiveSpeech } from "@/app/chat/_hooks/use-live-speech";
+import { useMic } from "@/app/(portal)/chat/_hooks/use-mic";
+import { useLiveSpeech } from "@/app/(portal)/chat/_hooks/use-live-speech";
 import { LiveOverlay } from "@/app/chat/_components/live-overlay";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
