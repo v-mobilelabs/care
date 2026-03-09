@@ -1,6 +1,6 @@
 "use client";
 import { Divider, List, Stack, Text, Title } from "@mantine/core";
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 // ── Inline parser ─────────────────────────────────────────────────────────────
 
@@ -59,10 +59,44 @@ export function parseMdBlocks(markdown: string): MdBlock[] {
     return blocks;
 }
 
+// ── Typing animation hook ────────────────────────────────────────────────────
+
+function useTypingEffect(text: string, speed = 15) {
+    const [displayedText, setDisplayedText] = useState("");
+    const [isComplete, setIsComplete] = useState(false);
+
+    useEffect(() => {
+        if (text.length === 0) {
+            setDisplayedText("");
+            setIsComplete(true);
+            return;
+        }
+
+        let index = 0;
+        setDisplayedText("");
+        setIsComplete(false);
+
+        const timer = setInterval(() => {
+            if (index < text.length) {
+                setDisplayedText(text.slice(0, index + 1));
+                index++;
+            } else {
+                setIsComplete(true);
+                clearInterval(timer);
+            }
+        }, speed);
+
+        return () => clearInterval(timer);
+    }, [text, speed]);
+
+    return { displayedText, isComplete };
+}
+
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 export function MarkdownContent({ text }: Readonly<{ text: string }>) {
-    const blocks = parseMdBlocks(text);
+    const { displayedText } = useTypingEffect(text, 8);
+    const blocks = parseMdBlocks(displayedText);
     const nodes: React.ReactNode[] = [];
     let i = 0;
     while (i < blocks.length) {

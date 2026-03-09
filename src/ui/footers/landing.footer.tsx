@@ -6,7 +6,7 @@ import Link from "next/link";
 export function LandingFooter() {
   return (
     <footer>
-      <Box p="md" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
+      <Box py="md" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
         <Container>
           <Group justify="space-between" wrap="wrap" gap="sm">
             <Stack gap={2}>

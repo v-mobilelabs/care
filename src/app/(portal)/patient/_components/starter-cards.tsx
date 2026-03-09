@@ -38,7 +38,7 @@ interface StarterCardsProps {
 }
 
 // ── Starters ──────────────────────────────────────────────────────────────────
-const ICON_SIZE = 32;
+const ICON_SIZE = 24;
 const STARTERS: Starter[] = [
     // Upload & Analyse
     {
@@ -256,7 +256,7 @@ function InteractiveCard({ icon, color, label, sub, onClick }: Readonly<CardProp
                 position: "relative",
                 borderRadius: "var(--mantine-radius-lg)",
                 overflow: "hidden",
-                aspectRatio: "1 / 1",
+                aspectRatio: "3 / 2",
                 width: "100%",
             }}
         >
@@ -331,7 +331,7 @@ function InteractiveCard({ icon, color, label, sub, onClick }: Readonly<CardProp
                     }}
                     transition={{ duration: 0.3 }}
                 >
-                    <ThemeIcon size={36} radius="md" color={color} variant="light" mb={8}>
+                    <ThemeIcon size={26} radius="md" color={color} variant="light" mb={8}>
                         {icon}
                     </ThemeIcon>
                 </motion.div>
@@ -445,7 +445,7 @@ export function StarterCards({ onSelect }: Readonly<StarterCardsProps>) {
             </motion.div>
 
             {/* Prompt grid */}
-            <SimpleGrid cols={{ base: 2, sm: 3, md: 5 }} spacing="xs" w="100%">
+            <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs" w="100%">
                 {visible.map(({ icon, color, label, sub, prompt }, index) => (
                     <motion.div
                         key={label}

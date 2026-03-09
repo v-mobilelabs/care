@@ -20,7 +20,9 @@ import {
     Tabs,
     Text,
     ThemeIcon,
+    Transition,
     UnstyledButton,
+    useMantineColorScheme,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -56,7 +58,6 @@ import {
     IconThermometer,
     IconX,
 } from "@tabler/icons-react";
-import { useMantineColorScheme } from "@mantine/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isToolUIPart } from "ai";
 import type { UIMessagePart, UIDataTypes, UITools } from "ai";
@@ -2125,6 +2126,15 @@ export function PatientSummaryCard({ data }: Readonly<{ data: PatientSummaryInpu
 
 // ── Tool Part Dispatcher ──────────────────────────────────────────────────────
 
+// Wrapper for animated tool cards
+function AnimatedToolCard({ children }: Readonly<{ children: React.ReactNode }>) {
+    return (
+        <Transition mounted={true} transition="slide-up" duration={300} timingFunction="ease-out">
+            {(styles) => <div style={styles}>{children}</div>}
+        </Transition>
+    );
+}
+
 export interface ToolPartRendererProps {
     part: UIMessagePart<UIDataTypes, UITools>;
     onAnswer: (toolCallId: string, answer: string) => void;
@@ -2169,49 +2179,49 @@ export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLea
     if (!isToolUIPart(part)) return null;
 
     const question = extractToolInput<AskQuestionInput>(part, "askQuestion");
-    if (question) return <QuestionCard data={question} toolCallId={toolCallId} isAnswered={isAnswered} isLoading={isLoading} onAnswer={onAnswer} />;
+    if (question) return <AnimatedToolCard><QuestionCard data={question} toolCallId={toolCallId} isAnswered={isAnswered} isLoading={isLoading} onAnswer={onAnswer} /></AnimatedToolCard>;
 
     const suggestActions = extractToolInput<SuggestActionsInput>(part, "suggestActions");
-    if (suggestActions) return <SuggestActionsCard data={suggestActions} toolCallId={toolCallId} isAnswered={isAnswered} onAnswer={onAnswer} />;
+    if (suggestActions) return <AnimatedToolCard><SuggestActionsCard data={suggestActions} toolCallId={toolCallId} isAnswered={isAnswered} onAnswer={onAnswer} /></AnimatedToolCard>;
 
     const condition = extractToolInput<ConditionInput>(part, "recordCondition");
-    if (condition) return <ConditionCard data={condition} onLearnMore={onLearnMore} />;
+    if (condition) return <AnimatedToolCard><ConditionCard data={condition} onLearnMore={onLearnMore} /></AnimatedToolCard>;
 
     const prescription = extractToolInput<PrescriptionInput>(part, "createPrescription");
-    if (prescription) return <PrescriptionCard data={prescription} />;
+    if (prescription) return <AnimatedToolCard><PrescriptionCard data={prescription} /></AnimatedToolCard>;
 
     const medicine = extractToolInput<MedicineInput>(part, "addMedicine");
-    if (medicine) return <MedicineCard data={medicine} />;
+    if (medicine) return <AnimatedToolCard><MedicineCard data={medicine} /></AnimatedToolCard>;
 
     const procedure = extractToolInput<ProcedureInput>(part, "orderProcedure");
-    if (procedure) return <ProcedureCard data={procedure} />;
+    if (procedure) return <AnimatedToolCard><ProcedureCard data={procedure} /></AnimatedToolCard>;
 
     const appointment = extractToolInput<AppointmentInput>(part, "bookAppointment");
-    if (appointment) return <AppointmentCard data={appointment} />;
+    if (appointment) return <AnimatedToolCard><AppointmentCard data={appointment} /></AnimatedToolCard>;
 
     const provider = extractToolInput<ProviderInput>(part, "recommendProvider");
-    if (provider) return <ProviderCard data={provider} />;
+    if (provider) return <AnimatedToolCard><ProviderCard data={provider} /></AnimatedToolCard>;
 
     const assessment = extractToolInput<AssessmentInput>(part, "completeAssessment");
-    if (assessment) return <AssessmentCompleteCard data={assessment} />;
+    if (assessment) return <AnimatedToolCard><AssessmentCompleteCard data={assessment} /></AnimatedToolCard>;
 
     const nextSteps = extractToolInput<NextStepsInput>(part, "nextSteps");
-    if (nextSteps) return <NextStepsCard data={nextSteps} />;
+    if (nextSteps) return <AnimatedToolCard><NextStepsCard data={nextSteps} /></AnimatedToolCard>;
 
     const dietPlan = extractToolInput<DietPlanInput>(part, "dietPlan");
-    if (dietPlan) return <DietPlanCard data={dietPlan} />;
+    if (dietPlan) return <AnimatedToolCard><DietPlanCard data={dietPlan} /></AnimatedToolCard>;
 
     const soapNote = extractToolInput<SoapNoteInput>(part, "soapNote");
-    if (soapNote) return <SoapNoteCard data={soapNote} />;
+    if (soapNote) return <AnimatedToolCard><SoapNoteCard data={soapNote} /></AnimatedToolCard>;
 
     const dentalChart = extractToolInput<DentalChartInput>(part, "dentalChart");
-    if (dentalChart) return <DentalChartCard data={dentalChart} />;
+    if (dentalChart) return <AnimatedToolCard><DentalChartCard data={dentalChart} /></AnimatedToolCard>;
 
     const logVitals = extractToolInput<LogVitalsInput>(part, "logVitals");
-    if (logVitals) return <LogVitalsCard data={logVitals} />;
+    if (logVitals) return <AnimatedToolCard><LogVitalsCard data={logVitals} /></AnimatedToolCard>;
 
     const patientSummary = extractToolInput<PatientSummaryInput>(part, "generatePatientSummary");
-    if (patientSummary) return <PatientSummaryCard data={patientSummary} />;
+    if (patientSummary) return <AnimatedToolCard><PatientSummaryCard data={patientSummary} /></AnimatedToolCard>;
 
     if (toolName) {
         return (

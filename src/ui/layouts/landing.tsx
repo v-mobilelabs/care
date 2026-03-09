@@ -8,7 +8,7 @@ export function LandingLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <Container h="100vh" w="100vw" p={0} m={0} style={{
+    <Container fluid h="100vh" p={0} m={0} style={{
       background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
     }}>
       <LandingHeader />

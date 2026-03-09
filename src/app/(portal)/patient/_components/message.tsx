@@ -11,6 +11,7 @@ import {
     Stack,
     Text,
     Textarea,
+    Transition,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -226,7 +227,7 @@ export function TextMessage({
     if (!text.trim()) return null;
     const isEditing = isUser && editingId === msgId;
 
-    return (
+    const content = (
         <Stack gap={6} align={isUser ? "flex-end" : "flex-start"}>
             <Group gap={8} style={{ flexDirection: isUser ? "row-reverse" : "row" }}>
                 <Avatar
@@ -312,6 +313,22 @@ export function TextMessage({
             {!isUser && <FeedbackBar msgId={msgId} />}
         </Stack>
     );
+
+    // Animate AI messages with fade-in and slide-up effect
+    if (!isUser) {
+        return (
+            <Transition
+                mounted={true}
+                transition="slide-up"
+                duration={400}
+                timingFunction="ease-out"
+            >
+                {(styles) => <div style={styles}>{content}</div>}
+            </Transition>
+        );
+    }
+
+    return content;
 }
 
 // ── Typing / thinking status indicator ───────────────────────────────────────

@@ -3,7 +3,7 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const DAILY_CREDITS = 100;
+export const DAILY_CREDITS = 500;
 
 // ── Firestore document shape ──────────────────────────────────────────────────
 

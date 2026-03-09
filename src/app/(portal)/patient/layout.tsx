@@ -7,7 +7,7 @@ import { ConsentGate, hasConsented, CONSENT_KEY } from "@/app/(portal)/patient/_
 import { ActiveProfileProvider } from "@/app/(portal)/patient/_context/active-profile-context";
 import { useProfileQuery } from "@/app/(portal)/patient/_query";
 import { PortalLayout } from "@/ui/layouts/portal";
-import { IconAi, IconStethoscope, IconVideo } from "@tabler/icons-react";
+import { IconAi, IconPill, IconStethoscope, IconVideo } from "@tabler/icons-react";
 
 const menus = [
     {
@@ -24,6 +24,11 @@ const menus = [
         label: "Consult",
         icon: <IconVideo />,
         href: "/patient/connect",
+    },
+    {
+        label: "Prescriptions",
+        icon: <IconPill />,
+        href: "/patient/prescriptions",
     }
     // Future menu items (e.g. SOAP notes, profile) would go here.
 ];
