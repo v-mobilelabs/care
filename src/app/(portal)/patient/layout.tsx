@@ -19,7 +19,7 @@ const menus = [
     {
         label: "Assistant",
         icon: <IconAi />,
-        href: "/patient",
+        href: "/patient/assistant",
     },
     {
         label: "Doctors",
@@ -37,7 +37,7 @@ const menus = [
 const application = {
     id: "careai-portal",
     name: "CareAI",
-    url: "/patient",
+    url: "/patient/assistant",
     icon: <IconAi size={20} />,
 };
 
@@ -68,12 +68,12 @@ function ChatShell({ children }: Readonly<{ children: React.ReactNode }>) {
         }
     }, [consented, profile?.consentedAt]);
 
-    // Only auto-create a session when on the root /patient page.
+    // Only auto-create a session when on the assistant page.
     // Sub-pages (profile, soap-notes, faq) don't carry ?id= and must not be redirected.
-    const isChatRoot = pathname === "/patient";
+    const isChatRoot = pathname === "/patient/assistant";
 
     // Sync sessionId whenever the URL ?id= param changes (e.g. navigating from
-    // a sub-page to /patient?id=xxx via the SOAP notes "Session" button).
+    // a sub-page to /patient/assistant?id=xxx via the SOAP notes "Session" button).
     useEffect(() => {
         const urlId = searchParams.get("id");
         if (urlId && urlId !== sessionId) {
@@ -85,24 +85,24 @@ function ChatShell({ children }: Readonly<{ children: React.ReactNode }>) {
         // Don't create a new session if the URL already carries a valid id —
         // the sync effect above will pick it up. This prevents a race where
         // both effects fire on the same render (e.g. navigating from a sub-page
-        // to /patient?id=xxx) and the auto-create wins with a stale null sessionId.
+        // to /patient/assistant?id=xxx) and the auto-create wins with a stale null sessionId.
         const urlId = searchParams.get("id");
         if (isChatRoot && !sessionId && !urlId) {
             const id = crypto.randomUUID();
             setSessionId(id);
-            router.replace(`/patient?id=${id}`);
+            router.replace(`/patient/assistant?id=${id}`);
         }
     }, [isChatRoot, sessionId, router, searchParams]);
 
     function handleNewChat() {
         const id = crypto.randomUUID();
         setSessionId(id);
-        router.replace(`/patient?id=${id}`);
+        router.replace(`/patient/assistant?id=${id}`);
     }
 
     function handleSelectSession(id: string) {
         setSessionId(id);
-        router.replace(`/patient?id=${id}`);
+        router.replace(`/patient/assistant?id=${id}`);
     }
 
     // Suppress render until consent status is known (avoids hydration mismatch

@@ -116,10 +116,10 @@ export default function TermsPage() {
           {/* 2 */}
           <Section title="2. Eligibility">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>You must be at least 13 years old (or 16 in the EU/UK) to use the Service independently.</List.Item>
-              <List.Item>If you are between 13 and 18, you must have parental or guardian consent.</List.Item>
-              <List.Item>You must have legal capacity to enter into a binding contract.</List.Item>
-              <List.Item>You may not use the Service where doing so violates local laws or regulations.</List.Item>
+              <li>You must be at least 13 years old (or 16 in the EU/UK) to use the Service independently.</li>
+              <li>If you are between 13 and 18, you must have parental or guardian consent.</li>
+              <li>You must have legal capacity to enter into a binding contract.</li>
+              <li>You may not use the Service where doing so violates local laws or regulations.</li>
             </List>
           </Section>
 
@@ -134,11 +134,11 @@ export default function TermsPage() {
               intelligence and are <strong>informational only</strong>.
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>CareAI is NOT a licensed medical device, hospital, clinic, or pharmacy.</List.Item>
-              <List.Item>No output from CareAI constitutes a diagnosis, prescription, or professional medical opinion.</List.Item>
-              <List.Item>AI models may produce errors, hallucinations, or outdated information. Never rely solely on CareAI outputs for any health decision.</List.Item>
-              <List.Item>Always seek the advice of a qualified physician, pharmacist, or other licensed health professional.</List.Item>
-              <List.Item>CareAI does not monitor your health in real time and is not an emergency service.</List.Item>
+              <li>CareAI is NOT a licensed medical device, hospital, clinic, or pharmacy.</li>
+              <li>No output from CareAI constitutes a diagnosis, prescription, or professional medical opinion.</li>
+              <li>AI models may produce errors, hallucinations, or outdated information. Never rely solely on CareAI outputs for any health decision.</li>
+              <li>Always seek the advice of a qualified physician, pharmacist, or other licensed health professional.</li>
+              <li>CareAI does not monitor your health in real time and is not an emergency service.</li>
             </List>
           </Section>
 
@@ -163,11 +163,11 @@ export default function TermsPage() {
           {/* 5 */}
           <Section title="5. Account Registration &amp; Security">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>You are responsible for maintaining the security of your email account, as magic-link authentication grants access via your inbox.</List.Item>
-              <List.Item>You must notify us immediately at <Anchor href="mailto:support@care.ai" size="sm">support@care.ai</Anchor> if you suspect unauthorised access.</List.Item>
-              <List.Item>One account per person. You may not create accounts on behalf of others except for dependent profiles (e.g. minor children) as permitted by the Service.</List.Item>
-              <List.Item>You may not share account access with other individuals.</List.Item>
-              <List.Item>We reserve the right to suspend or terminate accounts that violate these Terms.</List.Item>
+              <li>You are responsible for maintaining the security of your email account, as magic-link authentication grants access via your inbox.</li>
+              <li>You must notify us immediately at <Anchor href="mailto:support@care.ai" size="sm">support@care.ai</Anchor> if you suspect unauthorised access.</li>
+              <li>One account per person. You may not create accounts on behalf of others except for dependent profiles (e.g. minor children) as permitted by the Service.</li>
+              <li>You may not share account access with other individuals.</li>
+              <li>We reserve the right to suspend or terminate accounts that violate these Terms.</li>
             </List>
           </Section>
 
@@ -177,14 +177,14 @@ export default function TermsPage() {
           <Section title="6. Acceptable Use">
             <Text size="sm" c="dimmed" lh={1.8}>You agree not to:</Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>Use the Service for any unlawful purpose or in violation of applicable laws.</List.Item>
-              <List.Item>Submit false, misleading, or fraudulent health information.</List.Item>
-              <List.Item>Attempt to reverse-engineer, scrape, or extract data from the Service.</List.Item>
-              <List.Item>Upload content that infringes third-party intellectual property rights.</List.Item>
-              <List.Item>Use the Service to harass, harm, or deceive other individuals.</List.Item>
-              <List.Item>Attempt to bypass security, rate-limiting, or authentication mechanisms.</List.Item>
-              <List.Item>Use automated tools (bots, scrapers, crawlers) to access the Service without written permission.</List.Item>
-              <List.Item>Use the Service to provide clinical advice to others in a professional capacity without appropriate regulatory authorisation.</List.Item>
+              <li>Use the Service for any unlawful purpose or in violation of applicable laws.</li>
+              <li>Submit false, misleading, or fraudulent health information.</li>
+              <li>Attempt to reverse-engineer, scrape, or extract data from the Service.</li>
+              <li>Upload content that infringes third-party intellectual property rights.</li>
+              <li>Use the Service to harass, harm, or deceive other individuals.</li>
+              <li>Attempt to bypass security, rate-limiting, or authentication mechanisms.</li>
+              <li>Use automated tools (bots, scrapers, crawlers) to access the Service without written permission.</li>
+              <li>Use the Service to provide clinical advice to others in a professional capacity without appropriate regulatory authorisation.</li>
             </List>
           </Section>
 
@@ -197,15 +197,15 @@ export default function TermsPage() {
               you submit to the Service (e.g. symptom descriptions, uploaded files, voice recordings).
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>You retain ownership of your User Content.</List.Item>
-              <List.Item>
+              <li>You retain ownership of your User Content.</li>
+              <li>
                 You grant CareAI a limited, non-exclusive, worldwide licence to store, process,
                 and transmit your User Content solely to provide the Service to you and as
                 described in our{" "}
                 <Anchor href="/privacy" size="sm">Privacy Policy</Anchor>.
-              </List.Item>
-              <List.Item>You represent that you have the right to submit all content you provide and that it does not violate any law or third-party rights.</List.Item>
-              <List.Item>You are responsible for ensuring uploaded medical documents are your own or that you have authorisation to share them.</List.Item>
+              </li>
+              <li>You represent that you have the right to submit all content you provide and that it does not violate any law or third-party rights.</li>
+              <li>You are responsible for ensuring uploaded medical documents are your own or that you have authorisation to share them.</li>
             </List>
           </Section>
 
@@ -218,11 +218,11 @@ export default function TermsPage() {
               subject to the following limitations:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item><strong>Not exhaustive:</strong> AI assessments may miss conditions, drug interactions, or contraindications relevant to your specific circumstances.</List.Item>
-              <List.Item><strong>Not personalised clinical care:</strong> Outputs do not account for your full medical history unless you explicitly provide it.</List.Item>
-              <List.Item><strong>Drug recommendations are informational:</strong> Any medication or dosage suggestion must be verified with a licensed pharmacist or prescribing physician before use.</List.Item>
-              <List.Item><strong>ICD-10 codes are indicative:</strong> Codes assigned by the AI are for reference only and are not official diagnostic codes for insurance or billing purposes.</List.Item>
-              <List.Item><strong>Model limitations:</strong> AI outputs may contain errors, outdated clinical guidelines, or information that does not apply to you.</List.Item>
+              <li><strong>Not exhaustive:</strong> AI assessments may miss conditions, drug interactions, or contraindications relevant to your specific circumstances.</li>
+              <li><strong>Not personalised clinical care:</strong> Outputs do not account for your full medical history unless you explicitly provide it.</li>
+              <li><strong>Drug recommendations are informational:</strong> Any medication or dosage suggestion must be verified with a licensed pharmacist or prescribing physician before use.</li>
+              <li><strong>ICD-10 codes are indicative:</strong> Codes assigned by the AI are for reference only and are not official diagnostic codes for insurance or billing purposes.</li>
+              <li><strong>Model limitations:</strong> AI outputs may contain errors, outdated clinical guidelines, or information that does not apply to you.</li>
             </List>
           </Section>
 
@@ -235,11 +235,11 @@ export default function TermsPage() {
               subscription. Where applicable:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>All prices are displayed inclusive of applicable taxes unless noted otherwise.</List.Item>
-              <List.Item>Credits are non-transferable and have no cash value.</List.Item>
-              <List.Item>Unused credits may expire; expiry terms are shown at point of purchase.</List.Item>
-              <List.Item>Refunds are provided in accordance with our Refund Policy and applicable consumer law.</List.Item>
-              <List.Item>We reserve the right to change pricing with 30 days' notice for subscription plans.</List.Item>
+              <li>All prices are displayed inclusive of applicable taxes unless noted otherwise.</li>
+              <li>Credits are non-transferable and have no cash value.</li>
+              <li>Unused credits may expire; expiry terms are shown at point of purchase.</li>
+              <li>Refunds are provided in accordance with our Refund Policy and applicable consumer law.</li>
+              <li>We reserve the right to change pricing with 30 days' notice for subscription plans.</li>
             </List>
           </Section>
 
@@ -288,11 +288,11 @@ export default function TermsPage() {
               employees, agents, and licensors shall not be liable for:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>Any indirect, incidental, special, consequential, or punitive damages.</List.Item>
-              <List.Item>Loss of profits, data, goodwill, or other intangible losses.</List.Item>
-              <List.Item>Any harm arising from reliance on AI-generated clinical outputs.</List.Item>
-              <List.Item>Decisions made or not made based on information provided by the Service.</List.Item>
-              <List.Item>Any harm resulting from delay in seeking professional medical help.</List.Item>
+              <li>Any indirect, incidental, special, consequential, or punitive damages.</li>
+              <li>Loss of profits, data, goodwill, or other intangible losses.</li>
+              <li>Any harm arising from reliance on AI-generated clinical outputs.</li>
+              <li>Decisions made or not made based on information provided by the Service.</li>
+              <li>Any harm resulting from delay in seeking professional medical help.</li>
             </List>
             <Text size="sm" c="dimmed" lh={1.8}>
               Our total liability to you for any claim shall not exceed the greater of (a) the
@@ -331,9 +331,9 @@ export default function TermsPage() {
           {/* 15 */}
           <Section title="15. Termination">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>You may delete your account at any time from Settings. This will initiate data deletion as described in our Privacy Policy.</List.Item>
-              <List.Item>We may suspend or terminate your account immediately for material breach of these Terms, illegal activity, or to protect the safety of others.</List.Item>
-              <List.Item>Upon termination, your right to use the Service ceases immediately. Sections 3, 8, 10, 11, 12, 13 and 17 survive termination.</List.Item>
+              <li>You may delete your account at any time from Settings. This will initiate data deletion as described in our Privacy Policy.</li>
+              <li>We may suspend or terminate your account immediately for material breach of these Terms, illegal activity, or to protect the safety of others.</li>
+              <li>Upon termination, your right to use the Service ceases immediately. Sections 3, 8, 10, 11, 12, 13 and 17 survive termination.</li>
             </List>
           </Section>
 
@@ -354,10 +354,10 @@ export default function TermsPage() {
           {/* 17 */}
           <Section title="17. General">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item><strong>Entire Agreement:</strong> These Terms and the Privacy Policy constitute the entire agreement between you and CosmoOps regarding the Service.</List.Item>
-              <List.Item><strong>Severability:</strong> If any provision is found unenforceable, the remaining provisions continue in full force.</List.Item>
-              <List.Item><strong>Waiver:</strong> Failure to enforce any right does not constitute a waiver of that right.</List.Item>
-              <List.Item><strong>Assignment:</strong> You may not assign these Terms without our consent. We may assign them in connection with a merger, acquisition, or sale of assets.</List.Item>
+              <li><strong>Entire Agreement:</strong> These Terms and the Privacy Policy constitute the entire agreement between you and CosmoOps regarding the Service.</li>
+              <li><strong>Severability:</strong> If any provision is found unenforceable, the remaining provisions continue in full force.</li>
+              <li><strong>Waiver:</strong> Failure to enforce any right does not constitute a waiver of that right.</li>
+              <li><strong>Assignment:</strong> You may not assign these Terms without our consent. We may assign them in connection with a merger, acquisition, or sale of assets.</li>
             </List>
           </Section>
 

@@ -283,7 +283,7 @@ export default function HomePage() {
               referrals, and more — all from one conversation.
             </Text>
             <Group gap="md" justify="center" wrap="wrap">
-              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient")}>
+              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient/assistant")}>
                 Check My Symptoms
               </Button>
               <Button variant="subtle" color="primary" radius="xl" leftSection={<IconStethoscope size={20} />} onClick={() => router.push("/auth/login?kind=doctor")}>
@@ -379,7 +379,7 @@ export default function HomePage() {
               a full clinical report — conditions, medications, labs, referrals, SOAP notes,
               and a clear action plan.
             </Text>
-            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient")}>
+            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient/assistant")}>
               Start Free Assessment
             </Button>
           </Stack>
@@ -415,7 +415,7 @@ export default function HomePage() {
               <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
             </Group>
             <Group gap="md">
-              <Anchor size="xs" c="dimmed" onClick={() => router.push("/patient")}>Symptom Check</Anchor>
+              <Anchor size="xs" c="dimmed" onClick={() => router.push("/patient/assistant")}>Symptom Check</Anchor>
               <Anchor size="xs" c="dimmed" onClick={() => router.push("/privacy")}>Privacy Policy</Anchor>
               <Anchor size="xs" c="dimmed" onClick={() => router.push("/terms")}>Terms &amp; Conditions</Anchor>
             </Group>

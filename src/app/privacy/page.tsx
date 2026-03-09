@@ -91,28 +91,28 @@ export default function PrivacyPage() {
             <Stack gap="xs">
               <Text size="sm" fw={600}>2.1 Account Information</Text>
               <List size="sm" c="dimmed" spacing="xs" withPadding>
-                <List.Item>Email address (used for passwordless magic-link authentication)</List.Item>
-                <List.Item>Display name and profile details you optionally provide</List.Item>
-                <List.Item>Dependent profiles you create on behalf of others (e.g. children)</List.Item>
+                <li>Email address (used for passwordless magic-link authentication)</li>
+                <li>Display name and profile details you optionally provide</li>
+                <li>Dependent profiles you create on behalf of others (e.g. children)</li>
               </List>
 
               <Text size="sm" fw={600}>2.2 Health &amp; Clinical Data</Text>
               <List size="sm" c="dimmed" spacing="xs" withPadding>
-                <List.Item>Symptom descriptions you enter via text, voice, or live conversation</List.Item>
-                <List.Item>Medical images, photographs, and documents (PDFs, lab reports) you upload</List.Item>
-                <List.Item>Answers to AI follow-up questions (yes/no, scales, free text)</List.Item>
-                <List.Item>Conditions, diagnoses, medications, SOAP notes, and other clinical outputs generated during assessments</List.Item>
-                <List.Item>Diet plans, prescription history, and lab/imaging recommendations</List.Item>
-                <List.Item>Dental chart findings and risk-assessment scores</List.Item>
-                <List.Item>Insurance information you voluntarily enter</List.Item>
+                <li>Symptom descriptions you enter via text, voice, or live conversation</li>
+                <li>Medical images, photographs, and documents (PDFs, lab reports) you upload</li>
+                <li>Answers to AI follow-up questions (yes/no, scales, free text)</li>
+                <li>Conditions, diagnoses, medications, SOAP notes, and other clinical outputs generated during assessments</li>
+                <li>Diet plans, prescription history, and lab/imaging recommendations</li>
+                <li>Dental chart findings and risk-assessment scores</li>
+                <li>Insurance information you voluntarily enter</li>
               </List>
 
               <Text size="sm" fw={600}>2.3 Usage &amp; Technical Data</Text>
               <List size="sm" c="dimmed" spacing="xs" withPadding>
-                <List.Item>IP address, browser type, operating system, and device identifiers</List.Item>
-                <List.Item>Pages visited, features used, and session duration</List.Item>
-                <List.Item>Error logs and performance telemetry</List.Item>
-                <List.Item>Google reCAPTCHA v3 scores (anti-fraud signals)</List.Item>
+                <li>IP address, browser type, operating system, and device identifiers</li>
+                <li>Pages visited, features used, and session duration</li>
+                <li>Error logs and performance telemetry</li>
+                <li>Google reCAPTCHA v3 scores (anti-fraud signals)</li>
               </List>
             </Stack>
           </Section>
@@ -122,27 +122,27 @@ export default function PrivacyPage() {
           {/* 3 */}
           <Section title="3. How We Use Your Information">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>
+              <li>
                 <strong>Delivering the Service:</strong> Processing your symptoms through our AI models to produce structured clinical reports.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Authentication:</strong> Sending and verifying passwordless magic-link sign-in emails.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Personalisation:</strong> Displaying your assessment history, saved conditions, medications, and documents in your personal portal.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Safety &amp; Fraud Prevention:</strong> Using reCAPTCHA signals and rate-limiting to detect and block abusive traffic.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Service Improvement:</strong> Aggregated and anonymised analytics to improve AI accuracy and platform features. We never train models on identifiable health data without explicit consent.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Legal Compliance:</strong> Retaining records as required by applicable law and responding to valid legal requests.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Communications:</strong> Sending transactional emails (sign-in links, account notices). We do not send marketing email without your explicit opt-in.
-              </List.Item>
+              </li>
             </List>
           </Section>
 
@@ -155,11 +155,11 @@ export default function PrivacyPage() {
               HIPAA-equivalent frameworks. We treat it accordingly:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>All health data is encrypted in transit (TLS 1.3) and at rest (AES-256).</List.Item>
-              <List.Item>Access to identifiable health records is restricted to systems that need it to operate the Service and to a minimal set of authorised personnel.</List.Item>
-              <List.Item>We process your health data on the basis of your explicit consent, which you give when you submit a symptom assessment.</List.Item>
-              <List.Item>You may withdraw consent and request deletion at any time (see Section 8).</List.Item>
-              <List.Item>We do not sell, rent, or license your health data to any third party.</List.Item>
+              <li>All health data is encrypted in transit (TLS 1.3) and at rest (AES-256).</li>
+              <li>Access to identifiable health records is restricted to systems that need it to operate the Service and to a minimal set of authorised personnel.</li>
+              <li>We process your health data on the basis of your explicit consent, which you give when you submit a symptom assessment.</li>
+              <li>You may withdraw consent and request deletion at any time (see Section 8).</li>
+              <li>We do not sell, rent, or license your health data to any third party.</li>
             </List>
           </Section>
 
@@ -172,22 +172,22 @@ export default function PrivacyPage() {
               contractual data-protection obligations:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>
+              <li>
                 <strong>Google Firebase:</strong> Authentication, Firestore database, and file storage. Data processed in accordance with Google&apos;s Cloud Data Processing Addendum.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Google reCAPTCHA v3:</strong> Collects browser signals to detect bots. Subject to Google&apos;s{" "}
                 <Anchor href="https://policies.google.com/privacy" size="sm" target="_blank">Privacy Policy</Anchor>.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>AI Inference Providers:</strong> Your symptom descriptions are sent to large language model providers (e.g. Google Gemini, Anthropic Claude) solely for generating clinical assessments. These providers process data under strict data-processing agreements and do not use your content to train public models.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Vercel / CDN:</strong> Hosting and edge delivery. No health data is stored at the CDN layer.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Legal Disclosures:</strong> We may disclose information if required by law, court order, or to protect the safety of users or the public.
-              </List.Item>
+              </li>
             </List>
             <Text size="sm" c="dimmed" lh={1.8}>
               We do not share your personal or health data with advertisers, data brokers, or
@@ -200,15 +200,15 @@ export default function PrivacyPage() {
           {/* 6 */}
           <Section title="6. Cookies &amp; Tracking">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>
+              <li>
                 <strong>Strictly Necessary Cookies:</strong> Session tokens and CSRF protection required to operate the Service. Cannot be disabled.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Performance Cookies:</strong> Anonymous telemetry for error tracking and performance monitoring.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>No Advertising Cookies:</strong> We do not use third-party advertising or cross-site tracking cookies.
-              </List.Item>
+              </li>
             </List>
           </Section>
 
@@ -217,18 +217,18 @@ export default function PrivacyPage() {
           {/* 7 */}
           <Section title="7. Data Retention">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>
+              <li>
                 <strong>Account &amp; Health Data:</strong> Retained for as long as your account is active plus 30 days, to allow account recovery.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Assessment History:</strong> Stored indefinitely by default so you can review past reports. You can delete individual assessments or all history at any time from Settings.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Uploaded Files:</strong> Retained until you delete them or close your account.
-              </List.Item>
-              <List.Item>
+              </li>
+              <li>
                 <strong>Aggregated Analytics:</strong> Anonymised statistical data may be retained indefinitely; it cannot be linked back to you.
-              </List.Item>
+              </li>
             </List>
           </Section>
 
@@ -241,13 +241,13 @@ export default function PrivacyPage() {
               personal data:
             </Text>
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item><strong>Access:</strong> Request a copy of all data we hold about you.</List.Item>
-              <List.Item><strong>Correction:</strong> Ask us to correct inaccurate data.</List.Item>
-              <List.Item><strong>Deletion (&quot;Right to Be Forgotten&quot;):</strong> Request deletion of your account and all associated data.</List.Item>
-              <List.Item><strong>Restriction:</strong> Ask us to restrict processing while a dispute is resolved.</List.Item>
-              <List.Item><strong>Portability:</strong> Receive a machine-readable export of your data.</List.Item>
-              <List.Item><strong>Objection:</strong> Object to processing based on legitimate interests.</List.Item>
-              <List.Item><strong>Withdraw Consent:</strong> Stop further health-data processing at any time; this does not affect past assessments.</List.Item>
+              <li><strong>Access:</strong> Request a copy of all data we hold about you.</li>
+              <li><strong>Correction:</strong> Ask us to correct inaccurate data.</li>
+              <li><strong>Deletion (&quot;Right to Be Forgotten&quot;):</strong> Request deletion of your account and all associated data.</li>
+              <li><strong>Restriction:</strong> Ask us to restrict processing while a dispute is resolved.</li>
+              <li><strong>Portability:</strong> Receive a machine-readable export of your data.</li>
+              <li><strong>Objection:</strong> Object to processing based on legitimate interests.</li>
+              <li><strong>Withdraw Consent:</strong> Stop further health-data processing at any time; this does not affect past assessments.</li>
             </List>
             <Text size="sm" c="dimmed" lh={1.8}>
               To exercise any right, email{" "}
@@ -287,12 +287,12 @@ export default function PrivacyPage() {
           {/* 11 */}
           <Section title="11. Security Measures">
             <List size="sm" c="dimmed" spacing="xs" withPadding>
-              <List.Item>TLS 1.3 encryption for all data in transit</List.Item>
-              <List.Item>AES-256 encryption for data at rest</List.Item>
-              <List.Item>Passwordless authentication (magic links) — no passwords stored</List.Item>
-              <List.Item>Role-based access control limiting employee access to health data</List.Item>
-              <List.Item>Regular security audits and penetration testing</List.Item>
-              <List.Item>Automatic session expiry and token rotation</List.Item>
+              <li>TLS 1.3 encryption for all data in transit</li>
+              <li>AES-256 encryption for data at rest</li>
+              <li>Passwordless authentication (magic links) — no passwords stored</li>
+              <li>Role-based access control limiting employee access to health data</li>
+              <li>Regular security audits and penetration testing</li>
+              <li>Automatic session expiry and token rotation</li>
             </List>
             <Text size="sm" c="dimmed" lh={1.8}>
               Despite these measures, no system is 100% secure. If you discover a vulnerability,

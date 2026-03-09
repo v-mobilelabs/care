@@ -117,7 +117,7 @@ export function ChatContent() {
         // Strip ?message= from the URL immediately so a page reload won't re-send.
         const params = new URLSearchParams(searchParams.toString());
         params.delete("message");
-        router.replace(`/patient?${params.toString()}`);
+        router.replace(`/patient/assistant?${params.toString()}`);
         void sendMessage({ text: preset });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

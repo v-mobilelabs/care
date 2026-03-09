@@ -578,7 +578,7 @@ export function DietPlansContent() {
     function handleCreateDietPlan() {
         const id = crypto.randomUUID();
         startTransition(() => {
-            router.push(`/patient?id=${id}&message=${encodeURIComponent("I want to build a diet plan")}`);
+            router.push(`/patient/assistant?id=${id}&message=${encodeURIComponent("I want to build a diet plan")}`);
         });
     }
 

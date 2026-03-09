@@ -85,7 +85,7 @@ export function AIChatProvider({
   const newSession = useCallback(
     async (title?: string) => {
       const session = await createSessionMutation.mutateAsync(title);
-      router.push(`/patient?id=${session.id}`);
+      router.push(`/patient/assistant?id=${session.id}`);
     },
     [createSessionMutation, router],
   );
@@ -93,7 +93,7 @@ export function AIChatProvider({
   // Switch to existing session
   const switchSession = useCallback(
     (id: string) => {
-      router.push(`/patient?id=${id}`);
+      router.push(`/patient/assistant?id=${id}`);
     },
     [router],
   );

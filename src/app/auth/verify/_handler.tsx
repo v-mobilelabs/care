@@ -71,7 +71,7 @@ async function routeByKind(
         }
     } else {
         trackEvent({ name: "login", params: { method: "magic_link" } });
-        router.replace("/patient");
+        router.replace("/patient/assistant");
     }
 }
 

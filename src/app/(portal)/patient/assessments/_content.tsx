@@ -182,7 +182,7 @@ function AssessmentCard({
                             color="gray"
                             onClick={() =>
                                 startTransition(() =>
-                                    router.push(`/patient?id=${assessment.sessionId}`)
+                                    router.push(`/patient/assistant?id=${assessment.sessionId}`)
                                 )
                             }
                             aria-label="Open source session"

@@ -254,7 +254,7 @@ function EmptyFiles() {
             <Button
                 variant="light"
                 color="primary"
-                onClick={() => startTransition(() => router.push("/patient"))}
+                onClick={() => startTransition(() => router.push("/patient/assistant"))}
             >
                 Start a new chat
             </Button>

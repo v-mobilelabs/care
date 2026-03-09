@@ -164,7 +164,7 @@ export function HistoryContent() {
     }, [filtered]);
 
     function openSession(id: string) {
-        startNavTransition(() => { router.push(`/patient?id=${id}`); });
+        startNavTransition(() => { router.push(`/patient/assistant?id=${id}`); });
     }
 
     function confirmDelete(id: string) {
