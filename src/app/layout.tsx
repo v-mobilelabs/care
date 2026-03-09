@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
-import { Provider } from "@/ui/providers/provider";
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
-import "./globals.css";
-import { get } from "http";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { GetProfileUseCase } from "@/data/profile";
+import { BaseProvider } from "@/ui/providers/base-provider";
+import "./globals.css";
 
 const roboto = Roboto({
   weight: ["400", "500", "700"],
@@ -53,9 +52,9 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
       </head>
       <body className={roboto.variable}>
-        <Provider user={user} profile={profile}>
+        <BaseProvider user={user} profile={profile}>
           {children}
-        </Provider>
+        </BaseProvider>
       </body>
     </html>
   );
@@ -63,8 +62,11 @@ export default async function RootLayout({
 
 async function getData() {
   const user = await getServerUser();
-  const profile = await new GetProfileUseCase().execute(
-    GetProfileUseCase.validate({ userId: user?.uid }),
-  );
-  return { user, profile };
+  if (user) {
+    const profile = await new GetProfileUseCase().execute(
+      GetProfileUseCase.validate({ userId: user?.uid }),
+    );
+    return { user, profile };
+  }
+  return { user: null, profile: null };
 }

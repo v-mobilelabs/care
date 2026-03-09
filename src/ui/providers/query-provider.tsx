@@ -12,8 +12,10 @@ export function QueryProvider({ children, user, profile }: {
   readonly profile: ProfileDto | null;
 }) {
   const queryClient = getQueryClient();
-  queryClient.setQueryData(["current-user"], user);
-  queryClient.setQueryData(["current-profile"], profile);
+  if (user && profile) {
+    queryClient.setQueryData(["current-user"], user);
+    queryClient.setQueryData(["current-profile"], profile);
+  }
   return (
     <QueryClientProvider client={queryClient}>
       {children}

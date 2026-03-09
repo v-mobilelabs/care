@@ -26,6 +26,10 @@
     "/^node -e \"const m = require\\('@mantine/core'\\); console\\.log\\('List:', typeof m\\.List, 'List\\.Item:', m\\.List && typeof m\\.List\\.Item\\)\" 2>&1$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^git add -A && git commit -m \"chore: update portal layout, providers, and various improvements\"$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

@@ -13,4 +13,7 @@ export { ProviderCard } from "./provider-card";
 export { QuestionCard } from "./question-card";
 export { SoapNoteCard } from "./soap-note-card";
 export { SuggestActionsCard } from "./suggest-actions-card";
-export { ToolPartRenderer, type ToolPartRendererProps } from "./tool-part-renderer";
+export {
+  ToolPartRenderer,
+  type ToolPartRendererProps,
+} from "./tool-part-renderer";

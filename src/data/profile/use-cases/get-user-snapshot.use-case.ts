@@ -277,23 +277,31 @@ export class GetUserSnapshotUseCase extends UseCase<
   protected async run(input: GetUserSnapshotInput): Promise<UserSnapshotDto> {
     const { userId, dependentId } = input;
 
-    const [userProfile, patientData, dependentProfile, conditions, medications, soapNotes] =
-      await Promise.all([
-        profileRepository.get(userId).catch(() => null),
-        !dependentId ? patientRepository.get(userId).catch(() => null) : Promise.resolve(null),
-        dependentId
-          ? dependentRepository.findById(userId, dependentId).catch(() => null)
-          : Promise.resolve(null),
-        new ListConditionsUseCase(dependentId)
-          .execute(ListConditionsUseCase.validate({ userId, limit: 5 }))
-          .catch(() => []),
-        new ListMedicationsUseCase(dependentId)
-          .execute(ListMedicationsUseCase.validate({ userId, limit: 10 }))
-          .catch(() => []),
-        new ListSoapNotesUseCase(dependentId)
-          .execute(ListSoapNotesUseCase.validate({ userId, limit: 1 }))
-          .catch(() => []),
-      ]);
+    const [
+      userProfile,
+      patientData,
+      dependentProfile,
+      conditions,
+      medications,
+      soapNotes,
+    ] = await Promise.all([
+      profileRepository.get(userId).catch(() => null),
+      !dependentId
+        ? patientRepository.get(userId).catch(() => null)
+        : Promise.resolve(null),
+      dependentId
+        ? dependentRepository.findById(userId, dependentId).catch(() => null)
+        : Promise.resolve(null),
+      new ListConditionsUseCase(dependentId)
+        .execute(ListConditionsUseCase.validate({ userId, limit: 5 }))
+        .catch(() => []),
+      new ListMedicationsUseCase(dependentId)
+        .execute(ListMedicationsUseCase.validate({ userId, limit: 10 }))
+        .catch(() => []),
+      new ListSoapNotesUseCase(dependentId)
+        .execute(ListSoapNotesUseCase.validate({ userId, limit: 1 }))
+        .catch(() => []),
+    ]);
 
     const activeProfile = dependentId ? dependentProfile : patientData;
 
