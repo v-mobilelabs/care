@@ -1,5 +1,6 @@
-import { AppShell } from "@mantine/core";
+import { Container } from "@mantine/core";
 import { LandingHeader } from "../headers/landing.header";
+import { LandingFooter } from "../footers/landing.footer";
 
 export function LandingLayout({
   children,
@@ -7,9 +8,12 @@ export function LandingLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <AppShell header={{ height: 64 }} padding={0}>
+    <Container h="100vh" w="100vw" p={0} m={0} style={{
+      background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
+    }}>
       <LandingHeader />
-      <AppShell.Main>{children}</AppShell.Main>
-    </AppShell>
+      <main>{children}</main>
+      <LandingFooter />
+    </Container>
   );
 }

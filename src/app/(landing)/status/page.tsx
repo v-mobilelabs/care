@@ -36,9 +36,9 @@ interface ReadinessData {
     status: "ready" | "not_ready";
     timestamp: string;
     checks: {
-        firebaseAuth: CheckResult;
-        firestore: CheckResult;
-        realtimeDatabase: CheckResult;
+        authentication: CheckResult;
+        database: CheckResult;
+        messaging: CheckResult;
     };
 }
 
@@ -258,7 +258,7 @@ export default function StatusPage() {
                                             size="lg"
                                             variant="light"
                                             color={
-                                                readiness.checks.firebaseAuth.ok
+                                                readiness.checks.authentication.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
@@ -267,7 +267,7 @@ export default function StatusPage() {
                                         </ThemeIcon>
                                         <Stack gap={0}>
                                             <Text fw={500}>Authentication Service</Text>
-                                            {readiness.checks.firebaseAuth.error && (
+                                            {readiness.checks.authentication.error && (
                                                 <Text size="xs" c={colors.danger}>
                                                     Service unavailable
                                                 </Text>
@@ -275,20 +275,20 @@ export default function StatusPage() {
                                         </Stack>
                                     </Group>
                                     <Group gap="xs">
-                                        {readiness.checks.firebaseAuth.latency !== undefined && (
+                                        {readiness.checks.authentication.latency !== undefined && (
                                             <Text size="xs" c="dimmed">
-                                                {readiness.checks.firebaseAuth.latency}ms
+                                                {readiness.checks.authentication.latency}ms
                                             </Text>
                                         )}
                                         <Badge
                                             color={
-                                                readiness.checks.firebaseAuth.ok
+                                                readiness.checks.authentication.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
                                             variant="light"
                                         >
-                                            {readiness.checks.firebaseAuth.ok ? "OK" : "Failed"}
+                                            {readiness.checks.authentication.ok ? "OK" : "Failed"}
                                         </Badge>
                                     </Group>
                                 </Group>
@@ -302,7 +302,7 @@ export default function StatusPage() {
                                             size="lg"
                                             variant="light"
                                             color={
-                                                readiness.checks.firestore.ok
+                                                readiness.checks.database.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
@@ -311,7 +311,7 @@ export default function StatusPage() {
                                         </ThemeIcon>
                                         <Stack gap={0}>
                                             <Text fw={500}>Patient Service</Text>
-                                            {readiness.checks.firestore.error && (
+                                            {readiness.checks.database.error && (
                                                 <Text size="xs" c={colors.danger}>
                                                     Service unavailable
                                                 </Text>
@@ -319,20 +319,20 @@ export default function StatusPage() {
                                         </Stack>
                                     </Group>
                                     <Group gap="xs">
-                                        {readiness.checks.firestore.latency !== undefined && (
+                                        {readiness.checks.database.latency !== undefined && (
                                             <Text size="xs" c="dimmed">
-                                                {readiness.checks.firestore.latency}ms
+                                                {readiness.checks.database.latency}ms
                                             </Text>
                                         )}
                                         <Badge
                                             color={
-                                                readiness.checks.firestore.ok
+                                                readiness.checks.database.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
                                             variant="light"
                                         >
-                                            {readiness.checks.firestore.ok ? "OK" : "Failed"}
+                                            {readiness.checks.database.ok ? "OK" : "Failed"}
                                         </Badge>
                                     </Group>
                                 </Group>
@@ -346,7 +346,7 @@ export default function StatusPage() {
                                             size="lg"
                                             variant="light"
                                             color={
-                                                readiness.checks.realtimeDatabase.ok
+                                                readiness.checks.messaging.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
@@ -355,7 +355,7 @@ export default function StatusPage() {
                                         </ThemeIcon>
                                         <Stack gap={0}>
                                             <Text fw={500}>Realtime Messaging Service</Text>
-                                            {readiness.checks.realtimeDatabase.error && (
+                                            {readiness.checks.messaging.error && (
                                                 <Text size="xs" c={colors.danger}>
                                                     Service unavailable
                                                 </Text>
@@ -363,20 +363,20 @@ export default function StatusPage() {
                                         </Stack>
                                     </Group>
                                     <Group gap="xs">
-                                        {readiness.checks.realtimeDatabase.latency !== undefined && (
+                                        {readiness.checks.messaging.latency !== undefined && (
                                             <Text size="xs" c="dimmed">
-                                                {readiness.checks.realtimeDatabase.latency}ms
+                                                {readiness.checks.messaging.latency}ms
                                             </Text>
                                         )}
                                         <Badge
                                             color={
-                                                readiness.checks.realtimeDatabase.ok
+                                                readiness.checks.messaging.ok
                                                     ? colors.success
                                                     : colors.danger
                                             }
                                             variant="light"
                                         >
-                                            {readiness.checks.realtimeDatabase.ok ? "OK" : "Failed"}
+                                            {readiness.checks.messaging.ok ? "OK" : "Failed"}
                                         </Badge>
                                     </Group>
                                 </Group>

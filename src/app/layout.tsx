@@ -12,10 +12,13 @@ const roboto = Roboto({
   variable: "--font-roboto",
 });
 
+const bg = {
+  background: "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-7))",
+}
+
 export const metadata: Metadata = {
   title: "CareAI — AI Symptom Assessment",
   description: "Describe your symptoms to our AI, get a personalised assessment, and connect with a verified doctor.",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -30,7 +33,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#4c6ef5",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#4c6ef5" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1b1e" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

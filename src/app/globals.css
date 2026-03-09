@@ -6,6 +6,11 @@ html {
   /* Fill the entire screen on notched iOS devices */
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  /* Match body background for overscroll */
+  background-color: light-dark(
+    var(--mantine-color-gray-5),
+    var(--mantine-color-dark-7)
+  );
 }
 
 /* === Safe-area insets for iOS standalone PWA === */
@@ -17,7 +22,6 @@ html {
 }
 
 body {
-  background: var(--mantine-color-body);
   color: var(--mantine-color-text);
   /* Better mobile font rendering */
   -webkit-font-smoothing: antialiased;

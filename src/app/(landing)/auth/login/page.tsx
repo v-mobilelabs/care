@@ -1,8 +1,8 @@
 // Login page shell — no auth required. Single entry point for all user types.
 import { Anchor, Box, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { IconSparkles, IconStethoscope } from "@tabler/icons-react";
-import { MagicLinkForm } from "@/app/auth/login/_form";
 import { CaptchaProvider } from "@/ui/providers/captcha-provider";
+import { MagicLinkForm } from "./_form";
 
 export const metadata = { title: "Sign In — CareAI" };
 

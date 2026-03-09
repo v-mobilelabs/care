@@ -51,11 +51,11 @@ const SECTIONS = [
         items: [
             {
                 q: "What are credits?",
-                a: "Credits are your daily usage allowance. Every free user starts each day with 10 credits. Each message you send to CareAI costs 1 credit.",
+                a: "Credits are your daily usage allowance. Every free user starts each day with 100 credits. Each message you send to CareAI costs 1 credit.",
             },
             {
                 q: "When do my credits reset?",
-                a: "Credits reset automatically every day at midnight UTC. You don't need to do anything — the next time you send a message after midnight, your balance is restored to 10.",
+                a: "Credits reset automatically every day at midnight UTC. You don't need to do anything — the next time you send a message after midnight, your balance is restored to 100.",
             },
             {
                 q: "Why a credit system?",

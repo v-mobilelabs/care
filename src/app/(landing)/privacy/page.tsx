@@ -12,10 +12,8 @@ import {
 } from "@mantine/core";
 import { LegalLayout } from "@/ui/layouts/legal";
 import {
-  IconHeartbeat,
   IconLock,
   IconMail,
-  IconShieldCheck,
 } from "@tabler/icons-react";
 
 export const dynamic = "force-dynamic";
@@ -338,40 +336,6 @@ export default function PrivacyPage() {
 
         </Stack>
       </Container>
-
-      {/* Footer */}
-      <Box
-        py="lg"
-        style={{
-          borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-        }}
-      >
-        <Container size="lg">
-          <Group justify="space-between" wrap="wrap" gap="sm">
-            <Group gap={8}>
-              <ThemeIcon size={22} radius="md" color="primary" variant="light">
-                <IconHeartbeat size={13} />
-              </ThemeIcon>
-              <Text size="sm" fw={700} c="primary">CareAI</Text>
-              <Text size="xs" c="dimmed">© {new Date().getFullYear()}</Text>
-            </Group>
-            <Group gap="md">
-              <Anchor href="/" size="xs" c="dimmed">Home</Anchor>
-              <Anchor href="/terms" size="xs" c="dimmed">Terms</Anchor>
-              <Anchor href="/privacy" size="xs" c="dimmed">Privacy</Anchor>
-            </Group>
-          </Group>
-        </Container>
-      </Box>
-      <Group gap="xs" justify="center" pb="lg">
-        <ThemeIcon size={16} color="primary" variant="transparent">
-          <IconShieldCheck size={14} />
-        </ThemeIcon>
-        <Text size="xs" c="dimmed">
-          CareAI is not a substitute for professional medical advice, diagnosis, or treatment.
-          Always seek the advice of a qualified health provider.
-        </Text>
-      </Group>
     </LegalLayout>
   );
 }

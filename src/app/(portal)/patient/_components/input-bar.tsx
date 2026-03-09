@@ -173,7 +173,7 @@ export function InputBar({
                                 const now = new Date();
                                 const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
                                 const formatted = reset.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-                                return `You've used all 10 free credits for today. They reset at ${formatted}.`;
+                                return `You've used all 100 free credits for today. They reset at ${formatted}.`;
                             })()}
                         </Alert>
                     )}

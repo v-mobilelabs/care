@@ -1,19 +1,13 @@
 "use client";
-import { AppShell, Box } from "@mantine/core";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-
-import { ChatHeader } from "@/app/(portal)/patient/_components/chat-header";
 import { ChatContext } from "@/app/(portal)/patient/_context/chat-context";
 import { ConsentGate, hasConsented, CONSENT_KEY } from "@/app/(portal)/patient/_components/consent-gate";
 import { ActiveProfileProvider } from "@/app/(portal)/patient/_context/active-profile-context";
 import { useProfileQuery } from "@/app/(portal)/patient/_query";
-import { MessagingSidebar } from "@/ui/messaging/messaging-drawer";
-import { Provider } from "@/ui/providers/provider";
 import { PortalLayout } from "@/ui/layouts/portal";
 import { IconAi, IconStethoscope, IconVideo } from "@tabler/icons-react";
-
-// ── Shell — client component that owns all session-routing state ──────────────
 
 const menus = [
     {

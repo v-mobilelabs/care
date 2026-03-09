@@ -15,9 +15,9 @@ interface ReadinessResponse {
   status: "ready" | "not_ready";
   timestamp: string;
   checks: {
-    firebaseAuth: CheckResult;
-    firestore: CheckResult;
-    realtimeDatabase: CheckResult;
+    authentication: CheckResult;
+    database: CheckResult;
+    messaging: CheckResult;
   };
 }
 
@@ -67,22 +67,21 @@ async function checkRealtimeDatabase(): Promise<CheckResult> {
 }
 
 export async function GET() {
-  const [firebaseAuthCheck, firestoreCheck, rtdbCheck] = await Promise.all([
+  const [authCheck, dbCheck, msgCheck] = await Promise.all([
     checkFirebaseAuth(),
     checkFirestore(),
     checkRealtimeDatabase(),
   ]);
 
-  const allOk =
-    firebaseAuthCheck.ok && firestoreCheck.ok && rtdbCheck.ok;
+  const allOk = authCheck.ok && dbCheck.ok && msgCheck.ok;
 
   const response: ReadinessResponse = {
     status: allOk ? "ready" : "not_ready",
     timestamp: new Date().toISOString(),
     checks: {
-      firebaseAuth: firebaseAuthCheck,
-      firestore: firestoreCheck,
-      realtimeDatabase: rtdbCheck,
+      authentication: authCheck,
+      database: dbCheck,
+      messaging: msgCheck,
     },
   };
 

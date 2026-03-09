@@ -259,7 +259,7 @@ export default function HomePage() {
   const router = useRouter();
 
   return (
-    <LandingLayout>
+    <>
 
       {/* ── Hero ── */}
       <Box
@@ -402,28 +402,7 @@ export default function HomePage() {
           </SimpleGrid>
         </Container>
       </Box>
-
-      {/* ── Footer ── */}
-      <Box py="lg" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
-        <Container size="lg">
-          <Group justify="space-between" wrap="wrap" gap="sm">
-            <Group gap={8}>
-              <ThemeIcon size={22} radius="md" color="primary" variant="light">
-                <IconHeartbeat size={13} />
-              </ThemeIcon>
-              <Text size="sm" fw={700} c="primary">CareAI</Text>
-              <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
-            </Group>
-            <Group gap="md">
-              <Anchor size="xs" c="dimmed" onClick={() => router.push("/patient/assistant")}>Symptom Check</Anchor>
-              <Anchor size="xs" c="dimmed" onClick={() => router.push("/privacy")}>Privacy Policy</Anchor>
-              <Anchor size="xs" c="dimmed" onClick={() => router.push("/terms")}>Terms &amp; Conditions</Anchor>
-            </Group>
-          </Group>
-        </Container>
-      </Box>
-
-    </LandingLayout>
+    </>
   );
 }
 

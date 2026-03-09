@@ -1,13 +1,16 @@
-import { Group, Text, ThemeIcon } from "@mantine/core";
+import { Box, Group, Text, ThemeIcon } from "@mantine/core";
 import { IconHeartbeat } from "@tabler/icons-react";
+import Link from "next/link";
 
 export function Logo() {
   return (
-    <Group gap={6}>
-      <ThemeIcon size={26} radius="md" color="primary" variant="light">
-        <IconHeartbeat size={15} />
-      </ThemeIcon>
-      <Text c="primary" size="xl" fw={900}>CareAI</Text>
-    </Group>
+    <Box component={Link} href="/" style={{ textDecoration: "none" }}>
+      <Group gap={6}>
+        <ThemeIcon size={36} radius="md" color="primary" variant="transparent">
+          <IconHeartbeat size={26} />
+        </ThemeIcon>
+        <Text c="primary" size="xl" fw={900}>CareAI</Text>
+      </Group>
+    </Box>
   );
 }
