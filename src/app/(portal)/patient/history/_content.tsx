@@ -3,6 +3,8 @@ import {
     ActionIcon,
     Badge,
     Box,
+    Card,
+    Container,
     Divider,
     Group,
     Paper,
@@ -182,105 +184,98 @@ export function HistoryContent() {
     }
 
     return (
-        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-            {/* Header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
-                <Group gap="sm">
-                    <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                        <IconMessageSearch size={20} />
-                    </ThemeIcon>
-                    <Box>
-                        <Title order={4} lh={1.2}>Search History</Title>
-                        <Text size="xs" c="dimmed">Browse and continue past assessments</Text>
-                    </Box>
-                </Group>
-            </Box>
+        <Container pt="md">
+            <Card radius="xl" shadow="xl">
+                <Card.Section px="xl" py="lg" withBorder>
+                    <Group gap="sm">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                            <IconMessageSearch size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>Search History</Title>
+                            <Text size="xs" c="dimmed">Browse and continue past assessments</Text>
+                        </Box>
+                    </Group>
+                </Card.Section>
+                <Card.Section p="md">
+                    <Box style={{ flex: 1, overflow: "hidden" }}>
+                        <ScrollArea style={{ height: "100%" }}>
+                            <Box style={{ maxWidth: 720, margin: "0 auto" }}>
+                                {/* Search input */}
+                                <TextInput
+                                    placeholder="Search sessions by title…"
+                                    leftSection={<IconSearch size={15} />}
+                                    value={query}
+                                    onChange={(e) => setQuery(e.currentTarget.value)}
+                                    mb={spacing.xl}
+                                    radius="md"
+                                    size="sm"
+                                />
 
-            {/* Scrollable content */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" style={{ maxWidth: 720, margin: "0 auto" }}>
-                        {/* Search input */}
-                        <TextInput
-                            placeholder="Search sessions by title…"
-                            leftSection={<IconSearch size={15} />}
-                            value={query}
-                            onChange={(e) => setQuery(e.currentTarget.value)}
-                            mb={spacing.xl}
-                            radius="md"
-                            size="sm"
-                        />
+                                {/* Loading skeletons */}
+                                {isLoading && (
+                                    <Stack gap="sm">
+                                        {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e"].map((k) => (
+                                            <Skeleton key={k} height={62} radius="md" />
+                                        ))}
+                                    </Stack>
+                                )}
 
-                        {/* Loading skeletons */}
-                        {isLoading && (
-                            <Stack gap="sm">
-                                {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e"].map((k) => (
-                                    <Skeleton key={k} height={62} radius="md" />
-                                ))}
-                            </Stack>
-                        )}
+                                {/* Empty state */}
+                                {!isLoading && filtered.length === 0 && (
+                                    <Box py={60} style={{ textAlign: "center" }}>
+                                        <ThemeIcon size={48} radius="xl" color="gray" variant="light" mx="auto" mb="md">
+                                            <IconMessageSearch size={24} />
+                                        </ThemeIcon>
+                                        <Text fw={500} mb={4}>
+                                            {query ? "No sessions match your search" : "No sessions yet"}
+                                        </Text>
+                                        <Text size="sm" c="dimmed">
+                                            {query
+                                                ? "Try a different search term"
+                                                : "Start a new assessment to see it here"}
+                                        </Text>
+                                    </Box>
+                                )}
 
-                        {/* Empty state */}
-                        {!isLoading && filtered.length === 0 && (
-                            <Box py={60} style={{ textAlign: "center" }}>
-                                <ThemeIcon size={48} radius="xl" color="gray" variant="light" mx="auto" mb="md">
-                                    <IconMessageSearch size={24} />
-                                </ThemeIcon>
-                                <Text fw={500} mb={4}>
-                                    {query ? "No sessions match your search" : "No sessions yet"}
-                                </Text>
-                                <Text size="sm" c="dimmed">
-                                    {query
-                                        ? "Try a different search term"
-                                        : "Start a new assessment to see it here"}
-                                </Text>
+                                {/* Results grouped by date */}
+                                {!isLoading && filtered.length > 0 && (
+                                    <Stack gap={spacing.lg}>
+                                        {(() => {
+                                            const sections: React.ReactNode[] = [];
+                                            for (const [group, items] of grouped) {
+                                                if (items.length === 0) continue;
+                                                sections.push(
+                                                    <Box key={group}>
+                                                        <Group gap="xs" mb="xs">
+                                                            <Text size="xs" c="dimmed" fw={600} style={{ textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                                                                {group}
+                                                            </Text>
+                                                            <Divider style={{ flex: 1 }} />
+                                                        </Group>
+                                                        <Stack gap="xs">
+                                                            {items.map((s) => (
+                                                                <SessionRow
+                                                                    key={s.id}
+                                                                    session={s}
+                                                                    isPendingDelete={deleteSession.isPending && deleteSession.variables === s.id}
+                                                                    onOpen={() => openSession(s.id)}
+                                                                    onDelete={() => confirmDelete(s.id)}
+                                                                />
+                                                            ))}
+                                                        </Stack>
+                                                    </Box>
+                                                );
+                                            }
+                                            return sections;
+                                        })()}
+                                    </Stack>
+                                )}
                             </Box>
-                        )}
-
-                        {/* Results grouped by date */}
-                        {!isLoading && filtered.length > 0 && (
-                            <Stack gap={spacing.lg}>
-                                {(() => {
-                                    const sections: React.ReactNode[] = [];
-                                    for (const [group, items] of grouped) {
-                                        if (items.length === 0) continue;
-                                        sections.push(
-                                            <Box key={group}>
-                                                <Group gap="xs" mb="xs">
-                                                    <Text size="xs" c="dimmed" fw={600} style={{ textTransform: "uppercase", letterSpacing: "0.6px" }}>
-                                                        {group}
-                                                    </Text>
-                                                    <Divider style={{ flex: 1 }} />
-                                                </Group>
-                                                <Stack gap="xs">
-                                                    {items.map((s) => (
-                                                        <SessionRow
-                                                            key={s.id}
-                                                            session={s}
-                                                            isPendingDelete={deleteSession.isPending && deleteSession.variables === s.id}
-                                                            onOpen={() => openSession(s.id)}
-                                                            onDelete={() => confirmDelete(s.id)}
-                                                        />
-                                                    ))}
-                                                </Stack>
-                                            </Box>
-                                        );
-                                    }
-                                    return sections;
-                                })()}
-                            </Stack>
-                        )}
+                        </ScrollArea>
                     </Box>
-                </ScrollArea>
-            </Box>
-        </Box>
+                </Card.Section>
+            </Card>
+        </Container>
     );
 }

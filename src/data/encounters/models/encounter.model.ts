@@ -25,8 +25,8 @@ export interface EncounterDocument {
   notes?: string;
   startedAt: Timestamp;
   endedAt?: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 // ── DTO — outbound ────────────────────────────────────────────────────────────
@@ -98,7 +98,11 @@ export function toEncounterDto(
     notes: doc.notes,
     startedAt: doc.startedAt.toDate().toISOString(),
     endedAt: doc.endedAt?.toDate().toISOString(),
-    createdAt: doc.createdAt.toDate().toISOString(),
-    updatedAt: doc.updatedAt.toDate().toISOString(),
+    createdAt:
+      doc.createdAt?.toDate().toISOString() ??
+      doc.startedAt.toDate().toISOString(),
+    updatedAt:
+      doc.updatedAt?.toDate().toISOString() ??
+      doc.startedAt.toDate().toISOString(),
   };
 }

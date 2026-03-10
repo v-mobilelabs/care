@@ -14,6 +14,7 @@ import { SessionPayload } from "@/lib/auth/jwt";
 import { ProfileDto } from "@/data/profile";
 import { NotificationProvider } from "./notification-provider";
 import { MessagingProvider } from "./messaging-provider";
+import { QueryProvider } from "./query-provider";
 
 export function Provider({
   children,
@@ -26,18 +27,20 @@ export function Provider({
 }>) {
   return (
     <AuthProvider>
-      <NotificationProvider>
-        <MessagingProvider>
-          <MeetSessionProvider>
-            <ModalsProvider>{children}</ModalsProvider>
-            <PersistentMeetOverlay />
-            <MeetAutoRejoin />
-            <ActiveCallIsland />
-            <WaitingQueueIsland />
-            <QueuePositionIsland />
-          </MeetSessionProvider>
-        </MessagingProvider>
-      </NotificationProvider>
+      <QueryProvider user={user} profile={profile}>
+        <NotificationProvider>
+          <MessagingProvider>
+            <MeetSessionProvider>
+              <ModalsProvider>{children}</ModalsProvider>
+              <PersistentMeetOverlay />
+              <MeetAutoRejoin />
+              <ActiveCallIsland />
+              <WaitingQueueIsland />
+              <QueuePositionIsland />
+            </MeetSessionProvider>
+          </MessagingProvider>
+        </NotificationProvider>
+      </QueryProvider>
     </AuthProvider>
   );
 }

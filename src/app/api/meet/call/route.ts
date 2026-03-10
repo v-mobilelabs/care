@@ -48,7 +48,9 @@ export const POST = WithContext(async ({ user, req }) => {
   const profileData = profileSnap.data() as
     | { name?: string; photoUrl?: string }
     | undefined;
-  const patientName = profileData?.name ?? "Patient";
+  // Try profile name, then email prefix as fallback
+  const patientName =
+    profileData?.name ?? user.email.split("@")[0] ?? "Unknown Patient";
   const patientPhotoUrl = profileData?.photoUrl ?? null;
   const doctorName =
     (doctorProfileSnap.data() as { name?: string } | undefined)?.name ??

@@ -5,13 +5,14 @@ import {
     Badge,
     Box,
     Button,
+    Card,
+    Container,
     Divider,
     Group,
     Paper,
     ScrollArea,
     Skeleton,
     Stack,
-    Tabs,
     Text,
     ThemeIcon,
     Title,
@@ -299,11 +300,15 @@ function ConnectedDoctorCard({
 
     async function handleMessage() {
         if (!user) return;
+        // Try displayName, then email prefix, as fallback
+        const patientName =
+            user.displayName ??
+            (user.email ? user.email.split("@")[0] : "Unknown Patient");
         const convId = await startConversation({
             doctorId: invite.doctorId,
             patientId: user.uid,
             doctorName: invite.doctorName ?? "Doctor",
-            patientName: user.displayName ?? "Patient",
+            patientName,
         });
         openConversation(convId);
     }
@@ -545,211 +550,182 @@ export function DoctorsContent() {
     const connectedDoctorUids = connectedInvites.map((i) => i.doctorId);
     const onlineCount = useOnlineCount(connectedDoctorUids);
 
-    return (
-        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-
-            {/* ── Title bar ── */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                pt="md"
-                pb="xs"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
-                <Group gap="sm" align="center" wrap="nowrap" mb="sm">
-                    <Group gap="sm">
-                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                            <IconStethoscope size={20} />
-                        </ThemeIcon>
-                        <Box>
-                            <Title order={4} lh={1.2}>My Doctors</Title>
-                            <Group gap="xs" align="center">
-                                <Text size="xs" c="dimmed">{doctorCountLabel()}</Text>
-                                {onlineCount > 0 && (
-                                    <Badge
-                                        size="xs"
-                                        variant="dot"
-                                        color={colors.success}
-                                    >
-                                        {onlineCount} online
-                                    </Badge>
-                                )}
-                            </Group>
-                        </Box>
-                    </Group>
+    function openInvitesModal() {
+        modals.open({
+            title: (
+                <Group gap="xs">
+                    <IconUserCheck size={18} />
+                    <Text fw={600}>Doctor Invites</Text>
                 </Group>
-            </Box>
+            ),
+            size: "lg",
+            children: (
+                <Stack gap="sm">
+                    {invitesLoading && (
+                        <>
+                            <Skeleton height={180} radius="lg" />
+                            <Skeleton height={110} radius="lg" />
+                        </>
+                    )}
 
-            {/* ── Tabs ── */}
-            <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                <Tabs
-                    defaultValue="contacts"
-                    keepMounted={false}
-                    style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
-                >
-                    {/* Tab list row */}
-                    <Box
-                        px={{ base: "md", sm: "xl" }}
-                        style={{
-                            flexShrink: 0,
-                            borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                            background: "light-dark(white, var(--mantine-color-dark-8))",
-                        }}
-                    >
-                        <Tabs.List>
-                            <Tabs.Tab value="contacts" leftSection={<IconStethoscope size={14} />}>
-                                Doctors
-                            </Tabs.Tab>
-                            <Tabs.Tab
-                                value="invites"
-                                leftSection={<IconUserCheck size={14} />}
-                                rightSection={
-                                    pendingInvites.length > 0 ? (
-                                        <Badge size="xs" color="yellow" variant="filled" circle>
-                                            {pendingInvites.length}
-                                        </Badge>
-                                    ) : null
-                                }
-                            >
-                                Invites
-                            </Tabs.Tab>
-                        </Tabs.List>
-                    </Box>
+                    {!invitesLoading && pendingInvites.length > 0 && (
+                        <Stack gap="sm">
+                            <Text size="xs" fw={600} tt="uppercase" c="dimmed" px={2}>
+                                Awaiting your response ({pendingInvites.length})
+                            </Text>
+                            {pendingInvites.map((invite) => (
+                                <InviteCard
+                                    key={invite.doctorId}
+                                    invite={invite}
+                                    onAccept={confirmAccept}
+                                    onDecline={confirmDecline}
+                                    isPending={
+                                        respondMutation.isPending &&
+                                        respondMutation.variables?.doctorId === invite.doctorId
+                                    }
+                                />
+                            ))}
+                        </Stack>
+                    )}
 
-                    {/* ── Contacts panel ── */}
-                    <Tabs.Panel value="contacts" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }}>
-                            <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
-                                {doctorsLoading && (
-                                    <Stack gap="md">
-                                        {["a", "b", "c"].map((k) => (
-                                            <Skeleton key={k} height={130} radius="lg" />
-                                        ))}
-                                    </Stack>
-                                )}
+                    {!invitesLoading && pendingInvites.length === 0 && (
+                        <Box py={40} style={{ textAlign: "center" }}>
+                            <ThemeIcon size={64} radius="xl" color="primary" variant="light" mx="auto" mb="md">
+                                <IconUserCheck size={32} />
+                            </ThemeIcon>
+                            <Text fw={600} size="sm" mb={6}>No invites yet</Text>
+                            <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
+                                Doctors can invite you to connect via name search or after a video call.
+                                You&apos;ll see pending invites here to accept or decline.
+                            </Text>
+                        </Box>
+                    )}
 
-                                {!doctorsLoading && doctors.length === 0 && connectedInvites.length === 0 && (
-                                    <Box py={80} style={{ textAlign: "center" }}>
-                                        <ThemeIcon size={64} radius="xl" color="primary" variant="light" mx="auto" mb="md">
-                                            <IconStethoscope size={32} />
-                                        </ThemeIcon>
-                                        <Text fw={600} size="sm" mb={6}>No doctors yet</Text>
-                                        <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
-                                            Your healthcare providers will appear here once a doctor connects with you.
-                                        </Text>
-                                    </Box>
-                                )}
-
-                                {!doctorsLoading && doctors.length > 0 && (
-                                    <Stack gap="md">
-                                        {doctors.map((doctor) => (
-                                            <DoctorCard
-                                                key={doctor.id}
-                                                doctor={doctor}
-                                                onDelete={() => handleDelete(doctor)}
-                                            />
-                                        ))}
-                                    </Stack>
-                                )}
-
-                                {!doctorsLoading && connectedInvites.length > 0 && (
-                                    <Stack gap="md" mt={doctors.length > 0 ? "md" : 0}>
-                                        {doctors.length > 0 && (
-                                            <Group gap={6} mt={4}>
-                                                <Divider style={{ flex: 1 }} />
-                                                <Text size="xs" c="dimmed" fw={500}>Connected via invite</Text>
-                                                <Divider style={{ flex: 1 }} />
-                                            </Group>
-                                        )}
-                                        {connectedInvites.map((invite) => (
-                                            <ConnectedDoctorCard
-                                                key={invite.doctorId}
-                                                invite={invite}
-                                                onRevoke={confirmRevoke}
-                                            />
-                                        ))}
-                                    </Stack>
-                                )}
-                            </Box>
-                        </ScrollArea>
-                    </Tabs.Panel>
-
-                    {/* ── Invites panel ── */}
-                    <Tabs.Panel value="invites" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }}>
-                            <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
-                                <Stack gap="sm">
-                                    {invitesLoading && (
-                                        <>
-                                            <Skeleton height={180} radius="lg" />
-                                            <Skeleton height={110} radius="lg" />
-                                        </>
-                                    )}
-
-                                    {!invitesLoading && pendingInvites.length > 0 && (
-                                        <Stack gap="sm">
-                                            <Text size="xs" fw={600} tt="uppercase" c="dimmed" px={2}>
-                                                Awaiting your response ({pendingInvites.length})
-                                            </Text>
-                                            {pendingInvites.map((invite) => (
-                                                <InviteCard
-                                                    key={invite.doctorId}
-                                                    invite={invite}
-                                                    onAccept={confirmAccept}
-                                                    onDecline={confirmDecline}
-                                                    isPending={
-                                                        respondMutation.isPending &&
-                                                        respondMutation.variables?.doctorId === invite.doctorId
-                                                    }
-                                                />
-                                            ))}
-                                        </Stack>
-                                    )}
-
-                                    {!invitesLoading && pendingInvites.length === 0 && (
-                                        <Box py={80} style={{ textAlign: "center" }}>
-                                            <ThemeIcon size={64} radius="xl" color="primary" variant="light" mx="auto" mb="md">
-                                                <IconUserCheck size={32} />
-                                            </ThemeIcon>
-                                            <Text fw={600} size="sm" mb={6}>No invites yet</Text>
-                                            <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
-                                                Doctors can invite you to connect via name search or after a video call.
-                                                You&apos;ll see pending invites here to accept or decline.
-                                            </Text>
-                                        </Box>
-                                    )}
-
-                                    {!invitesLoading && pendingInvites.length > 0 && (
-                                        <Paper
-                                            radius="lg"
-                                            p="md"
-                                            mt="sm"
-                                            style={{
-                                                background: "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.06))",
-                                                border: "1px solid light-dark(var(--mantine-color-primary-1), rgba(107,79,248,0.12))",
-                                            }}
-                                        >
-                                            <Group gap="xs" align="flex-start">
-                                                <IconShieldCheck size={15} color="var(--mantine-color-primary-5)" style={{ marginTop: 1 }} />
-                                                <Stack gap={2}>
-                                                    <Text size="xs" fw={500}>Your privacy is protected</Text>
-                                                    <Text size="xs" c="dimmed">
-                                                        Only doctors you accept can view your health data. Invites from video calls
-                                                        are auto-accepted since you participated in the call.
-                                                    </Text>
-                                                </Stack>
-                                            </Group>
-                                        </Paper>
-                                    )}
+                    {!invitesLoading && pendingInvites.length > 0 && (
+                        <Paper
+                            radius="lg"
+                            p="md"
+                            mt="sm"
+                            style={{
+                                background: "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.06))",
+                                border: "1px solid light-dark(var(--mantine-color-primary-1), rgba(107,79,248,0.12))",
+                            }}
+                        >
+                            <Group gap="xs" align="flex-start">
+                                <IconShieldCheck size={15} color="var(--mantine-color-primary-5)" style={{ marginTop: 1 }} />
+                                <Stack gap={2}>
+                                    <Text size="xs" fw={500}>Your privacy is protected</Text>
+                                    <Text size="xs" c="dimmed">
+                                        Only doctors you accept can view your health data. Invites from video calls
+                                        are auto-accepted since you participated in the call.
+                                    </Text>
                                 </Stack>
+                            </Group>
+                        </Paper>
+                    )}
+                </Stack>
+            ),
+        });
+    }
+
+    return (
+        <Container pt="md">
+            <Card radius="xl" shadow="xl">
+                <Card.Section px="xl" py="lg" withBorder>
+                    <Group justify="space-between" align="center" wrap="nowrap" mb="sm">
+                        <Group gap="sm">
+                            <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                                <IconStethoscope size={20} />
+                            </ThemeIcon>
+                            <Box>
+                                <Title order={4} lh={1.2}>My Doctors</Title>
+                                <Group gap="xs" align="center">
+                                    <Text size="xs" c="dimmed">{doctorCountLabel()}</Text>
+                                    {onlineCount > 0 && (
+                                        <Badge
+                                            size="xs"
+                                            variant="dot"
+                                            color={colors.success}
+                                        >
+                                            {onlineCount} online
+                                        </Badge>
+                                    )}
+                                </Group>
                             </Box>
-                        </ScrollArea>
-                    </Tabs.Panel>
-                </Tabs>
-            </Box>
-        </Box>
+                        </Group>
+                        <Button
+                            variant="light"
+                            leftSection={<IconUserCheck size={16} />}
+                            rightSection={
+                                pendingInvites.length > 0 ? (
+                                    <Badge size="xs" color="yellow" variant="filled" circle>
+                                        {pendingInvites.length}
+                                    </Badge>
+                                ) : null
+                            }
+                            onClick={openInvitesModal}
+                        >
+                            Invites
+                        </Button>
+                    </Group>
+                </Card.Section>
+                <Card.Section p="md">
+                    <ScrollArea style={{ height: "100%" }}>
+                        <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
+                            {doctorsLoading && (
+                                <Stack gap="md">
+                                    {["a", "b", "c"].map((k) => (
+                                        <Skeleton key={k} height={130} radius="lg" />
+                                    ))}
+                                </Stack>
+                            )}
+
+                            {!doctorsLoading && doctors.length === 0 && connectedInvites.length === 0 && (
+                                <Box py={80} style={{ textAlign: "center" }}>
+                                    <ThemeIcon size={64} radius="xl" color="primary" variant="light" mx="auto" mb="md">
+                                        <IconStethoscope size={32} />
+                                    </ThemeIcon>
+                                    <Text fw={600} size="sm" mb={6}>No doctors yet</Text>
+                                    <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
+                                        Your healthcare providers will appear here once a doctor connects with you.
+                                    </Text>
+                                </Box>
+                            )}
+
+                            {!doctorsLoading && doctors.length > 0 && (
+                                <Stack gap="md">
+                                    {doctors.map((doctor) => (
+                                        <DoctorCard
+                                            key={doctor.id}
+                                            doctor={doctor}
+                                            onDelete={() => handleDelete(doctor)}
+                                        />
+                                    ))}
+                                </Stack>
+                            )}
+
+                            {!doctorsLoading && connectedInvites.length > 0 && (
+                                <Stack gap="md" mt={doctors.length > 0 ? "md" : 0}>
+                                    {doctors.length > 0 && (
+                                        <Group gap={6} mt={4}>
+                                            <Divider style={{ flex: 1 }} />
+                                            <Text size="xs" c="dimmed" fw={500}>Connected via invite</Text>
+                                            <Divider style={{ flex: 1 }} />
+                                        </Group>
+                                    )}
+                                    {connectedInvites.map((invite) => (
+                                        <ConnectedDoctorCard
+                                            key={invite.doctorId}
+                                            invite={invite}
+                                            onRevoke={confirmRevoke}
+                                        />
+                                    ))}
+                                </Stack>
+                            )}
+                        </Box>
+                    </ScrollArea>
+                </Card.Section>
+            </Card>
+        </Container>
     );
 }

@@ -16,7 +16,7 @@ const ColorSchemeToggle = dynamic(
 
 export function LandingHeader() {
   return (
-    <Container>
+    <Container px="md">
       <Group justify="space-between" align="center" h={64}>
         <Logo />
         <Group gap="xs">

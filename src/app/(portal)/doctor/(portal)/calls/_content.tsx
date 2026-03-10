@@ -16,9 +16,6 @@ import {
     IconPhoneCall,
     IconClock,
     IconVideo,
-    IconCalendar,
-    IconPlayerPlay,
-    IconUser,
     IconChevronRight,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -146,6 +143,22 @@ function CallRow({
                     >
                         {statusLabel(call.status)}
                     </Badge>
+                    {call.status === "ended" && call.recordingUrl && (
+                        <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="primary"
+                            radius="xl"
+                            leftSection={<IconVideo size={12} />}
+                            component="a"
+                            href={call.recordingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontWeight: 600 }}
+                        >
+                            Recording
+                        </Button>
+                    )}
                     {call.status === "accepted" && onRejoin && (
                         <Button
                             size="compact-xs"

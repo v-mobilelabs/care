@@ -4,7 +4,9 @@ import {
     Badge,
     Box,
     Button,
+    Card,
     Center,
+    Container,
     Divider,
     Group,
     Image,
@@ -38,22 +40,7 @@ import { useTransition } from "react";
 
 import { useFilesQuery, useDeleteFileMutation, useStorageMetricsQuery, type FileRecord } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+import { formatBytes, formatDate } from "@/lib/format";
 
 function getFileIcon(mimeType: string, size = 28): React.ReactNode {
     if (mimeType === "application/pdf") return <IconFileTypePdf size={size} />;
@@ -296,83 +283,66 @@ export function FilesContent() {
     }
 
     return (
-        <Box
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                overflow: "hidden",
-            }}
-        >
-            {/* Header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
-                <Group justify="space-between" align="center">
-                    <Group gap="sm">
-                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                            <IconFolder size={20} />
-                        </ThemeIcon>
-                        <Box>
-                            <Title order={4} lh={1.2}>My Files</Title>
-                            <Text size="xs" c="dimmed">
-                                All files you&apos;ve uploaded across your chat sessions
-                            </Text>
-                        </Box>
-                    </Group>
-                    {!isLoading && files.length > 0 && (
-                        <Badge variant="light" color="gray" size="sm" radius="xl">
-                            {files.length} {files.length === 1 ? "file" : "files"}
-                        </Badge>
-                    )}
-                </Group>
-                {/* Storage usage */}
-                <Box mt="sm">
-                    <StorageBar />
-                </Box>
-            </Box>
-
-            {/* Scrollable content */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={1080} mx="auto">
-                        {/* Loading skeletons */}
-                        {isLoading && (
-                            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
-                                {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e", "sk-f"].map((k) => (
-                                    <Skeleton key={k} height={200} radius="lg" />
-                                ))}
-                            </SimpleGrid>
-                        )}
-
-                        {/* Empty state */}
-                        {!isLoading && files.length === 0 && <EmptyFiles />}
-
-                        {/* File grid */}
+        <Container pt="md">
+            <Card radius="xl" shadow="xl">
+                <Card.Section px="xl" py="lg" withBorder>
+                    <Group justify="space-between" align="center">
+                        <Group gap="sm">
+                            <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                                <IconFolder size={20} />
+                            </ThemeIcon>
+                            <Box>
+                                <Title order={4} lh={1.2}>My Files</Title>
+                                <Text size="xs" c="dimmed">
+                                    All files you&apos;ve uploaded across your chat sessions
+                                </Text>
+                            </Box>
+                        </Group>
                         {!isLoading && files.length > 0 && (
-                            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
-                                {files.map((file) => (
-                                    <FileCard
-                                        key={file.id}
-                                        file={file}
-                                        isPendingDelete={
-                                            deleteFile.isPending &&
-                                            deleteFile.variables?.fileId === file.id
-                                        }
-                                        onDelete={() => handleDelete(file)}
-                                    />
-                                ))}
-                            </SimpleGrid>
+                            <Badge variant="light" color="gray" size="sm" radius="xl">
+                                {files.length} {files.length === 1 ? "file" : "files"}
+                            </Badge>
                         )}
+                    </Group>
+                    <Box mt="sm">
+                        <StorageBar />
                     </Box>
-                </ScrollArea>
-            </Box>
-        </Box>
-    );
-}
+                </Card.Section>
+                <Card.Section p="md">
+                    <Box style={{ flex: 1, overflow: "hidden" }}>
+                        <ScrollArea style={{ height: "100%" }}>
+                            <Box maw={1080} mx="auto">
+                                {/* Loading skeletons */}
+                                {isLoading && (
+                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
+                                        {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e", "sk-f"].map((k) => (
+                                            <Skeleton key={k} height={200} radius="lg" />
+                                        ))}
+                                    </SimpleGrid>
+                                )}
+
+                                {/* Empty state */}
+                                {!isLoading && files.length === 0 && <EmptyFiles />}
+
+                                {/* File grid */}
+                                {!isLoading && files.length > 0 && (
+                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
+                                        {files.map((file) => (
+                                            <FileCard
+                                                key={file.id}
+                                                file={file}
+                                                isPendingDelete={
+                                                    deleteFile.isPending &&
+                                                    deleteFile.variables?.fileId === file.id
+                                                }
+                                                onDelete={() => handleDelete(file)}
+                                            />
+                                        ))}
+                                    </SimpleGrid>
+                                )}
+                            </Box>
+                        </ScrollArea>
+                    </Box>
+                </Card.Section>
+            </Card>
+        </Container>

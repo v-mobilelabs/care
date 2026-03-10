@@ -107,95 +107,109 @@ function CallCard({ call, onRejoin }: Readonly<{ call: CallRequestDto; onRejoin?
     return (
         <Paper withBorder radius="lg" style={{ overflow: "hidden" }}>
             <Box p="md">
-            <Group justify="space-between" align="flex-start" wrap="nowrap">
-                {/* Left: avatar + info */}
-                <Group gap="md" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
-                    <Box pos="relative">
-                        <Avatar
-                            size={48}
-                            radius="xl"
-                            color="primary"
-                            variant="light"
-                        >
-                            {getInitials(call.doctorName)}
-                        </Avatar>
-                        <Box
-                            pos="absolute"
-                            style={{
-                                bottom: -2,
-                                right: -2,
-                                borderRadius: "50%",
-                                background: `var(--mantine-color-${color}-1)`,
-                                border: "2px solid var(--mantine-color-body)",
-                                width: 20,
-                                height: 20,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                        >
-                            <Box c={`${color}.6`}>
-                                <StatusIcon status={call.status} />
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                    {/* Left: avatar + info */}
+                    <Group gap="md" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+                        <Box pos="relative">
+                            <Avatar
+                                size={48}
+                                radius="xl"
+                                color="primary"
+                                variant="light"
+                            >
+                                {getInitials(call.doctorName)}
+                            </Avatar>
+                            <Box
+                                pos="absolute"
+                                style={{
+                                    bottom: -2,
+                                    right: -2,
+                                    borderRadius: "50%",
+                                    background: `var(--mantine-color-${color}-1)`,
+                                    border: "2px solid var(--mantine-color-body)",
+                                    width: 20,
+                                    height: 20,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                }}
+                            >
+                                <Box c={`${color}.6`}>
+                                    <StatusIcon status={call.status} />
+                                </Box>
                             </Box>
                         </Box>
-                    </Box>
 
-                    <Stack gap={4} style={{ minWidth: 0 }}>
-                        <Text fw={700} size="sm" truncate>
-                            Dr. {call.doctorName}
-                        </Text>
-                        <Group gap={6} wrap="nowrap">
-                            <IconCalendar size={12} color="var(--mantine-color-dimmed)" />
-                            <Text size="xs" c="dimmed">{date}</Text>
-                            <Text size="xs" c="dimmed">·</Text>
-                            <Text size="xs" c="dimmed">{time}</Text>
-                        </Group>
-                        {duration && (
-                            <Group gap={4} wrap="nowrap">
-                                <IconPlayerPlay size={11} color={`var(--mantine-color-${colors.success}-6)`} />
-                                <Text size="xs" c={`${colors.success}.6`} fw={500}>
-                                    {duration}
-                                </Text>
+                        <Stack gap={4} style={{ minWidth: 0 }}>
+                            <Text fw={700} size="sm" truncate>
+                                Dr. {call.doctorName}
+                            </Text>
+                            <Group gap={6} wrap="nowrap">
+                                <IconCalendar size={12} color="var(--mantine-color-dimmed)" />
+                                <Text size="xs" c="dimmed">{date}</Text>
+                                <Text size="xs" c="dimmed">·</Text>
+                                <Text size="xs" c="dimmed">{time}</Text>
                             </Group>
+                            {duration && (
+                                <Group gap={4} wrap="nowrap">
+                                    <IconPlayerPlay size={11} color={`var(--mantine-color-${colors.success}-6)`} />
+                                    <Text size="xs" c={`${colors.success}.6`} fw={500}>
+                                        {duration}
+                                    </Text>
+                                </Group>
+                            )}
+                        </Stack>
+                    </Group>
+
+                    {/* Right: badge + optional rejoin */}
+                    <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
+                        <Badge
+                            color={color}
+                            variant="light"
+                            size="sm"
+                            leftSection={<StatusIcon status={call.status} />}
+                        >
+                            {statusLabel(call.status)}
+                        </Badge>
+                        {call.status === "accepted" && onRejoin && (
+                            <Button
+                                size="compact-xs"
+                                variant="filled"
+                                color="primary"
+                                leftSection={<IconPhoneCall size={12} />}
+                                onClick={onRejoin}
+                            >
+                                Rejoin
+                            </Button>
+                        )}
+                        {call.status === "ended" && call.recordingUrl && (
+                            <Button
+                                size="compact-xs"
+                                variant="light"
+                                color="primary"
+                                leftSection={<IconVideo size={12} />}
+                                component="a"
+                                href={call.recordingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Recording
+                            </Button>
+                        )}
+                        {call.status === "ended" && call.transcript && (
+                            <Button
+                                size="compact-xs"
+                                variant={transcriptOpen ? "filled" : "light"}
+                                color="primary"
+                                leftSection={<IconFileText size={12} />}
+                                rightSection={transcriptOpen ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
+                                onClick={() => setTranscriptOpen((v) => !v)}
+                            >
+                                Transcript
+                            </Button>
                         )}
                     </Stack>
                 </Group>
-
-                {/* Right: badge + optional rejoin */}
-                <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
-                    <Badge
-                        color={color}
-                        variant="light"
-                        size="sm"
-                        leftSection={<StatusIcon status={call.status} />}
-                    >
-                        {statusLabel(call.status)}
-                    </Badge>
-                    {call.status === "accepted" && onRejoin && (
-                        <Button
-                            size="compact-xs"
-                            variant="filled"
-                            color="primary"
-                            leftSection={<IconPhoneCall size={12} />}
-                            onClick={onRejoin}
-                        >
-                            Rejoin
-                        </Button>
-                    )}
-                    {call.status === "ended" && call.transcript && (
-                        <Button
-                            size="compact-xs"
-                            variant={transcriptOpen ? "filled" : "light"}
-                            color="primary"
-                            leftSection={<IconFileText size={12} />}
-                            rightSection={transcriptOpen ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
-                            onClick={() => setTranscriptOpen((v) => !v)}
-                        >
-                            Transcript
-                        </Button>
-                    )}
-                </Stack>
-            </Group>
             </Box>
 
             {/* Inline transcript panel */}

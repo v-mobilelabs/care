@@ -1,5 +1,5 @@
 "use client";
-import { Box, Group, ScrollArea, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Box, Card, Container, Group, ScrollArea, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconUser } from "@tabler/icons-react";
 
 import { useAuth } from "@/ui/providers/auth-provider";
@@ -45,55 +45,48 @@ export function ProfileContent() {
             : null;
 
     return (
-        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-            {/* Page header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
-                <Group gap="sm">
-                    <ThemeIcon size={34} radius="md" color="primary" variant="light">
-                        <IconUser size={18} />
-                    </ThemeIcon>
-                    <Box>
-                        <Title order={5} lh={1.2}>Profile</Title>
-                        <Text size="xs" c="dimmed">Manage your personal &amp; health information</Text>
+        <Container pt="md">
+            <Card radius="xl" shadow="xl">
+                <Card.Section px="xl" py="lg" withBorder>
+                    <Group gap="sm">
+                        <ThemeIcon size={34} radius="md" color="primary" variant="light">
+                            <IconUser size={18} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={5} lh={1.2}>Profile</Title>
+                            <Text size="xs" c="dimmed">Manage your personal &amp; health information</Text>
+                        </Box>
+                    </Group>
+                </Card.Section>
+                <Card.Section p="md">
+                    <Box style={{ flex: 1, overflow: "hidden" }}>
+                        <ScrollArea style={{ height: "100%" }}>
+                            <Box maw={600} mx="auto">
+                                <Stack gap="md">
+                                    <HeroCard
+                                        photoURL={healthProfile?.photoUrl ?? user?.photoURL ?? null}
+                                        email={user?.email ?? null}
+                                        emailVerified={user?.emailVerified ?? false}
+                                        initials={initials}
+                                        healthProfile={healthProfile}
+                                        isProfileLoaded={healthProfile !== undefined}
+                                        bmi={bmi}
+                                        onAvatarUpdated={() => {
+                                            refreshUser();
+                                            void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+                                        }}
+                                    />
+                                    <PersonalInfoSection />
+                                    <LocationInfoSection
+                                        healthProfile={healthProfile}
+                                    />
+                                    <DangerSection />
+                                </Stack>
+                            </Box>
+                        </ScrollArea>
                     </Box>
-                </Group>
-            </Box>
-
-            {/* Scrollable sections */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={600} mx="auto">
-                        <Stack gap="md">
-                            <HeroCard
-                                photoURL={healthProfile?.photoUrl ?? user?.photoURL ?? null}
-                                email={user?.email ?? null}
-                                emailVerified={user?.emailVerified ?? false}
-                                initials={initials}
-                                healthProfile={healthProfile}
-                                isProfileLoaded={healthProfile !== undefined}
-                                bmi={bmi}
-                                onAvatarUpdated={() => {
-                                    refreshUser();
-                                    void qc.invalidateQueries({ queryKey: chatKeys.profile() });
-                                }}
-                            />
-                            <PersonalInfoSection />
-                            <LocationInfoSection
-                                healthProfile={healthProfile}
-                            />
-                            <DangerSection />
-                        </Stack>
-                    </Box>
-                </ScrollArea>
-            </Box>
-        </Box>
+                </Card.Section>
+            </Card>
+        </Container>
     );
 }
