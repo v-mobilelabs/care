@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   DAILY_CREDITS,
@@ -8,8 +8,6 @@ import {
   type CreditDocument,
   type CreditDto,
 } from "../models/credit.model";
-
-const db = FirebaseService.getInstance().getDb();
 
 const creditDoc = (userId: string) => db.doc(`credits/${userId}`);
 

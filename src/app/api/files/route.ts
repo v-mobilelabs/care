@@ -4,7 +4,6 @@ import { ListAllFilesUseCase } from "@/data/sessions";
 
 // GET /api/files — returns all files uploaded by the current user across every session
 export const GET = WithContext(async ({ user }) => {
-  const input = ListAllFilesUseCase.validate({ userId: user.uid });
-  const files = await new ListAllFilesUseCase().execute(input);
+  const files = await new ListAllFilesUseCase().execute({ userId: user.uid });
   return NextResponse.json(files);
 });

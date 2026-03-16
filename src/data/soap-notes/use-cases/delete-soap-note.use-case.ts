@@ -7,7 +7,9 @@ import {
   type SoapNoteRefInput,
 } from "../models/soap-note.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({ sourceIdField: "noteId", remove: true })
 export class DeleteSoapNoteUseCase extends UseCase<SoapNoteRefInput, void> {
   constructor(
     private readonly dependentId?: string,

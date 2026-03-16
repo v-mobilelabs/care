@@ -1,4 +1,4 @@
-import { vitalService, type VitalService } from "../service/vital.service";
+import { vitalRepository } from "../repositories/vital.repository";
 import {
   ListVitalsSchema,
   type ListVitalsInput,
@@ -7,10 +7,7 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class ListVitalsUseCase extends UseCase<ListVitalsInput, VitalDto[]> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: VitalService = vitalService,
-  ) {
+  constructor(private readonly dependentId?: string) {
     super();
   }
 
@@ -19,6 +16,6 @@ export class ListVitalsUseCase extends UseCase<ListVitalsInput, VitalDto[]> {
   }
 
   protected async run(input: ListVitalsInput): Promise<VitalDto[]> {
-    return this.service.list(input, this.dependentId);
+    return vitalRepository.list(input.userId, input.limit, this.dependentId);
   }
 }

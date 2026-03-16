@@ -40,7 +40,7 @@ import {
     useDeleteDependentMutation,
     type DependentRecord,
 } from "@/app/(portal)/patient/_query";
-import { DependentForm } from "@/app/(portal)/patient/profile/_shared";
+import { DependentForm } from "@/ui/chat/profile/shared";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

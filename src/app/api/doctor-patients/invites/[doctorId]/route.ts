@@ -18,17 +18,15 @@ export const POST = WithContext(
     }
 
     if (parsed.data.action === "accept") {
-      const input = AcceptInviteUseCase.validate({
+      await new AcceptInviteUseCase().execute({
         doctorId: params.doctorId,
         patientId: user.uid,
       });
-      await new AcceptInviteUseCase().execute(input);
     } else {
-      const input = DeclineInviteUseCase.validate({
+      await new DeclineInviteUseCase().execute({
         doctorId: params.doctorId,
         patientId: user.uid,
       });
-      await new DeclineInviteUseCase().execute(input);
     }
 
     return NextResponse.json({ success: true });

@@ -7,6 +7,7 @@ import {
     Collapse,
     Divider,
     Group,
+    Loader,
     Paper,
     ScrollArea,
     Skeleton,
@@ -29,7 +30,9 @@ import {
     IconChevronUp,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { useCallHistory } from "./_query";
 import type { CallRequestDto, CallRequestStatus } from "@/data/meet";
 import { colors } from "@/ui/tokens";
@@ -88,10 +91,17 @@ function getInitials(name: string | undefined | null): string {
         .toUpperCase();
 }
 
+function RejoinLabel() {
+    const { pending } = useLinkStatus();
+    if (pending) return <Loader size={12} />;
+    return <IconPhoneCall size={12} />;
+}
+
 // ── Call card ─────────────────────────────────────────────────────────────────
 
-function CallCard({ call, onRejoin }: Readonly<{ call: CallRequestDto; onRejoin?: () => void }>) {
+function CallCard({ call }: Readonly<{ call: CallRequestDto }>) {
     const [transcriptOpen, setTranscriptOpen] = useState(false);
+
     const date = new Date(call.createdAt).toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
@@ -171,29 +181,15 @@ function CallCard({ call, onRejoin }: Readonly<{ call: CallRequestDto; onRejoin?
                         >
                             {statusLabel(call.status)}
                         </Badge>
-                        {call.status === "accepted" && onRejoin && (
+                        {call.status === "accepted" && (
                             <Button
                                 size="compact-xs"
                                 variant="filled"
                                 color="primary"
-                                leftSection={<IconPhoneCall size={12} />}
-                                onClick={onRejoin}
+                                component={Link}
+                                href={`/meet/${call.id}`}
                             >
-                                Rejoin
-                            </Button>
-                        )}
-                        {call.status === "ended" && call.recordingUrl && (
-                            <Button
-                                size="compact-xs"
-                                variant="light"
-                                color="primary"
-                                leftSection={<IconVideo size={12} />}
-                                component="a"
-                                href={call.recordingUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                Recording
+                                <RejoinLabel />
                             </Button>
                         )}
                         {call.status === "ended" && call.transcript && (
@@ -244,28 +240,11 @@ function CallCard({ call, onRejoin }: Readonly<{ call: CallRequestDto; onRejoin?
         </Paper>
     );
 }
-// ── Call card with navigation ───────────────────────────────────────────────
-
-function CallCardWithNav({ call }: Readonly<{ call: CallRequestDto }>) {
-    const router = useRouter();
-
-    function handleRejoin() {
-        router.push(`/meet/${call.id}`);
-    }
-
-    return (
-        <CallCard
-            call={call}
-            onRejoin={call.status === "accepted" ? handleRejoin : undefined}
-        />
-    );
-}
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CallsContent() {
     const { data: calls, isLoading, error } = useCallHistory();
     const router = useRouter();
-    const [, startTransition] = useTransition();
 
     return (
         <Box
@@ -329,7 +308,7 @@ export function CallsContent() {
                                                 size="xs"
                                                 variant="light"
                                                 color="primary"
-                                                onClick={() => startTransition(() => router.refresh())}
+                                                onClick={() => router.refresh()}
                                             >
                                                 Try again
                                             </Button>
@@ -359,13 +338,12 @@ export function CallsContent() {
                                                 </Text>
                                             </Stack>
                                             <Button
-                                                variant="filled"
+                                                variant="light"
                                                 color="primary"
                                                 size="sm"
                                                 leftSection={<IconVideo size={16} />}
-                                                onClick={() =>
-                                                    startTransition(() => router.push("/patient/connect"))
-                                                }
+                                                component={Link}
+                                                href="/patient/connect"
                                             >
                                                 See a Doctor
                                             </Button>
@@ -380,7 +358,7 @@ export function CallsContent() {
                                         {calls.length} consultation{calls.length === 1 ? "" : "s"}
                                     </Text>
                                     {calls.map((call) => (
-                                        <CallCardWithNav key={call.id} call={call} />
+                                        <CallCard key={call.id} call={call} />
                                     ))}
                                 </Stack>
                             );

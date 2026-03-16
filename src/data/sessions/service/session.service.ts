@@ -62,7 +62,7 @@ export class SessionService {
     const { userId, profileId, sessionId } = input;
     await Promise.all([
       messageRepository.deleteAll(userId, profileId, sessionId),
-      fileRepository.deleteAll(userId, profileId, sessionId),
+      fileRepository.deleteAll(profileId, sessionId),
     ]);
     await sessionRepository.delete(userId, profileId, sessionId);
   }

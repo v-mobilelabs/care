@@ -1,13 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import {
-  ref,
-  onValue,
-  query,
-  orderByKey,
-  limitToLast,
-} from "firebase/database";
-import { getClientDatabase } from "@/lib/firebase/client";
+import { useEffect, useRef } from "react";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 import { markAsRead } from "./actions";
 import type { DmMessage } from "./types";
 
@@ -24,73 +17,54 @@ export function useMessages(
   limit = 200,
   viewerUid?: string | null,
 ) {
-  const [messages, setMessages] = useState<DmMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading } = useRTDBListener<Record<string, unknown>>(
+    conversationId ? `dm/${conversationId}/messages` : null,
+    {
+      pageSize: limit,
+      orderBy: { type: "key" },
+      orderDirection: "asc",
+    },
+  );
 
   // Track the previous message count so we only call markAsRead when
   // the snapshot actually changes (avoids redundant RTDB writes).
   const prevCountRef = useRef<number | null>(null);
 
+  const messages: DmMessage[] = data
+    ? Object.entries(data).map(([key, val]) => {
+        const v = val as Record<string, unknown>;
+        return {
+          id: key,
+          senderId: (v.senderId as string) ?? "",
+          text: (v.text as string) ?? "",
+          createdAt: (v.createdAt as number) ?? 0,
+        };
+      })
+    : [];
+
+  // Auto-reset unread count when the viewer is actively
+  // subscribed to this conversation and new messages arrived.
   useEffect(() => {
-    if (!conversationId) return;
-
-    // Reset on conversation change.
-    prevCountRef.current = null;
-
-    const db = getClientDatabase();
-    const messagesRef = query(
-      ref(db, `dm/${conversationId}/messages`),
-      orderByKey(),
-      limitToLast(limit),
-    );
-
-    const unsub = onValue(
-      messagesRef,
-      (snap) => {
-        const msgs: DmMessage[] = [];
-        snap.forEach((child) => {
-          const val = child.val();
-          msgs.push({
-            id: child.key!,
-            senderId: val.senderId ?? "",
-            text: val.text ?? "",
-            createdAt: val.createdAt ?? 0,
-          });
-        });
-        setMessages(msgs);
-        setLoading(false);
-
-        // Auto-reset unread count when the viewer is actively
-        // subscribed to this conversation and new messages arrived.
-        if (
-          viewerUid &&
-          conversationId &&
-          msgs.length > 0 &&
-          prevCountRef.current !== null &&
-          msgs.length > prevCountRef.current
-        ) {
-          void markAsRead(viewerUid, conversationId);
-        }
-        // First snapshot — also reset (user just opened the thread).
-        if (
-          viewerUid &&
-          conversationId &&
-          prevCountRef.current === null &&
-          msgs.length > 0
-        ) {
-          void markAsRead(viewerUid, conversationId);
-        }
-        prevCountRef.current = msgs.length;
-      },
-      () => {
-        // Permission denied or network error — stop loading.
-        setMessages([]);
-        setLoading(false);
-      },
-    );
-
-    return unsub;
-  }, [conversationId, limit, viewerUid]);
+    if (
+      viewerUid &&
+      conversationId &&
+      messages.length > 0 &&
+      prevCountRef.current !== null &&
+      messages.length > prevCountRef.current
+    ) {
+      void markAsRead(viewerUid, conversationId);
+    }
+    // First snapshot — also reset (user just opened the thread).
+    if (
+      viewerUid &&
+      conversationId &&
+      prevCountRef.current === null &&
+      messages.length > 0
+    ) {
+      void markAsRead(viewerUid, conversationId);
+    }
+    prevCountRef.current = messages.length;
+  }, [messages.length, viewerUid, conversationId]);
 
   // No active conversation — return safe empty defaults at render time.
   if (!conversationId) return { messages: [] as DmMessage[], loading: false };

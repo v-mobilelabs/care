@@ -10,7 +10,7 @@ import {
     useUploadPrescriptionMutation,
     useDeletePrescriptionMutation,
     useExtractPrescriptionMutation,
-    type FileRecord,
+    type PrescriptionRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { PrescriptionDetailDrawer } from "./_prescription-detail-drawer";
@@ -36,12 +36,17 @@ export function PrescriptionsContent() {
         if (!files || files.length === 0) return;
         Array.from(files).forEach((file) => {
             upload.mutate({ file }, {
-                onSuccess: () =>
+                onSuccess: (result) => {
+                    const count = result.medications.length;
                     notifications.show({
-                        message: `${file.name} saved.`,
+                        message: count > 0
+                            ? `${file.name} saved — ${count} medication${count === 1 ? "" : "s"} extracted.`
+                            : `${file.name} saved.`,
                         color: colors.success,
                         icon: <IconCheck size={16} />,
-                    }),
+                    });
+                    if (count > 0) setDetailFileId(result.id);
+                },
                 onError: (err) =>
                     notifications.show({
                         title: "Upload failed",
@@ -52,9 +57,9 @@ export function PrescriptionsContent() {
         });
     }
 
-    function handleExtract(file: FileRecord) {
+    function handleExtract(file: PrescriptionRecord) {
         setExtractingFileId(file.id);
-        extract.mutate({ fileId: file.id, sessionId: file.sessionId ?? undefined }, {
+        extract.mutate({ fileId: file.id }, {
             onSuccess: (result) => {
                 setExtractingFileId(null);
                 const count = result.medications.length;
@@ -79,12 +84,13 @@ export function PrescriptionsContent() {
         });
     }
 
-    function handleDelete(file: FileRecord) {
+    function handleDelete(file: PrescriptionRecord) {
+        const label = file.prescribedBy ? `Dr. ${file.prescribedBy}` : "This prescription";
         modals.openConfirmModal({
             title: "Delete prescription?",
             children: (
                 <Text size="sm">
-                    <strong>{file.name}</strong> will be permanently removed. This cannot be undone.
+                    <strong>{label}</strong> will be permanently removed. This cannot be undone.
                 </Text>
             ),
             labels: { confirm: "Delete", cancel: "Cancel" },
@@ -95,7 +101,7 @@ export function PrescriptionsContent() {
                     {
                         onSuccess: () =>
                             notifications.show({
-                                message: `${file.name} deleted.`,
+                                message: `${label} deleted.`,
                                 color: colors.success,
                                 icon: <IconCheck size={16} />,
                             }),
@@ -107,10 +113,12 @@ export function PrescriptionsContent() {
 
     return (
         <Container pt="md">
-            {/* Detail drawer — key resets state when switching between prescriptions */}
+            {/* Detail modal — key resets state when switching between prescriptions */}
             <PrescriptionDetailDrawer
                 key={detailFileId ?? ""}
                 file={detailFile}
+                isExtracting={extractingFileId === detailFileId}
+                onExtract={() => { if (detailFile) handleExtract(detailFile); }}
                 onClose={() => setDetailFileId(null)}
             />
 
@@ -137,9 +145,9 @@ export function PrescriptionsContent() {
             {/* Header */}
             <Card
                 radius={"xl"}
-                shadow="xl"
+                withBorder
             >
-                <Card.Section px="xl" py="lg" withBorder>
+                <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="md" withBorder>
                     <Group justify="space-between" align="center">
                         <Group gap="sm">
                             <ThemeIcon size={36} radius="md" color="primary" variant="light">
@@ -218,9 +226,9 @@ export function PrescriptionsContent() {
                             <Box maw={1080} mx="auto">
                                 {/* Loading skeletons */}
                                 {isLoading && (
-                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
+                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
                                         {["sk-a", "sk-b", "sk-c", "sk-d"].map((k) => (
-                                            <Skeleton key={k} height={200} radius="lg" />
+                                            <Skeleton key={k} height={140} radius="md" />
                                         ))}
                                     </SimpleGrid>
                                 )}
@@ -235,7 +243,7 @@ export function PrescriptionsContent() {
 
                                 {/* Grid */}
                                 {!isLoading && prescriptions.length > 0 && (
-                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="md">
+                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
                                         {prescriptions.map((rx) => (
                                             <PrescriptionCard
                                                 key={rx.id}
@@ -247,7 +255,7 @@ export function PrescriptionsContent() {
                                                 isExtracting={extractingFileId === rx.id}
                                                 onDelete={() => handleDelete(rx)}
                                                 onExtract={() => handleExtract(rx)}
-                                                onViewMeds={() => setDetailFileId(rx.id)}
+                                                onOpenDetail={() => setDetailFileId(rx.id)}
                                             />
                                         ))}
                                     </SimpleGrid>

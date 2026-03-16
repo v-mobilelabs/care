@@ -2,7 +2,7 @@ import {
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { bucket } from "@/lib/firebase/admin";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
@@ -10,9 +10,6 @@ import {
   type InsuranceDocument,
   type InsuranceDto,
 } from "../models/insurance.model";
-
-const firebaseService = FirebaseService.getInstance();
-const bucket = firebaseService.getBucket();
 
 /** Signed URL expiry — 1 hour */
 const SIGNED_URL_EXPIRY_MS = 60 * 60 * 1000;

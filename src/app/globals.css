@@ -7,10 +7,11 @@ html {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   /* Match body background for overscroll */
-  background-color: light-dark(
-    var(--mantine-color-gray-5),
-    var(--mantine-color-dark-7)
+  background: light-dark(
+    var(--mantine-color-gray-2),
+    var(--mantine-color-dark-9)
   );
+  overscroll-behavior-y: none; /* Stops the vertical bounce */
 }
 
 /* === Safe-area insets for iOS standalone PWA === */
@@ -34,6 +35,10 @@ body {
   /* Fill entire viewport on iOS */
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  background: light-dark(
+    var(--mantine-color-gray-2),
+    var(--mantine-color-dark-9)
+  );
 }
 
 /* Hide the reCAPTCHA v3 badge — per Google's policy you must mention
@@ -46,4 +51,16 @@ body {
 /* Ensure individual notification items are clickable even though container has pointer-events: none */
 .mantine-Notifications-notification {
   pointer-events: auto !important;
+}
+
+/* ── NavLink hover fix — inactive items in light mode ─────────────────────── */
+/* Mantine hardcodes inactive hover to gray-0 (near-white), invisible on the  */
+/* light sidebar. Override with a visible primary tint.                        */
+:where([data-mantine-color-scheme="light"])
+  .mantine-NavLink-root:not([data-active]):hover {
+  background-color: var(--mantine-color-primary-0) !important;
+}
+:where([data-mantine-color-scheme="dark"])
+  .mantine-NavLink-root:not([data-active]):hover {
+  background-color: rgba(107, 79, 248, 0.18) !important;
 }

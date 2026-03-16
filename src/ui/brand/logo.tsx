@@ -5,7 +5,7 @@ import Link from "next/link";
 export function Logo() {
   return (
     <Box component={Link} href="/" style={{ textDecoration: "none" }}>
-      <Group gap={6}>
+      <Group gap={0}>
         <ThemeIcon size={36} radius="md" color="primary" variant="transparent">
           <IconHeartbeat size={26} />
         </ThemeIcon>

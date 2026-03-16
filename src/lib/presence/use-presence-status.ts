@@ -11,9 +11,7 @@
  * fail with permission denied (database rules require auth != null).
  */
 "use client";
-import { useEffect, useState } from "react";
-import { ref, onValue } from "firebase/database";
-import { getClientDatabase, getClientAuth } from "@/lib/firebase/client";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 import type { UserKind } from "@/lib/auth/jwt";
 
 export interface PresenceStatus {
@@ -48,41 +46,21 @@ const INITIAL: PresenceStatus = {
 };
 
 export function usePresenceStatus(uid: string): PresenceStatus {
-  const [status, setStatus] = useState<PresenceStatus>(INITIAL);
+  const { data, loading, error } = useRTDBListener<
+    Omit<PresenceStatus, "loading">
+  >(uid ? `presence/${uid}` : null);
 
-  // Then subscribe to presence data
-  useEffect(() => {
-    if (!uid) {
-      console.log("usePresenceStatus: no uid provided");
-      setStatus(INITIAL);
-      return;
-    }
-
-    setStatus(INITIAL);
-
-    const db = getClientDatabase();
-    const presenceRef = ref(db, `presence/${uid}`);
-
-    const unsubscribe = onValue(
-      presenceRef,
-      (snap) => {
-        const data = snap.val() as Omit<PresenceStatus, "loading"> | null;
-        setStatus(
-          data ? { ...data, loading: false } : { ...INITIAL, loading: false },
-        );
-      },
-      (error) => {
-        console.error(
-          "usePresenceStatus: error reading presence for uid",
-          uid,
-          error,
-        );
-        setStatus({ ...INITIAL, loading: false });
-      },
+  if (error) {
+    console.error(
+      "usePresenceStatus: error reading presence for uid",
+      uid,
+      error,
     );
+  }
 
-    return unsubscribe;
-  }, [uid]);
+  if (!uid) {
+    return INITIAL;
+  }
 
-  return status;
+  return data ? { ...data, loading } : { ...INITIAL, loading };
 }

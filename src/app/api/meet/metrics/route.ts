@@ -4,8 +4,8 @@ import { WithContext } from "@/lib/api/with-context";
 import { GetCallMetricsUseCase } from "@/data/meet";
 
 export const GET = WithContext(async ({ user }) => {
-  const metrics = await new GetCallMetricsUseCase().execute(
-    GetCallMetricsUseCase.validate({ patientId: user.uid }),
-  );
+  const metrics = await new GetCallMetricsUseCase().execute({
+    patientId: user.uid,
+  });
   return NextResponse.json(metrics);
 });

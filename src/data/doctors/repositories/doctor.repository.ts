@@ -2,7 +2,7 @@ import {
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDoctorDto,
@@ -10,8 +10,6 @@ import {
   type DoctorDto,
   type ClinicInfo,
 } from "../models/doctor.model";
-
-const db = FirebaseService.getInstance().getDb();
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 

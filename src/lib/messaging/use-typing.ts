@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { ref, set, onValue, remove } from "firebase/database";
+import { useEffect, useRef } from "react";
+import { ref, set, remove } from "firebase/database";
 import { getClientDatabase } from "@/lib/firebase/client";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 
 const TYPING_TIMEOUT_MS = 2_000;
 
@@ -16,29 +17,14 @@ export function useTyping(
   myUid: string | null,
   otherUid: string | null,
 ) {
-  const [otherTyping, setOtherTyping] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Listen to the other user's typing node ─────────────────────────────────
-  useEffect(() => {
-    if (!conversationId || !otherUid) return;
-
-    const db = getClientDatabase();
-    const typingRef = ref(db, `dm/${conversationId}/typing/${otherUid}`);
-
-    const unsub = onValue(
-      typingRef,
-      (snap) => {
-        setOtherTyping(snap.val() === true);
-      },
-      () => {
-        // Permission denied — ignore.
-        setOtherTyping(false);
-      },
-    );
-
-    return unsub;
-  }, [conversationId, otherUid]);
+  const { data: otherTypingData } = useRTDBListener<boolean>(
+    conversationId && otherUid
+      ? `dm/${conversationId}/typing/${otherUid}`
+      : null,
+  );
 
   // ── Clean up own typing indicator on unmount ───────────────────────────────
   useEffect(() => {
@@ -75,6 +61,7 @@ export function useTyping(
   }
 
   // When prerequisites are missing, report not-typing.
-  const resolvedTyping = conversationId && otherUid ? otherTyping : false;
-  return { otherTyping: resolvedTyping, startTyping, clearTyping };
+  const otherTyping =
+    conversationId && otherUid ? otherTypingData === true : false;
+  return { otherTyping, startTyping, clearTyping };
 }

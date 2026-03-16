@@ -5,7 +5,6 @@
  */
 import { Box, Group, Loader, Text, Tooltip } from "@mantine/core";
 import { IconClock, IconMicrophoneOff, IconWifi } from "@tabler/icons-react";
-import { motion } from "framer-motion";
 import { AudioWaveform } from "./_audio-waveform";
 import { formatDuration, type ConnectionHealth, type NetworkStats, type Participant } from "./_room-types";
 
@@ -13,8 +12,6 @@ interface RoomHeaderProps {
     remoteUser: Participant;
     remoteMuted: boolean;
     status: "initialising" | "ready" | "error";
-    isRecording: boolean;
-    isUploadingRecording: boolean;
     callDuration: number;
     connectionHealth: ConnectionHealth;
     networkStats: NetworkStats | null;
@@ -25,8 +22,6 @@ export function RoomHeader({
     remoteUser,
     remoteMuted,
     status,
-    isRecording,
-    isUploadingRecording,
     callDuration,
     connectionHealth,
     networkStats,
@@ -75,39 +70,6 @@ export function RoomHeader({
 
                 {/* Separator */}
                 <Box style={{ width: 1, height: 14, background: "light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))" }} />
-
-                {/* Recording indicator — Teams style */}
-                {isRecording && (
-                    <Group gap={6}>
-                        <motion.div
-                            animate={{ opacity: [1, 0.35, 1] }}
-                            transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity }}
-                            style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: "50%",
-                                background: "var(--mantine-color-red-6)",
-                                boxShadow: "0 0 6px var(--mantine-color-red-6)",
-                            }}
-                        />
-                        <Text size="xs" fw={600} c="red.4" style={{ letterSpacing: "0.04em" }}>
-                            Recording
-                        </Text>
-                    </Group>
-                )}
-                {isUploadingRecording && (
-                    <Group gap={6}>
-                        <Loader size={10} color="orange" />
-                        <Text size="xs" fw={500} c="orange.4">
-                            Saving recording…
-                        </Text>
-                    </Group>
-                )}
-
-                {/* Separator when recording + timer both show */}
-                {(isRecording || isUploadingRecording) && status === "ready" && (
-                    <Box style={{ width: 1, height: 14, background: "light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))" }} />
-                )}
 
                 {/* Call timer */}
                 {status === "ready" && (

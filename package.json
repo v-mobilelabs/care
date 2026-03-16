@@ -6,12 +6,20 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:nutrition": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-nutrition.ts",
+    "seed:guidelines": "NODE_ENV=development npx tsx --env-file=.env.local src/data/guidelines/seed/seed-guidelines.ts",
+    "setup:vector-indexes": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/create-vector-indexes.ts"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^4.0.77",
     "@ai-sdk/google": "^3.0.34",
     "@ai-sdk/react": "^3.0.107",
+    "@aws-sdk/client-chime-sdk-media-pipelines": "^3.1005.0",
     "@aws-sdk/client-chime-sdk-meetings": "^3.1002.0",
+    "@aws-sdk/client-s3": "^3.1005.0",
+    "@aws-sdk/client-sts": "^3.1005.0",
+    "@aws-sdk/s3-request-presigner": "^3.1005.0",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@mantine/carousel": "^8.3.15",
     "@mantine/charts": "^8.3.15",
@@ -53,6 +61,7 @@
     "react-easy-crop": "^5.5.6",
     "react-google-recaptcha-v3": "^1.11.0",
     "recharts": "^3.7.0",
+    "reflect-metadata": "^0.2.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -61,6 +70,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

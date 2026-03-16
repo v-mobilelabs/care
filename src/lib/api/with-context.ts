@@ -1,14 +1,18 @@
 // Server-only — used in Next.js App Router API route handlers.
 import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { trace, SpanStatusCode, type Span } from "@opentelemetry/api";
 import { COOKIE_NAME } from "@/lib/auth/jwt";
 import type { SessionPayload, UserKind } from "@/lib/auth/jwt";
 import { auth } from "@/lib/firebase/admin";
+import { CreditsExhaustedError } from "@/lib/errors";
+
+const tracer = trace.getTracer("careai.api");
 
 // ── Context type ──────────────────────────────────────────────────────────────
 
 export interface ApiContext {
-  user: SessionPayload; // { uid, email, kind }
+  user: SessionPayload;
   req: NextRequest;
   /** Raw dependent ID from the X-Dependent-Id header. Undefined for the user's own profile. */
   dependentId?: string;
@@ -24,7 +28,7 @@ export interface ApiContext {
 
 type ApiHandler<
   TParams extends Record<string, string> = Record<string, string>,
-> = (ctx: ApiContext, params: TParams) => Promise<NextResponse>;
+> = (ctx: ApiContext, params: TParams) => Promise<NextResponse | Response>;
 
 // ── Error codes ───────────────────────────────────────────────────────────────
 
@@ -145,98 +149,233 @@ function makeRouteHandler<
   return async function routeHandler(
     req: NextRequest,
     { params }: { params: Promise<TParams> },
-  ): Promise<NextResponse> {
-    // ── 1. Authenticate + resolve params (parallel — independent) ────────────
-    let user: SessionPayload;
-    let resolvedParams: TParams;
+  ): Promise<NextResponse | Response> {
+    const spanName = `${req.method} ${new URL(req.url).pathname}`;
 
-    try {
-      const [cookieStore, rp] = await Promise.all([cookies(), params]);
-      resolvedParams = rp;
-      const token = cookieStore.get(COOKIE_NAME)?.value;
+    return tracer.startActiveSpan(spanName, async (span: Span) => {
+      try {
+        // Add basic HTTP attributes
+        span.setAttributes({
+          "http.method": req.method,
+          "http.url": req.url,
+          "http.target": new URL(req.url).pathname,
+        });
 
-      if (!token) {
-        return errorResponse(
-          401,
-          ERRORS.UNAUTHORIZED.code,
-          ERRORS.UNAUTHORIZED.message,
-        );
+        // ── 1. Authenticate + resolve params (parallel — independent) ────────────
+        let user: SessionPayload;
+        let resolvedParams: TParams;
+
+        try {
+          const [cookieStore, rp] = await Promise.all([cookies(), params]);
+          resolvedParams = rp;
+          const token = cookieStore.get(COOKIE_NAME)?.value;
+
+          if (!token) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: "No session token",
+            });
+            span.setAttribute("http.status_code", 401);
+            return errorResponse(
+              401,
+              ERRORS.UNAUTHORIZED.code,
+              ERRORS.UNAUTHORIZED.message,
+            );
+          }
+
+          // verifySessionCookie with checkRevoked=true is Firebase's recommended
+          // approach for session management. It automatically rejects sessions
+          // whose user has been deleted, disabled, or had their tokens revoked —
+          // no extra getUser() call needed.
+          const decoded = await auth.verifySessionCookie(token, true);
+          // Back-compat: tokens may carry kind:"patient" (brief migration window) — normalise to "user".
+          const kind: UserKind = decoded.kind === "doctor" ? "doctor" : "user";
+          user = { uid: decoded.uid, email: decoded.email ?? "", kind };
+
+          // Add user context to span
+          span.setAttributes({
+            "user.id": user.uid,
+            "user.kind": user.kind,
+            "user.email": user.email,
+          });
+        } catch (err) {
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: "Session verification failed",
+          });
+          span.recordException(
+            err instanceof Error ? err : new Error(JSON.stringify(err)),
+          );
+          span.setAttribute("http.status_code", 401);
+          return errorResponse(
+            401,
+            ERRORS.UNAUTHORIZED.code,
+            "Session expired, revoked, or account no longer exists.",
+          );
+        }
+
+        // ── 1b. Kind enforcement ──────────────────────────────────────────────────
+        if (requiredKind) {
+          span.setAttribute("auth.required_kind", requiredKind);
+          if (user.kind !== requiredKind) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: `Kind mismatch: expected ${requiredKind}, got ${user.kind}`,
+            });
+            span.setAttribute("http.status_code", 403);
+            return errorResponse(
+              403,
+              ERRORS.FORBIDDEN.code,
+              `This endpoint requires a ${requiredKind} session.`,
+            );
+          }
+        }
+
+        // ── 1c. Extract optional dependent header ─────────────────────────────────
+        const dependentId = req.headers.get("x-dependent-id") ?? undefined;
+        const profileId = dependentId ?? user.uid;
+
+        if (dependentId) {
+          span.setAttribute("profile.dependent_id", dependentId);
+        }
+        span.setAttribute("profile.id", profileId);
+
+        // ── 2. Invoke handler ─────────────────────────────────────────────────────
+        try {
+          const response = await handler(
+            { user, req, dependentId, profileId },
+            resolvedParams,
+          );
+
+          // Extract status code from response
+          const statusCode = response.status;
+          span.setAttribute("http.status_code", statusCode);
+
+          // Set span status based on HTTP status
+          if (statusCode >= 200 && statusCode < 300) {
+            span.setStatus({ code: SpanStatusCode.OK });
+          } else if (statusCode >= 400) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: `HTTP ${statusCode}`,
+            });
+          }
+
+          return response;
+        } catch (err) {
+          if (err instanceof ApiError) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: err.message,
+            });
+            span.setAttributes({
+              "http.status_code": err.statusCode,
+              "error.code": err.code,
+              "error.type": "ApiError",
+            });
+            span.recordException(err);
+            return errorResponse(err.statusCode, err.code, err.message);
+          }
+
+          // Credits exhausted (thrown by AI service / credit middleware)
+          if (err instanceof CreditsExhaustedError) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: err.message,
+            });
+            span.setAttributes({
+              "http.status_code": err.statusCode,
+              "error.code": err.code,
+              "error.type": "CreditsExhaustedError",
+            });
+            span.recordException(err);
+            return errorResponse(
+              err.statusCode,
+              err.code,
+              err.toResponseMessage(),
+            );
+          }
+
+          // Zod validation errors (ZodError)
+          if (isZodError(err)) {
+            const issues = err.issues.map(
+              (i: { path: (string | number)[]; message: string }) =>
+                `${i.path.join(".")}: ${i.message}`,
+            );
+            const message = issues.join("; ");
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: "Validation failed",
+            });
+            span.setAttributes({
+              "http.status_code": 400,
+              "error.code": ERRORS.BAD_REQUEST.code,
+              "error.type": "ZodError",
+              "error.validation_issues": message,
+            });
+            span.recordException(
+              err instanceof Error ? err : new Error(JSON.stringify(err)),
+            );
+            return errorResponse(400, ERRORS.BAD_REQUEST.code, message);
+          }
+
+          // Firestore missing index (gRPC FAILED_PRECONDITION = code 9)
+          if (isFirestoreMissingIndexError(err)) {
+            const message =
+              "A required database index is missing. Please contact support.";
+            console.error(
+              "[WithContext] Missing Firestore index:",
+              (err as Error).message,
+            );
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: "Missing Firestore index",
+            });
+            span.setAttributes({
+              "http.status_code": 503,
+              "error.code": "INDEX_MISSING",
+              "error.type": "FirestoreIndexError",
+            });
+            span.recordException(
+              err instanceof Error ? err : new Error(JSON.stringify(err)),
+            );
+            return errorResponse(503, "INDEX_MISSING", message);
+          }
+
+          // Unhandled errors
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: err instanceof Error ? err.message : JSON.stringify(err),
+          });
+          span.setAttributes({
+            "http.status_code": 500,
+            "error.code": ERRORS.INTERNAL.code,
+            "error.type": "UnhandledError",
+          });
+          span.recordException(
+            err instanceof Error ? err : new Error(JSON.stringify(err)),
+          );
+
+          // Log in development; suppress full stack in production.
+          if (process.env.NODE_ENV === "production") {
+            console.error(
+              "[WithContext] Unhandled error:",
+              (err as Error)?.message ?? err,
+            );
+          } else {
+            console.error("[WithContext] Unhandled error:", err);
+          }
+
+          return errorResponse(
+            500,
+            ERRORS.INTERNAL.code,
+            ERRORS.INTERNAL.message,
+          );
+        }
+      } finally {
+        span.end();
       }
-
-      // verifySessionCookie with checkRevoked=true is Firebase's recommended
-      // approach for session management. It automatically rejects sessions
-      // whose user has been deleted, disabled, or had their tokens revoked —
-      // no extra getUser() call needed.
-      const decoded = await auth.verifySessionCookie(token, true);
-      // Back-compat: tokens may carry kind:"patient" (brief migration window) — normalise to "user".
-      const kind: UserKind = decoded.kind === "doctor" ? "doctor" : "user";
-      user = { uid: decoded.uid, email: decoded.email ?? "", kind };
-    } catch {
-      return errorResponse(
-        401,
-        ERRORS.UNAUTHORIZED.code,
-        "Session expired, revoked, or account no longer exists.",
-      );
-    }
-
-    // ── 1b. Kind enforcement ──────────────────────────────────────────────────
-    if (requiredKind && user.kind !== requiredKind) {
-      return errorResponse(
-        403,
-        ERRORS.FORBIDDEN.code,
-        `This endpoint requires a ${requiredKind} session.`,
-      );
-    }
-
-    // ── 1c. Extract optional dependent header ─────────────────────────────────
-    const dependentId = req.headers.get("x-dependent-id") ?? undefined;
-    const profileId = dependentId ?? user.uid;
-
-    // ── 2. Invoke handler ─────────────────────────────────────────────────────
-    try {
-      return await handler(
-        { user, req, dependentId, profileId },
-        resolvedParams,
-      );
-    } catch (err) {
-      if (err instanceof ApiError) {
-        return errorResponse(err.statusCode, err.code, err.message);
-      }
-
-      // Zod validation errors (ZodError)
-      if (isZodError(err)) {
-        const issues = err.issues.map(
-          (i: { path: (string | number)[]; message: string }) =>
-            `${i.path.join(".")}: ${i.message}`,
-        );
-        return errorResponse(400, ERRORS.BAD_REQUEST.code, issues.join("; "));
-      }
-
-      // Firestore missing index (gRPC FAILED_PRECONDITION = code 9)
-      if (isFirestoreMissingIndexError(err)) {
-        console.error(
-          "[WithContext] Missing Firestore index:",
-          (err as Error).message,
-        );
-        return errorResponse(
-          503,
-          "INDEX_MISSING",
-          "A required database index is missing. Please contact support.",
-        );
-      }
-
-      // Log in development; suppress full stack in production.
-      if (process.env.NODE_ENV !== "production") {
-        console.error("[WithContext] Unhandled error:", err);
-      } else {
-        console.error(
-          "[WithContext] Unhandled error:",
-          (err as Error)?.message ?? err,
-        );
-      }
-
-      return errorResponse(500, ERRORS.INTERNAL.code, ERRORS.INTERNAL.message);
-    }
+    });
   };
 }
 

@@ -12,10 +12,6 @@ const roboto = Roboto({
   variable: "--font-roboto",
 });
 
-const bg = {
-  background: "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-7))",
-}
-
 export const metadata: Metadata = {
   title: "CareAI — AI Symptom Assessment",
   description: "Describe your symptoms to our AI, get a personalised assessment, and connect with a verified doctor.",
@@ -70,7 +66,7 @@ async function getData() {
   const user = await getServerUser();
   if (user) {
     const profile = await new GetProfileUseCase().execute(
-      GetProfileUseCase.validate({ userId: user?.uid }),
+      { userId: user?.uid },
     );
     return { user, profile };
   }

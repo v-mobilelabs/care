@@ -113,6 +113,14 @@ export function EncounterDetailContent({
                 body: JSON.stringify({ notes: newNotes }),
             });
         },
+        onMutate: async (newNotes) => {
+            await queryClient.cancelQueries({ queryKey: ["encounters", encounterId] });
+            const snapshot = queryClient.getQueryData<EncounterDto>(["encounters", encounterId]);
+            queryClient.setQueryData<EncounterDto>(["encounters", encounterId], (prev) =>
+                prev ? { ...prev, notes: newNotes } : prev,
+            );
+            return { snapshot };
+        },
         onSuccess: () => {
             notifications.show({
                 title: "Notes saved",
@@ -120,18 +128,19 @@ export function EncounterDetailContent({
                 color: colors.success,
                 icon: <IconCheck size={18} />,
             });
-            queryClient.invalidateQueries({
-                queryKey: ["encounters", encounterId],
-            });
-            queryClient.invalidateQueries({ queryKey: ["encounters"] });
         },
-        onError: (err: Error) => {
+        onError: (err: Error, _vars, ctx) => {
+            if (ctx?.snapshot) queryClient.setQueryData(["encounters", encounterId], ctx.snapshot);
             notifications.show({
                 title: "Error",
                 message: err.message || "Failed to save notes. Please try again.",
                 color: colors.danger,
                 icon: <IconAlertCircle size={18} />,
             });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["encounters", encounterId] });
+            queryClient.invalidateQueries({ queryKey: ["encounters"] });
         },
     });
 

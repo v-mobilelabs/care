@@ -9,12 +9,11 @@ import {
 export const PATCH = WithContext<{ insuranceId: string }>(
   async ({ user, req, dependentId }, { insuranceId }) => {
     const body = (await req.json()) as unknown;
-    const input = UpdateInsuranceUseCase.validate({
+    const record = await new UpdateInsuranceUseCase(dependentId).execute({
       ...(body as object),
       userId: user.uid,
       insuranceId,
     });
-    const record = await new UpdateInsuranceUseCase(dependentId).execute(input);
     return NextResponse.json(record);
   },
 );
@@ -22,11 +21,10 @@ export const PATCH = WithContext<{ insuranceId: string }>(
 // DELETE /api/insurance/[insuranceId] — delete an insurance record (and its document)
 export const DELETE = WithContext<{ insuranceId: string }>(
   async ({ user, dependentId }, { insuranceId }) => {
-    const input = DeleteInsuranceUseCase.validate({
+    await new DeleteInsuranceUseCase(dependentId).execute({
       userId: user.uid,
       insuranceId,
     });
-    await new DeleteInsuranceUseCase(dependentId).execute(input);
     return NextResponse.json({ ok: true });
   },
 );

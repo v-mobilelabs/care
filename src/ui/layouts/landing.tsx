@@ -1,6 +1,7 @@
 import { Container } from "@mantine/core";
 import { LandingHeader } from "../headers/landing.header";
 import { LandingFooter } from "../footers/landing.footer";
+import { LandingChatOverlay } from "@/ui/landing-chat-overlay";
 
 export function LandingLayout({
   children,
@@ -8,12 +9,11 @@ export function LandingLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <Container fluid h="100vh" p={0} m={0} style={{
-      background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))",
-    }}>
+    <Container fluid h="100vh" w="100vw" p={0} m={0}>
       <LandingHeader />
       <main>{children}</main>
       <LandingFooter />
+      <LandingChatOverlay />
     </Container>
   );
 }

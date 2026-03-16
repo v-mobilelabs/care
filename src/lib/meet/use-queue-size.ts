@@ -5,29 +5,12 @@
  *
  * Returns 0 while loading or when no queue data exists.
  */
-import { useEffect, useState } from "react";
-import { ref, onValue } from "firebase/database";
-import { getClientDatabase } from "@/lib/firebase/client";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 
 export function useQueueSize(doctorId: string | null | undefined): number {
-  const [size, setSize] = useState(0);
+  const { data } = useRTDBListener<number>(
+    doctorId ? `queue-size/${doctorId}` : null,
+  );
 
-  useEffect(() => {
-    if (!doctorId) {
-      setSize(0);
-      return;
-    }
-
-    const db = getClientDatabase();
-    const queueRef = ref(db, `queue-size/${doctorId}`);
-
-    const unsubscribe = onValue(queueRef, (snap) => {
-      const val = snap.val() as number | null;
-      setSize(val ?? 0);
-    });
-
-    return unsubscribe;
-  }, [doctorId]);
-
-  return size;
+  return data ?? 0;
 }

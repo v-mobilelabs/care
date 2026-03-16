@@ -34,8 +34,11 @@ export const auth = getAuth(getAdminApp());
 /** Firebase Admin Firestore instance (singleton, Node.js only). */
 export const db = getFirestore(getAdminApp());
 
-/** Firebase Admin Storage bucket (singleton, Node.js only). */
+/** Firebase Admin Storage instance (singleton, Node.js only). */
 export const storage = getStorage(getAdminApp());
+
+/** Firebase Admin Storage default bucket (singleton, Node.js only). */
+export const bucket = storage.bucket();
 
 /** Firebase Admin Realtime Database instance (singleton, Node.js only). */
 export const rtdb = getDatabase(getAdminApp());

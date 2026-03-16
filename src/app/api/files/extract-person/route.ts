@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateText, Output } from "ai";
+import { generateText, Output, NoObjectGeneratedError } from "ai";
 import { google } from "@ai-sdk/google";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 
@@ -125,7 +125,13 @@ export const POST = WithContext(async ({ req }) => {
     if (!extracted)
       return NextResponse.json<ExtractedPersonResult>({ hasPersonData: false });
     return NextResponse.json<ExtractedPersonResult>(extracted);
-  } catch {
+  } catch (error) {
+    if (NoObjectGeneratedError.isInstance(error)) {
+      console.warn(
+        "[extract-person] No structured output generated:",
+        error.message,
+      );
+    }
     // Model error — don't block the send, just skip the check.
     return NextResponse.json<ExtractedPersonResult>({ hasPersonData: false });
   }

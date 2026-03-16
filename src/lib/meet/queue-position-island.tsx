@@ -10,17 +10,63 @@
  *
  * Mounted in the root layout alongside ActiveCallIsland.
  */
-import { Box, Group, Text, UnstyledButton } from "@mantine/core";
+import { Box, Group, Loader, Text, UnstyledButton } from "@mantine/core";
 import { IconClock } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useCallState } from "@/lib/meet/use-call-state";
 
+function QueueIslandContent({ pos, isNext }: Readonly<{ pos: number; isNext: boolean }>) {
+    const { pending } = useLinkStatus();
+    return (
+        <>
+            {/* Position badge */}
+            <Box
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: isNext
+                        ? "var(--mantine-color-teal-6)"
+                        : "var(--mantine-color-primary-6)",
+                    animation: isNext ? "qpi-pulse 2s ease-in-out infinite" : undefined,
+                    flexShrink: 0,
+                }}
+            >
+                {pending ? (
+                    <Loader size={10} color="white" type="dots" />
+                ) : (
+                    <Text size="xs" fw={700} style={{ color: "#fff", lineHeight: 1 }}>
+                        {pos}
+                    </Text>
+                )}
+            </Box>
+
+            <Group gap={6} wrap="nowrap">
+                <IconClock size={14} color={isNext ? "#34C759" : "rgba(255,255,255,0.8)"} />
+                <Text
+                    size="xs"
+                    fw={600}
+                    style={{
+                        color: isNext ? "#34C759" : "rgba(255,255,255,0.9)",
+                        letterSpacing: 0.2,
+                    }}
+                >
+                    {isNext ? "You\u2019re next!" : `#${pos} in queue`}
+                </Text>
+            </Group>
+        </>
+    );
+}
+
 export function QueuePositionIsland() {
     const { user, kind } = useAuth();
     const callState = useCallState(kind === "user" ? user?.uid : undefined);
-    const router = useRouter();
     const [hovered, setHovered] = useState(false);
 
     // Only show for patients with a pending call that has a queue position
@@ -53,7 +99,8 @@ export function QueuePositionIsland() {
                 }
             `}</style>
             <UnstyledButton
-                onClick={() => router.push("/patient/connect")}
+                component={Link}
+                href="/patient/connect"
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
                 aria-label={isNext ? "You're next in queue" : `#${pos} in queue`}
@@ -76,40 +123,7 @@ export function QueuePositionIsland() {
                         : "0 2px 10px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.06)",
                 }}
             >
-                {/* Position badge */}
-                <Box
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 22,
-                        height: 22,
-                        borderRadius: "50%",
-                        background: isNext
-                            ? "var(--mantine-color-teal-6)"
-                            : "var(--mantine-color-primary-6)",
-                        animation: isNext ? "qpi-pulse 2s ease-in-out infinite" : undefined,
-                        flexShrink: 0,
-                    }}
-                >
-                    <Text size="xs" fw={700} style={{ color: "#fff", lineHeight: 1 }}>
-                        {pos}
-                    </Text>
-                </Box>
-
-                <Group gap={6} wrap="nowrap">
-                    <IconClock size={14} color={isNext ? "#34C759" : "rgba(255,255,255,0.8)"} />
-                    <Text
-                        size="xs"
-                        fw={600}
-                        style={{
-                            color: isNext ? "#34C759" : "rgba(255,255,255,0.9)",
-                            letterSpacing: 0.2,
-                        }}
-                    >
-                        {isNext ? "You\u2019re next!" : `#${pos} in queue`}
-                    </Text>
-                </Group>
+                <QueueIslandContent pos={pos} isNext={isNext} />
             </UnstyledButton>
         </Box>
     );

@@ -1,12 +1,6 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
-import type { PatientDocument } from "@/data/patients/models/patient.model";
 import { USER_KINDS, type UserKind } from "@/lib/auth/jwt";
-
-// ── Firestore document shape — base identity ──────────────────────────────────
-// Stored at profiles/{userId}.
-// Patient health fields (dob, sex, height, weight, etc.) live in patients/{userId}.
-// Doctor professional fields (specialty, licenseNumber, etc.) live in doctors/{userId}.
 
 export interface ProfileDocument {
   userId: string;
@@ -20,10 +14,11 @@ export interface ProfileDocument {
   gender?: string;
   city?: string;
   country?: string;
+  dateOfBirth?: string; // ISO-8601 date string (YYYY-MM-DD)
   updatedAt: Timestamp;
 }
 
-// ── DTO — outbound (combined view: base + patient health fields) ───────────────
+// ── DTO — outbound (base identity only) ──────────────────────────────────────
 
 export interface ProfileDto {
   userId: string;
@@ -41,10 +36,7 @@ export interface ProfileDto {
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
-export function toProfileDto(
-  base: ProfileDocument,
-  patient?: PatientDocument | null,
-): ProfileDto {
+export function toProfileDto(base: ProfileDocument): ProfileDto {
   // Back-compat: documents may carry the legacy kind:"patient" value written
   // during a brief migration window — normalise to the canonical "user".
   const rawKind = base.kind as string;
@@ -59,8 +51,8 @@ export function toProfileDto(
     photoUrl: base.photoUrl,
     city: base.city,
     country: base.country,
-    dateOfBirth: patient?.dateOfBirth,
-    gender: patient?.sex,
+    dateOfBirth: base.dateOfBirth,
+    gender: base.gender,
     updatedAt: base.updatedAt.toDate().toISOString(),
   };
 }
@@ -75,10 +67,12 @@ export const UpsertProfileSchema = z.object({
   name: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
-  photoUrl: z.string().url().optional(),
+  photoUrl: z.string().min(1).optional(),
   gender: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
+  /** ISO-8601 date string (YYYY-MM-DD) */
+  dateOfBirth: z.string().optional(),
 });
 
 export type UpsertProfileInput = z.infer<typeof UpsertProfileSchema>;

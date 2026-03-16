@@ -2,6 +2,7 @@
 import { ActionIcon, Badge, Box, Collapse, Divider, Group, List, Paper, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCapsule, IconChevronDown, IconHeartbeat, IconNotes } from "@tabler/icons-react";
+import { motion } from "framer-motion";
 import type { PatientSummaryInput } from "@/app/(portal)/patient/_types";
 
 export interface PatientSummaryCardProps {
@@ -33,7 +34,13 @@ export function PatientSummaryCard({ data }: Readonly<PatientSummaryCardProps>) 
                         </Box>
                     </Group>
                     <ActionIcon variant="subtle" color="gray" size="sm">
-                        <IconChevronDown size={14} style={{ transform: opened ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }} />
+                        <motion.div
+                            animate={{ rotate: opened ? 180 : 0 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >
+                            <IconChevronDown size={14} />
+                        </motion.div>
                     </ActionIcon>
                 </Group>
             </UnstyledButton>

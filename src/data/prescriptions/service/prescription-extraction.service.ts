@@ -1,19 +1,25 @@
 // server-only — never import in client components.
 import { aiService, type AIService } from "@/data/shared/service/ai.service";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { bucket } from "@/lib/firebase/admin";
 import {
   fileService,
   type FileService,
 } from "@/data/sessions/service/file.service";
 import {
-  promptService,
-  type PromptService,
-} from "@/data/prompts/service/prompt.service";
-import {
   ExtractionSchema,
-  type ExtractResult,
   type ExtractPrescriptionInput,
 } from "../models/extract.model";
+import { prescriptionRepository } from "../repositories/prescription.repository";
+import type {
+  PrescriptionDto,
+  PrescriptionMedication,
+} from "../models/prescription.model";
+
+const EXTRACTION_PROMPT = `You are a clinical data extraction assistant.
+Extract ALL medications from this prescription accurately.
+For each medication extract: name, dosage, form, frequency, duration, instructions, and condition/indication if present.
+Also capture the prescribing doctor name and prescription date if visible.
+Return only information that is clearly visible — do not guess or infer missing fields.`;
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -21,32 +27,26 @@ export class PrescriptionExtractionService {
   constructor(
     private readonly files: FileService = fileService,
     private readonly ai: AIService = aiService,
-    private readonly firebase: FirebaseService = FirebaseService.getInstance(),
-    private readonly prompts: PromptService = promptService,
   ) {}
 
-  async extract(input: ExtractPrescriptionInput): Promise<ExtractResult> {
+  async extract(input: ExtractPrescriptionInput): Promise<PrescriptionDto> {
     // 1. Resolve file metadata (raw — no signed-URL refresh needed for extraction)
     const file = await this.files.getRaw({
       userId: input.userId,
       profileId: input.profileId,
-      sessionId: input.sessionId!,
       fileId: input.fileId,
     });
     if (!file) {
       throw Object.assign(
         new Error(
-          `[PrescriptionExtractionService] File not found — userId=${input.userId} sessionId=${input.sessionId} fileId=${input.fileId}`,
+          `[PrescriptionExtractionService] File not found — userId=${input.userId} fileId=${input.fileId}`,
         ),
         { code: "FILE_NOT_FOUND" },
       );
     }
 
     // 2. Download bytes from Cloud Storage
-    const [bytes] = await this.firebase
-      .getBucket()
-      .file(file.storagePath)
-      .download();
+    const [bytes] = await bucket.file(file.storagePath).download();
     const base64 = bytes.toString("base64");
     const dataUri = `data:${file.mimeType};base64,${base64}`;
 
@@ -60,19 +60,57 @@ export class PrescriptionExtractionService {
         };
 
     // 4. Extract structured data via Gemini (consumes 1 credit for the user)
-    const prompt =
-      this.prompts.get({ id: "prescription-extraction" })?.content ?? "";
-
-    return this.ai.extractObject(
+    const result = await this.ai.extractObject(
       ExtractionSchema,
       [
         {
           role: "user",
-          content: [mediaPart, { type: "text" as const, text: prompt }],
+          content: [
+            mediaPart,
+            { type: "text" as const, text: EXTRACTION_PROMPT },
+          ],
         },
       ],
       { userId: input.userId },
     );
+
+    // 5. Persist the extraction result back to the file document so it survives
+    //    page refreshes and is returned by GET /api/prescriptions on subsequent loads.
+    await this.files.patchExtractedData(
+      {
+        userId: input.userId,
+        profileId: input.profileId,
+        fileId: input.fileId,
+      },
+      result,
+    );
+
+    // 6. Upsert into the prescriptions collection (with fileId + fileUrl)
+    const existing = await prescriptionRepository.findByFileId(
+      input.userId,
+      input.fileId,
+    );
+    if (existing) return existing;
+
+    return prescriptionRepository.create(input.userId, {
+      fileId: input.fileId,
+      fileUrl: file.downloadUrl ?? undefined,
+      source: "extracted",
+      medications: result.medications.map(
+        (m): PrescriptionMedication => ({
+          name: m.name,
+          dosage: m.dosage ?? "",
+          form: (m.form as PrescriptionMedication["form"]) ?? "Other",
+          frequency: m.frequency ?? "",
+          duration: m.duration ?? "",
+          instructions: m.instructions,
+          indication: m.condition ?? "",
+        }),
+      ),
+      prescribedBy: result.prescribedBy ?? result.doctors?.[0]?.name,
+      prescriptionDate: result.date,
+      notes: result.notes,
+    });
   }
 }
 

@@ -1,23 +1,27 @@
 "use client";
 import {
     ActionIcon,
+    Avatar,
     Box,
     Center,
+    Divider,
     Group,
+    Indicator,
     Loader,
     ScrollArea,
     Stack,
     Text,
     TextInput,
 } from "@mantine/core";
-import { IconArrowLeft, IconSend } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { IconArrowDown, IconArrowLeft, IconSend } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMessages } from "@/lib/messaging/use-messages";
 import { useTyping } from "@/lib/messaging/use-typing";
 import { sendMessage } from "@/lib/messaging/actions";
 import { useInbox } from "@/lib/messaging/use-inbox";
 import { useAuth } from "@/ui/providers/auth-provider";
+import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 import { TypingIndicator } from "./typing-indicator";
 
 interface MessageThreadProps {
@@ -40,6 +44,7 @@ export function MessageThread({
 
     const { entries } = useInbox(myUid);
     const entry = entries.find((e) => e.conversationId === conversationId);
+    const { online } = usePresenceStatus(otherUid);
 
     const { messages, loading } = useMessages(conversationId, 200, myUid);
     const { otherTyping, startTyping, clearTyping } = useTyping(
@@ -50,16 +55,52 @@ export function MessageThread({
 
     const [text, setText] = useState("");
     const viewportRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-    // Auto-scroll to bottom when new messages arrive or typing starts.
+    const scrollToBottom = useCallback((instant?: boolean) => {
+        requestAnimationFrame(() => {
+            if (viewportRef.current) {
+                viewportRef.current.scrollTo({
+                    top: viewportRef.current.scrollHeight,
+                    behavior: instant ? "instant" : "smooth",
+                });
+            }
+        });
+    }, []);
+
+    // On initial load: scroll to bottom instantly once messages are ready & focus input.
+    const didInitialScroll = useRef(false);
     useEffect(() => {
-        if (viewportRef.current) {
-            viewportRef.current.scrollTo({
-                top: viewportRef.current.scrollHeight,
-                behavior: "smooth",
-            });
+        if (!loading && messages.length > 0 && !didInitialScroll.current) {
+            didInitialScroll.current = true;
+            scrollToBottom(true);
+            inputRef.current?.focus();
         }
-    }, [messages.length, otherTyping]);
+    }, [loading, messages.length, scrollToBottom]);
+
+    // Auto-scroll to bottom when new messages arrive or typing starts,
+    // but only if the user is already near the bottom.
+    useEffect(() => {
+        if (!didInitialScroll.current) return;
+        const el = viewportRef.current;
+        if (!el) return;
+        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        if (isNearBottom) scrollToBottom();
+    }, [messages.length, otherTyping, scrollToBottom]);
+
+    // Track scroll position to show/hide "scroll to bottom" button.
+    useEffect(() => {
+        const el = viewportRef.current;
+        if (!el) return;
+        function handleScroll() {
+            if (!el) return;
+            const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            setShowScrollBtn(distFromBottom > 200);
+        }
+        el.addEventListener("scroll", handleScroll, { passive: true });
+        return () => el.removeEventListener("scroll", handleScroll);
+    }, []);
 
     async function handleSend() {
         const trimmed = text.trim();
@@ -97,106 +138,180 @@ export function MessageThread({
                     borderBottom: "1px solid var(--mantine-color-default-border)",
                     flexShrink: 0,
                 }}
+                bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))"
             >
-                <ActionIcon variant="subtle" color="gray" onClick={onBack} aria-label="Back">
+                <ActionIcon size="md" variant="subtle" color="gray" onClick={onBack} aria-label="Back">
                     <IconArrowLeft size={18} />
                 </ActionIcon>
-                <Text fw={600} size="sm">
-                    {entry?.otherName ?? "Chat"}
-                </Text>
+                <Indicator
+                    color={online ? "teal" : "gray"}
+                    size={8}
+                    offset={3}
+                    position="bottom-end"
+                    withBorder
+                >
+                    <Avatar size="sm" radius="xl" color="primary" name={entry?.otherName ?? ""} />
+                </Indicator>
+                <Box>
+                    <Text fw={600} size="sm" lh={1.3}>
+                        {entry?.otherName ?? "Chat"}
+                    </Text>
+                    <Text size="xs" c={online ? "teal" : "dimmed"}>
+                        {online ? "Online" : "Offline"}
+                    </Text>
+                </Box>
             </Group>
 
             {/* ── Messages ────────────────────────────────────────────────── */}
-            <ScrollArea style={{ flex: 1 }} viewportRef={viewportRef}>
-                <Stack gap="xs" p="md">
-                    {(() => {
-                        if (loading) {
-                            return (
-                                <Center py="xl">
-                                    <Loader size="sm" />
-                                </Center>
-                            );
-                        }
+            <Box style={{ flex: 1, position: "relative", minHeight: 0 }}>
+                <ScrollArea style={{ height: "100%" }} viewportRef={viewportRef}>
+                    <Stack gap="sm" p="md">
+                        {(() => {
+                            if (loading) {
+                                return (
+                                    <Center py="xl">
+                                        <Loader size="sm" />
+                                    </Center>
+                                );
+                            }
 
-                        if (messages.length === 0) {
-                            return (
-                                <Center py="xl">
-                                    <Text c="dimmed" size="sm">
-                                        No messages yet — say hello!
-                                    </Text>
-                                </Center>
-                            );
-                        }
-
-                        return messages.map((msg, index) => {
-                            const isMine = msg.senderId === myUid;
-                            return (
-                                <motion.div
-                                    key={msg.id}
-                                    initial={{
-                                        opacity: 0,
-                                        y: 20,
-                                        x: isMine ? 20 : -20,
-                                        scale: 0.95
-                                    }}
-                                    animate={{
-                                        opacity: 1,
-                                        y: 0,
-                                        x: 0,
-                                        scale: 1
-                                    }}
-                                    transition={{
-                                        duration: 0.3,
-                                        ease: "easeOut",
-                                        delay: index < 5 ? index * 0.05 : 0
-                                    }}
-                                    style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        alignItems: isMine ? "flex-end" : "flex-start",
-                                    }}
-                                >
-                                    <Box
-                                        px="sm"
-                                        py="xs"
-                                        style={{
-                                            maxWidth: "75%",
-                                            borderRadius: "var(--mantine-radius-lg)",
-                                            background: isMine
-                                                ? "var(--mantine-color-primary-6)"
-                                                : "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
-                                            color: isMine ? "white" : undefined,
-                                        }}
-                                    >
-                                        <Text size="sm" style={{ wordBreak: "break-word" }}>
-                                            {msg.text}
+                            if (messages.length === 0) {
+                                return (
+                                    <Center py="xl">
+                                        <Text c="dimmed" size="sm">
+                                            No messages yet — say hello!
                                         </Text>
-                                    </Box>
-                                    <Text size="xs" c="dimmed" mt={2}>
-                                        {msg.createdAt
-                                            ? new Date(msg.createdAt).toLocaleTimeString([], {
-                                                hour: "2-digit",
-                                                minute: "2-digit",
-                                            })
-                                            : ""}
-                                    </Text>
-                                </motion.div>
-                            );
-                        });
-                    })()}
+                                    </Center>
+                                );
+                            }
 
-                    {otherTyping && (
+                            return messages.map((msg, index) => {
+                                const isMine = msg.senderId === myUid;
+                                const prev = index > 0 ? messages[index - 1] : null;
+
+                                // Date separator: show when the day changes between messages.
+                                const msgDate = new Date(msg.createdAt);
+                                const prevDate = prev ? new Date(prev.createdAt) : null;
+                                const showDateSep = !prevDate || msgDate.toDateString() !== prevDate?.toDateString();
+
+                                // Group timestamps: hide if previous message is same sender & same minute.
+                                const showTimestamp = !prev
+                                    || prev?.senderId !== msg.senderId
+                                    || Math.floor((prev?.createdAt ?? 0) / 60000) !== Math.floor(msg.createdAt / 60000);
+
+                                return (
+                                    <div key={msg.id}>
+                                        {showDateSep && (
+                                            <Divider
+                                                my="sm"
+                                                label={formatDateLabel(msgDate)}
+                                                labelPosition="center"
+                                                color="dimmed"
+                                            />
+                                        )}
+                                        <motion.div
+                                            initial={{
+                                                opacity: 0,
+                                                y: 20,
+                                                x: isMine ? 20 : -20,
+                                                scale: 0.95
+                                            }}
+                                            animate={{
+                                                opacity: 1,
+                                                y: 0,
+                                                x: 0,
+                                                scale: 1
+                                            }}
+                                            transition={{
+                                                duration: 0.3,
+                                                ease: "easeOut",
+                                                delay: index < 5 ? index * 0.05 : 0
+                                            }}
+                                            style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                alignItems: isMine ? "flex-end" : "flex-start",
+                                            }}
+                                        >
+                                            <Box
+                                                px="md"
+                                                py="xs"
+                                                style={{
+                                                    maxWidth: "75%",
+                                                    borderRadius: "var(--mantine-radius-lg)",
+                                                    background: isMine
+                                                        ? "var(--mantine-color-primary-6)"
+                                                        : "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
+                                                    color: isMine ? "white" : undefined,
+                                                }}
+                                            >
+                                                <Text size="md" style={{ wordBreak: "break-word" }}>
+                                                    {msg.text}
+                                                </Text>
+                                            </Box>
+                                            {showTimestamp && (
+                                                <Text size="xs" c="dimmed" mt="2xs">
+                                                    {msg.createdAt
+                                                        ? new Date(msg.createdAt).toLocaleTimeString([], {
+                                                            hour: "2-digit",
+                                                            minute: "2-digit",
+                                                        })
+                                                        : ""}
+                                                </Text>
+                                            )}
+                                        </motion.div>
+                                    </div>
+                                );
+                            });
+                        })()}
+
+                        <AnimatePresence>
+                            {otherTyping && (
+                                <motion.div
+                                    key="typing"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 10 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    <TypingIndicator />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </Stack>
+                </ScrollArea>
+
+                {/* Scroll-to-bottom FAB */}
+                <AnimatePresence>
+                    {showScrollBtn && (
                         <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
                             transition={{ duration: 0.2 }}
+                            style={{
+                                position: "absolute",
+                                bottom: 12,
+                                left: "50%",
+                                transform: "translateX(-50%)",
+                                zIndex: 10,
+                            }}
                         >
-                            <TypingIndicator />
+                            <ActionIcon
+                                variant="filled"
+                                color="primary"
+                                size="lg"
+                                radius="xl"
+                                onClick={() => scrollToBottom()}
+                                aria-label="Scroll to bottom"
+                                style={{ boxShadow: "var(--mantine-shadow-md)" }}
+                            >
+                                <IconArrowDown size={18} />
+                            </ActionIcon>
                         </motion.div>
                     )}
-                </Stack>
-            </ScrollArea>
+                </AnimatePresence>
+            </Box>
 
             {/* ── Input bar ───────────────────────────────────────────────── */}
             <Box
@@ -209,6 +324,7 @@ export function MessageThread({
             >
                 <Group gap="xs" wrap="nowrap">
                     <TextInput
+                        ref={inputRef}
                         placeholder="Type a message…"
                         value={text}
                         onChange={(e) => {
@@ -218,7 +334,7 @@ export function MessageThread({
                         onKeyDown={handleKeyDown}
                         style={{ flex: 1 }}
                         radius="xl"
-                        size="sm"
+                        size="md"
                     />
                     <ActionIcon
                         variant="filled"
@@ -235,4 +351,17 @@ export function MessageThread({
             </Box>
         </Stack>
     );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDateLabel(date: Date): string {
+    const now = new Date();
+    if (date.toDateString() === now.toDateString()) return "Today";
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+    return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }

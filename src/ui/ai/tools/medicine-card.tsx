@@ -4,6 +4,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconBookmark, IconBookmarkFilled, IconCapsule, IconCheck, IconChevronDown } from "@tabler/icons-react";
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAddMedicationMutation } from "@/app/(portal)/patient/_query";
 import type { MedicineInput } from "@/app/(portal)/patient/_types";
 
@@ -59,11 +60,40 @@ export function MedicineCard({ data }: Readonly<MedicineCardProps>) {
                             loading={addMedication.isPending}
                             title={saved ? "Saved" : "Save to medications"}
                         >
-                            {saved ? <IconBookmarkFilled size={13} /> : <IconBookmark size={13} />}
+                            <AnimatePresence mode="wait" initial={false}>
+                                {saved ? (
+                                    <motion.div
+                                        key="saved"
+                                        initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                        exit={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                                        style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    >
+                                        <IconBookmarkFilled size={13} />
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="unsaved"
+                                        initial={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                        exit={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                                        style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                    >
+                                        <IconBookmark size={13} />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </ActionIcon>
-                        <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
-                            style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
-                            <IconChevronDown size={13} />
+                        <ThemeIcon size={20} radius="xl" color="gray" variant="subtle" style={{ overflow: "hidden" }}>
+                            <motion.div
+                                animate={{ rotate: opened ? 180 : 0 }}
+                                transition={{ duration: 0.25, ease: "easeInOut" }}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                            >
+                                <IconChevronDown size={13} />
+                            </motion.div>
                         </ThemeIcon>
                     </Group>
                 </Group>

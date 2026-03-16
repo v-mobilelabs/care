@@ -25,7 +25,7 @@ import {
     IconX,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
@@ -177,7 +177,15 @@ function IncomingCallCard({
         });
     };
 
-    const waitSeconds = Math.floor((Date.now() - call.createdAt) / 1000);
+    const [waitSeconds, setWaitSeconds] = useState(
+        () => Math.max(0, Math.floor((Date.now() - call.createdAt) / 1000)),
+    );
+    useEffect(() => {
+        const t = setInterval(() => {
+            setWaitSeconds(Math.max(0, Math.floor((Date.now() - call.createdAt) / 1000)));
+        }, 1000);
+        return () => clearInterval(t);
+    }, [call.createdAt]);
     const waitLabel =
         waitSeconds < 60
             ? `${waitSeconds}s`

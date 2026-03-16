@@ -3,7 +3,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { aiService } from "@/lib/ai/ai.service";
+import { aiService } from "@/data/shared/service/ai.service";
 
 export const maxDuration = 30;
 
@@ -24,7 +24,7 @@ const ClinicResultSchema = z.object({
  * Uses Gemini with Google Search grounding to find clinic/practice details
  * for the given doctor and return them as structured JSON.
  */
-export const POST = WithContext(async ({ req }) => {
+export const POST = WithContext(async ({ req, user }) => {
   const body = (await req.json()) as {
     name?: string;
     specialty?: string;
@@ -70,7 +70,7 @@ export const POST = WithContext(async ({ req }) => {
   ].join("\n");
 
   const { text } = await generateText({
-    model: aiService.fast,
+    model: aiService.forUser(user.uid).fast,
     tools: { googleSearch: google.tools.googleSearch({}) },
     system: systemPrompt,
     prompt: userPrompt,

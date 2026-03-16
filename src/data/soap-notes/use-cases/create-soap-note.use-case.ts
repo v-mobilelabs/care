@@ -8,7 +8,22 @@ import {
   type SoapNoteDto,
 } from "../models/soap-note.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({
+  type: "soap",
+  contentFields: [
+    "condition",
+    "riskLevel",
+    "subjective",
+    "objective",
+    "assessment",
+    "plan",
+    "createdAt",
+  ],
+  sourceIdField: "id",
+  metadataFields: ["riskLevel", "createdAt"],
+})
 export class CreateSoapNoteUseCase extends UseCase<
   CreateSoapNoteInput,
   SoapNoteDto

@@ -25,45 +25,30 @@ export class FileService {
         `Storage quota exceeded. You have ${remainingMB} MB remaining of your ${USER_STORAGE_LIMIT_BYTES / 1024 / 1024} MB limit.`,
       );
     }
-    return fileRepository.upload(
-      input.userId,
-      input.profileId,
-      input.sessionId,
-      {
-        name: input.name,
-        mimeType: input.mimeType,
-        size: input.size,
-        buffer: input.buffer,
-      },
-    );
+    return fileRepository.upload(input.userId, input.profileId, {
+      name: input.name,
+      mimeType: input.mimeType,
+      size: input.size,
+      buffer: input.buffer,
+      sessionId: input.sessionId,
+    });
   }
 
   async getById(input: FileRefInput): Promise<FileDto | null> {
-    return fileRepository.findById(
-      input.userId,
-      input.profileId,
-      input.sessionId,
-      input.fileId,
-    );
+    return fileRepository.findById(input.profileId, input.fileId);
   }
 
   /** Like getById but skips the signed-URL refresh — lighter, safe for server-only extraction. */
   async getRaw(input: {
     userId: string;
     profileId: string;
-    sessionId: string;
     fileId: string;
   }): Promise<FileDto | null> {
-    return fileRepository.findByIdRaw(
-      input.userId,
-      input.profileId,
-      input.sessionId,
-      input.fileId,
-    );
+    return fileRepository.findByIdRaw(input.profileId, input.fileId);
   }
 
   async list(input: ListFilesInput): Promise<FileDto[]> {
-    return fileRepository.list(input.userId, input.profileId, input.sessionId);
+    return fileRepository.list(input.profileId, input.sessionId);
   }
 
   async listAllForUser(userId: string): Promise<FileDto[]> {
@@ -75,27 +60,16 @@ export class FileService {
   }
 
   async delete(input: FileRefInput): Promise<void> {
-    await fileRepository.delete(
-      input.userId,
-      input.profileId,
-      input.sessionId,
-      input.fileId,
-    );
+    await fileRepository.delete(input.profileId, input.fileId);
   }
 
   async patchExtractedData(
     input: FileRefInput,
     extractedData: ExtractedPrescriptionData,
   ): Promise<void> {
-    await fileRepository.patch(
-      input.userId,
-      input.profileId,
-      input.sessionId,
-      input.fileId,
-      {
-        extractedData,
-      },
-    );
+    await fileRepository.patch(input.profileId, input.fileId, {
+      extractedData,
+    });
   }
 }
 

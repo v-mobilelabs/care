@@ -1,23 +1,23 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import type {
-  PatientDocument,
-  UpsertPatientInput,
+import { db } from "@/lib/firebase/admin";
+import {
+  toPatientDto,
+  type PatientDocument,
+  type PatientDto,
+  type UpsertPatientInput,
 } from "../models/patient.model";
-
-const db = FirebaseService.getInstance().getDb();
 
 /** Patient health data lives at patients/{userId} (top-level) */
 const patientDoc = (userId: string) => db.collection("patients").doc(userId);
 
 export const patientRepository = {
-  async get(userId: string): Promise<PatientDocument | null> {
+  async get(userId: string): Promise<PatientDto | null> {
     const snap = await patientDoc(userId).get();
     if (!snap.exists) return null;
-    return snap.data() as PatientDocument;
+    return toPatientDto(snap.data() as PatientDocument);
   },
 
-  async upsert(input: UpsertPatientInput): Promise<PatientDocument> {
+  async upsert(input: UpsertPatientInput): Promise<PatientDto> {
     const ref = patientDoc(input.userId);
     const now = Timestamp.now();
 
@@ -40,12 +40,13 @@ export const patientRepository = {
       data.activityLevel = input.activityLevel;
     if (input.foodPreferences !== undefined)
       data.foodPreferences = input.foodPreferences;
+    if (input.bloodGroup !== undefined) data.bloodGroup = input.bloodGroup;
     if (input.consentedAt !== undefined) {
       data.consentedAt = Timestamp.fromDate(new Date(input.consentedAt));
     }
 
     await ref.set(data, { merge: true });
     const snap = await ref.get();
-    return snap.data() as PatientDocument;
+    return toPatientDto(snap.data() as PatientDocument);
   },
 };

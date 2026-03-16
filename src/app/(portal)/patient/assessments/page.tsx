@@ -17,7 +17,7 @@ export default async function AssessmentsPage() {
             queryKey: [...chatKeys.assessments(), undefined],
             queryFn: () =>
                 new ListAssessmentsUseCase().execute(
-                    ListAssessmentsUseCase.validate({ userId: user.uid }),
+                    { userId: user.uid },
                 ),
         });
     }

@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { signOut } from "@/lib/auth/sign-out";
-import { CONSENT_KEY } from "@/app/(portal)/patient/_components/consent-gate";
+import { CONSENT_KEY } from "@/ui/chat/components/consent-gate";
 
 // ── Section block ─────────────────────────────────────────────────────────────
 

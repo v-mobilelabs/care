@@ -4,6 +4,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconBookmark, IconBookmarkFilled, IconCapsule, IconCheck, IconChevronDown, IconClipboardHeart } from "@tabler/icons-react";
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAddMedicationMutation } from "@/app/(portal)/patient/_query";
 import type { PrescriptionInput } from "@/app/(portal)/patient/_types";
 
@@ -88,7 +89,31 @@ export function PrescriptionCard({ data }: Readonly<PrescriptionCardProps>) {
                                                     disabled={saved || addMedication.isPending}
                                                     title={saved ? "Saved to my medications" : "Save to my medications"}
                                                 >
-                                                    {saved ? <IconBookmarkFilled size={12} /> : <IconBookmark size={12} />}
+                                                    <AnimatePresence mode="wait" initial={false}>
+                                                        {saved ? (
+                                                            <motion.div
+                                                                key="saved"
+                                                                initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                                                exit={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                                                transition={{ duration: 0.25, ease: "easeInOut" }}
+                                                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                                            >
+                                                                <IconBookmarkFilled size={12} />
+                                                            </motion.div>
+                                                        ) : (
+                                                            <motion.div
+                                                                key="unsaved"
+                                                                initial={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                                                exit={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                                                transition={{ duration: 0.25, ease: "easeInOut" }}
+                                                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                                            >
+                                                                <IconBookmark size={12} />
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </ActionIcon>
                                             </Table.Td>
                                         </Table.Tr>

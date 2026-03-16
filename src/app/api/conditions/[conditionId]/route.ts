@@ -5,11 +5,10 @@ import { DeleteConditionUseCase } from "@/data/conditions";
 // DELETE /api/conditions/[conditionId]
 export const DELETE = WithContext<{ conditionId: string }>(
   async ({ user, dependentId }, { conditionId }) => {
-    const input = DeleteConditionUseCase.validate({
+    await new DeleteConditionUseCase(dependentId).execute({
       userId: user.uid,
       conditionId,
     });
-    await new DeleteConditionUseCase(dependentId).execute(input);
     return NextResponse.json({ ok: true });
   },
 );

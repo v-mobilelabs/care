@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { WithContext } from "@/lib/api/with-context";
 import {
@@ -6,7 +6,7 @@ import {
   UpdateDoctorSchema,
   doctorProfileRepository,
 } from "@/data/doctors";
-import { profileRepository } from "@/data/profile";
+import { UpsertProfileUseCase } from "@/data/profile";
 import { auth } from "@/lib/firebase/admin";
 import {
   COOKIE_NAME,
@@ -27,8 +27,9 @@ const DoctorSignupSchema = z.object({
 
 // GET /api/doctors/me — fetch the authenticated doctor's profile
 export const GET = WithContext({ kind: "doctor" }, async ({ user }) => {
-  const input = GetDoctorProfileUseCase.validate({ uid: user.uid });
-  const profile = await new GetDoctorProfileUseCase().execute(input);
+  const profile = await new GetDoctorProfileUseCase().execute({
+    uid: user.uid,
+  });
   if (!profile) {
     return NextResponse.json(
       { error: "Doctor profile not found." },
@@ -76,12 +77,24 @@ export async function POST(req: NextRequest) {
   // Write kind:"doctor" + identity fields to profiles/{uid} and professional
   // fields to doctors/{uid} in parallel.
   await Promise.all([
-    profileRepository.upsert({ userId: uid, kind: "doctor", name, phone }),
+    new UpsertProfileUseCase().execute(
+      UpsertProfileUseCase.validate({
+        userId: uid,
+        kind: "doctor",
+        name,
+        phone,
+      }),
+    ),
     doctorProfileRepository.upsert({ uid, specialty, licenseNumber, bio }),
   ]);
 
-  // Stamp kind:"doctor" as a custom claim so the session cookie carries it.
-  await auth.setCustomUserClaims(uid, { kind: "doctor" satisfies UserKind });
+  // Stamp kind:"doctor" as a custom claim — only affects future token refreshes,
+  // not the session cookie being minted below. Defer it post-response.
+  after(() =>
+    auth
+      .setCustomUserClaims(uid, { kind: "doctor" satisfies UserKind })
+      .catch(console.error),
+  );
 
   // Issue a fresh Firebase session cookie — the cookie now carries kind:"doctor"
   // so the proxy will route the user straight to the doctor portal.
@@ -89,9 +102,7 @@ export async function POST(req: NextRequest) {
     expiresIn: SESSION_DURATION_SECONDS * 1000,
   });
 
-  const profile = await new GetDoctorProfileUseCase().execute(
-    GetDoctorProfileUseCase.validate({ uid }),
-  );
+  const profile = await new GetDoctorProfileUseCase().execute({ uid });
 
   const res = NextResponse.json(profile);
   res.cookies.set(COOKIE_NAME, sessionCookie, COOKIE_OPTS);
@@ -111,8 +122,8 @@ export const PUT = WithContext({ kind: "doctor" }, async ({ user, req }) => {
     bio: input.bio,
   });
 
-  const profile = await new GetDoctorProfileUseCase().execute(
-    GetDoctorProfileUseCase.validate({ uid: user.uid }),
-  );
+  const profile = await new GetDoctorProfileUseCase().execute({
+    uid: user.uid,
+  });
   return NextResponse.json(profile);
 });

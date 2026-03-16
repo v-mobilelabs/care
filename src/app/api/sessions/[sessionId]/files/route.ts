@@ -1,21 +1,24 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   ListFilesUseCase,
   UploadFileUseCase,
+  ClassifyFileUseCase,
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from "@/data/sessions";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/sessions/[sessionId]/files
 export const GET = WithContext<{ sessionId: string }>(
   async ({ user, profileId }, { sessionId }) => {
-    const input = ListFilesUseCase.validate({
+    const files = await new ListFilesUseCase().execute({
       userId: user.uid,
       profileId,
       sessionId,
     });
-    const files = await new ListFilesUseCase().execute(input);
     return NextResponse.json(files);
   },
 );
@@ -48,7 +51,7 @@ export const POST = WithContext<{ sessionId: string }>(
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const input = UploadFileUseCase.validate({
+    const uploaded = await new UploadFileUseCase().execute({
       userId: user.uid,
       profileId,
       sessionId,
@@ -58,7 +61,25 @@ export const POST = WithContext<{ sessionId: string }>(
       buffer,
     });
 
-    const uploaded = await new UploadFileUseCase().execute(input);
+    revalidateTag(CacheTags.files(user.uid), "minutes");
+
+    after(async () => {
+      await new ClassifyFileUseCase()
+        .execute({
+          fileId: uploaded.id,
+          profileId,
+          userId: user.uid,
+          name: file.name,
+          mimeType: file.type,
+          buffer,
+        })
+        .catch((err: unknown) => {
+          console.error("[POST /api/sessions/files] classify error:", err);
+        });
+      // Re-invalidate after classification updates the file's label.
+      revalidateTag(CacheTags.files(user.uid), "minutes");
+    });
+
     return NextResponse.json(uploaded, { status: 201 });
   },
 );

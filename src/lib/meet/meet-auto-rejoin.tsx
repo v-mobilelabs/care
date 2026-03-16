@@ -15,13 +15,13 @@
  * component does nothing — the MeetContent lobby will handle joining so the
  * user can configure mic/camera before re-entering the call.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { ref, onValue, type Unsubscribe } from "firebase/database";
 import { usePathname } from "next/navigation";
-import { firebaseApp, getClientDatabase } from "@/lib/firebase/client";
+import { firebaseApp } from "@/lib/firebase/client";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useMeetSession } from "./meet-session-context";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 import type { MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 
 /** Minimal shape of the RTDB call-requests entry (doctor side). */
@@ -36,6 +36,28 @@ interface RtdbCallState {
     requestId?: string;
 }
 
+function useDoctorRejoin(doctorId: string | null, authReady: boolean) {
+    const { data } = useRTDBListener<Record<string, RtdbCallEntry>>(
+        authReady && doctorId ? `call-requests/${doctorId}` : null
+    );
+
+    if (!data) return null;
+
+    const accepted = Object.values(data).find(
+        (e) => e.status === "accepted" && e.requestId,
+    );
+    return accepted?.requestId ?? null;
+}
+
+function usePatientRejoin(patientId: string | null, authReady: boolean) {
+    const { data } = useRTDBListener<RtdbCallState>(
+        authReady && patientId ? `call-state/${patientId}` : null
+    );
+
+    if (!data || data.status !== "accepted" || !data?.requestId) return null;
+    return data.requestId;
+}
+
 export function MeetAutoRejoin() {
     const { user, kind, loading } = useAuth();
     const { state, startMeet } = useMeetSession();
@@ -45,6 +67,36 @@ export function MeetAutoRejoin() {
     // to avoid firing multiple fetches if RTDB emits rapidly.
     const rejoinAttemptedRef = useRef<string | null>(null);
 
+    // Wait for Firebase client Auth to be ready
+    const [authReady, setAuthReady] = useState(false);
+    useEffect(() => {
+        if (!user || !kind) {
+            setAuthReady(false);
+            return;
+        }
+
+        const unsubAuth = onAuthStateChanged(
+            getAuth(firebaseApp),
+            (firebaseUser) => {
+                setAuthReady(!!firebaseUser && firebaseUser.uid === user.uid);
+            },
+        );
+
+        return unsubAuth;
+    }, [user, kind]);
+
+    // Get the requestId to rejoin based on user kind
+    const doctorRequestId = useDoctorRejoin(
+        kind === "doctor" ? (user?.uid ?? null) : null,
+        authReady
+    );
+    const patientRequestId = usePatientRejoin(
+        kind === "user" ? (user?.uid ?? null) : null,
+        authReady
+    );
+
+    const requestIdToRejoin = kind === "doctor" ? doctorRequestId : patientRequestId;
+
     useEffect(() => {
         // Wait for auth to resolve
         if (loading || !user || !kind) return;
@@ -53,58 +105,10 @@ export function MeetAutoRejoin() {
         // If the user is already on the /meet page, the lobby in MeetContent
         // will handle joining — don't auto-start the room behind it.
         if (pathname.startsWith("/meet/")) return;
+        // No active call to rejoin
+        if (!requestIdToRejoin) return;
 
-        let unsubRtdb: Unsubscribe | null = null;
-        let cancelled = false;
-
-        const unsubAuth = onAuthStateChanged(
-            getAuth(firebaseApp),
-            (firebaseUser) => {
-                // Clean up previous RTDB listener
-                if (unsubRtdb) {
-                    unsubRtdb();
-                    unsubRtdb = null;
-                }
-
-                if (!firebaseUser || firebaseUser.uid !== user.uid) return;
-
-                const db = getClientDatabase();
-
-                if (kind === "doctor") {
-                    // Doctor: scan /call-requests/{doctorId} for an accepted entry
-                    const queueRef = ref(db, `call-requests/${user.uid}`);
-                    unsubRtdb = onValue(
-                        queueRef,
-                        (snap) => {
-                            if (cancelled) return;
-                            const data = snap.val() as Record<string, RtdbCallEntry> | null;
-                            if (!data) return;
-
-                            const accepted = Object.values(data).find(
-                                (e) => e.status === "accepted" && e.requestId,
-                            );
-                            if (accepted) {
-                                void attemptRejoin(accepted.requestId);
-                            }
-                        },
-                        () => { /* permission error — ignore */ },
-                    );
-                } else {
-                    // Patient: read /call-state/{patientId}
-                    const callRef = ref(db, `call-state/${user.uid}`);
-                    unsubRtdb = onValue(
-                        callRef,
-                        (snap) => {
-                            if (cancelled) return;
-                            const data = snap.val() as RtdbCallState | null;
-                            if (!data || data.status !== "accepted" || !data?.requestId) return;
-                            void attemptRejoin(data.requestId);
-                        },
-                        () => { /* permission error — ignore */ },
-                    );
-                }
-            },
-        );
+        void attemptRejoin(requestIdToRejoin);
 
         async function attemptRejoin(requestId: string) {
             // Only attempt once per requestId per mount
@@ -115,9 +119,32 @@ export function MeetAutoRejoin() {
 
             try {
                 const res = await fetch(`/api/meet/${requestId}/session`);
-                if (!res.ok || cancelled) return;
+
+                // If meeting has ended (400/404), clear the RTDB state so we stop retrying
+                if (!res.ok) {
+                    if (res.status === 400 || res.status === 404) {
+                        console.log("[MeetAutoRejoin] Meeting has ended, cleaning up RTDB state");
+                        // Ensure user is still valid before cleanup
+                        if (!user?.uid || !kind) return;
+
+                        const { getClientDatabase } = await import("@/lib/firebase/client");
+                        const db = getClientDatabase();
+                        if (kind === "doctor") {
+                            // Remove from doctor's call queue
+                            await import("firebase/database").then(({ remove, ref }) =>
+                                remove(ref(db, `call-requests/${user.uid}/${requestId}`))
+                            );
+                        } else {
+                            // Update patient's call state to ended
+                            await import("firebase/database").then(({ update, ref }) =>
+                                update(ref(db, `call-state/${user.uid}`), { status: "ended" })
+                            );
+                        }
+                    }
+                    return;
+                }
+
                 const sessionData = (await res.json()) as MeetSessionData;
-                if (cancelled) return;
 
                 // Restore mic/camera preferences persisted by the room on toggle.
                 // Defaults to true if not found (first join).
@@ -126,20 +153,14 @@ export function MeetAutoRejoin() {
 
                 // Double-check overlay hasn't been started in the meantime
                 startMeet(sessionData, { micOn, cameraOn });
-            } catch {
+            } catch (err) {
                 // Network error — user can manually rejoin via Dynamic Island or /meet page
+                console.error("[MeetAutoRejoin] Failed to rejoin:", err);
                 rejoinAttemptedRef.current = null;
             }
         }
-
-        return () => {
-            cancelled = true;
-            unsubAuth();
-            if (unsubRtdb) unsubRtdb();
-        };
-        // Only re-run when auth resolves, overlay state changes, or pathname changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading, user?.uid, kind, state.sessionData === null, pathname]);
+    }, [loading, user?.uid, kind, state.sessionData, pathname, requestIdToRejoin]);
 
     // This component is invisible — it only drives side effects.
     return null;

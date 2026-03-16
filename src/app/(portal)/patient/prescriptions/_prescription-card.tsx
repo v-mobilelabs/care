@@ -1,166 +1,160 @@
-import { ActionIcon, Badge, Box, Button, Divider, Group, Image, Paper, Text, ThemeIcon, Tooltip } from "@mantine/core";
-import { IconCapsule, IconDownload, IconExternalLink, IconFileTypePdf, IconPhoto, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Badge, Box, Card, Group, Image, Stack, Text, ThemeIcon, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconCapsule, IconDownload, IconExternalLink, IconPhoto, IconSparkles, IconTrash } from "@tabler/icons-react";
 
-import { type FileRecord } from "@/app/(portal)/patient/_query";
+import { type PrescriptionRecord } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
-import { formatBytes, formatDate } from "@/lib/format";
+import { DateText } from "@/ui/DateText";
 
-export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onViewMeds }: Readonly<{
-    file: FileRecord;
+export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onOpenDetail }: Readonly<{
+    file: PrescriptionRecord;
     isPendingDelete: boolean;
     isExtracting: boolean;
     onDelete: () => void;
     onExtract: () => void;
-    onViewMeds: () => void;
+    onOpenDetail: () => void;
 }>) {
-    const isImage = file.mimeType.startsWith("image/");
-    const isPdf = file.mimeType === "application/pdf";
-    const extractedCount = file.extractedData?.medications.length ?? 0;
-    const hasExtracted = extractedCount > 0;
+    const medCount = file.medications.length;
+    const hasMeds = medCount > 0;
+    const isImage = file.fileUrl?.match(/\.(jpe?g|png|webp|gif)/i);
+
+    const displayName = file.prescribedBy
+        ? `Dr. ${file.prescribedBy}`
+        : "Prescription";
 
     return (
-        <Paper
-            withBorder
-            radius="lg"
+        <Card
+            radius="md"
             style={{
-                overflow: "hidden",
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease, box-shadow 120ms ease",
-                display: "flex",
-                flexDirection: "column",
             }}
         >
-            {/* Preview */}
-            <Box
-                style={{
-                    aspectRatio: "4/3",
-                    background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                    position: "relative",
-                }}
-            >
-                {isImage && file.downloadUrl ? (
-                    <Image
-                        src={file.downloadUrl}
-                        h="100%"
-                        w="100%"
-                        style={{ objectFit: "cover", position: "absolute", inset: 0 }}
-                        alt={file.name}
-                    />
-                ) : (
-                    <ThemeIcon size={44} radius="xl" color={isPdf ? colors.danger : "primary"} variant="light">
-                        {isPdf ? <IconFileTypePdf size={22} /> : <IconPhoto size={22} />}
-                    </ThemeIcon>
-                )}
-
-                {/* Badge */}
-                <Badge
-                    size="xs"
-                    color={isPdf ? colors.danger : "primary"}
-                    variant="filled"
-                    radius="sm"
-                    style={{ position: "absolute", top: 8, right: 8 }}
-                >
-                    {isPdf ? "PDF" : file.mimeType.split("/")[1]?.toUpperCase() ?? "Image"}
-                </Badge>
-            </Box>
-
-            <Divider />
-
-            {/* Metadata */}
-            <Box px="sm" py="xs" style={{ flex: 1 }}>
-                <Group justify="space-between" wrap="nowrap" gap={4}>
-                    <Tooltip label={file.name} withArrow openDelay={400} multiline maw={240}>
-                        <Text size="sm" fw={600} truncate="end" style={{ lineHeight: 1.3, flex: 1, minWidth: 0 }}>
-                            {file.name}
-                        </Text>
-                    </Tooltip>
-                </Group>
-                <Group gap={4} mt={2}>
-                    <Text size="xs" c="dimmed">{formatBytes(file.size)}</Text>
-                    <Text size="xs" c="dimmed">·</Text>
-                    <Text size="xs" c="dimmed">{formatDate(file.createdAt)}</Text>
-                </Group>
-            </Box>
-
-            {/* Extracted medications badge */}
-            {hasExtracted && (
-                <Box px="sm" pb="xs">
-                    <Button
-                        size="xs"
-                        variant="light"
-                        color={colors.success}
-                        leftSection={<IconCapsule size={12} />}
-                        onClick={onViewMeds}
-                        fullWidth
+            {/* Clickable area: thumbnail + metadata → opens detail modal */}
+            <Card.Section aria-label="View prescription details">
+                <UnstyledButton onClick={onOpenDetail} style={{ display: "flex", flexDirection: "column", width: "100%", textAlign: "left" }}>
+                    {/* Thumbnail */}
+                    <Box
+                        style={{
+                            width: "100%",
+                            height: 72,
+                            background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            overflow: "hidden",
+                        }}
                     >
-                        {extractedCount} medication{extractedCount === 1 ? "" : "s"} found
-                    </Button>
-                </Box>
-            )}
+                        {isImage && file.fileUrl ? (
+                            <Image
+                                src={file.fileUrl}
+                                alt={displayName}
+                                w="100%"
+                                h="100%"
+                                style={{ objectFit: "cover" }}
+                            />
+                        ) : (
+                            <ThemeIcon size={32} radius="md" color="primary" variant="light">
+                                <IconPhoto size={18} />
+                            </ThemeIcon>
+                        )}
+                    </Box>
+                </UnstyledButton>
+            </Card.Section>
+            <Card.Section withBorder style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                {/* Metadata */}
+                <Stack gap={6} p="sm" style={{ flex: 1 }} component="div">
+                    <Text size="xs" fw={600} truncate="end" lh={1.3}>
+                        {displayName}
+                    </Text>
+                    <Group gap={4} wrap="wrap">
+                        {hasMeds && (
+                            <Badge
+                                size="xs"
+                                color={colors.success}
+                                variant="light"
+                                radius="sm"
+                                leftSection={<IconCapsule size={9} />}
+                            >
+                                {medCount} med{medCount === 1 ? "" : "s"}
+                            </Badge>
+                        )}
+                        {file.urgent && (
+                            <Badge size="xs" color="red" variant="filled" radius="sm">
+                                Urgent
+                            </Badge>
+                        )}
+                    </Group>
+                </Stack>
+            </Card.Section>
 
             {/* Actions */}
-            <Group gap={4} px="sm" pb="sm" justify="flex-end">
-                <Tooltip label={hasExtracted ? "Re-extract with AI" : "Extract medications with AI"} withArrow>
-                    <ActionIcon
-                        size={28}
-                        variant="light"
-                        color="primary"
-                        onClick={onExtract}
-                        loading={isExtracting}
-                        disabled={isPendingDelete}
-                        aria-label="Extract prescription"
-                    >
-                        <IconSparkles size={14} />
-                    </ActionIcon>
-                </Tooltip>
-                {file.downloadUrl && (
-                    <>
-                        <Tooltip label="Open in new tab" withArrow>
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5))" variant="light" withBorder px="sm">
+                <Group justify="space-between">
+                    <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>
+                        <DateText date={file.createdAt} />
+                    </Text>
+                    <Group gap={2} py={6} justify="flex-end">
+                        <Tooltip label={hasMeds ? "Re-extract" : "Extract with AI"} withArrow>
                             <ActionIcon
-                                size={28}
-                                variant="subtle"
-                                color="gray"
-                                component="a"
-                                href={file.downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="Open prescription"
-                            >
-                                <IconExternalLink size={14} />
-                            </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Download" withArrow>
-                            <ActionIcon
-                                size={28}
-                                variant="subtle"
+                                size={24}
+                                variant="light"
                                 color="primary"
-                                component="a"
-                                href={file.downloadUrl}
-                                download={file.name}
-                                aria-label="Download prescription"
+                                onClick={onExtract}
+                                loading={isExtracting}
+                                disabled={isPendingDelete}
+                                aria-label="Extract prescription"
                             >
-                                <IconDownload size={14} />
+                                <IconSparkles size={13} />
                             </ActionIcon>
                         </Tooltip>
-                    </>
-                )}
-                <Tooltip label="Delete" withArrow>
-                    <ActionIcon
-                        size={28}
-                        variant="subtle"
-                        color="red"
-                        onClick={onDelete}
-                        disabled={isPendingDelete || isExtracting}
-                        aria-label="Delete prescription"
-                    >
-                        <IconTrash size={14} />
-                    </ActionIcon>
-                </Tooltip>
-            </Group>
-        </Paper>
+                        {file.fileUrl && (
+                            <>
+                                <Tooltip label="Open" withArrow>
+                                    <ActionIcon
+                                        size={24}
+                                        variant="subtle"
+                                        color="gray"
+                                        component="a"
+                                        href={file.fileUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label="Open prescription"
+                                    >
+                                        <IconExternalLink size={13} />
+                                    </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="Download" withArrow>
+                                    <ActionIcon
+                                        size={24}
+                                        variant="subtle"
+                                        color="primary"
+                                        component="a"
+                                        href={file.fileUrl}
+                                        download
+                                        aria-label="Download prescription"
+                                    >
+                                        <IconDownload size={13} />
+                                    </ActionIcon>
+                                </Tooltip>
+                            </>
+                        )}
+                        <Tooltip label="Delete" withArrow>
+                            <ActionIcon
+                                size={24}
+                                variant="subtle"
+                                color="red"
+                                onClick={onDelete}
+                                disabled={isPendingDelete || isExtracting}
+                                aria-label="Delete prescription"
+                            >
+                                <IconTrash size={13} />
+                            </ActionIcon>
+                        </Tooltip>
+                    </Group>
+                </Group>
+
+            </Card.Section>
+        </Card>
     );
 }

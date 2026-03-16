@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/firebase/admin";
 import { detectKind } from "@/lib/auth/detect-kind";
 import { COOKIE_NAME, COOKIE_OPTS, type UserKind } from "@/lib/auth/jwt";
-import { profileRepository } from "@/data/profile";
+import { UpsertProfileUseCase } from "@/data/profile";
 import { mintSessionCookieWithKind } from "@/lib/auth/mint-session";
 
 export async function POST(req: NextRequest) {
@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
   // If the caller signals this is a new doctor, stamp kind:"doctor" into
   // profiles/{uid} right now so detectKind() picks it up immediately.
   if (kindOverride === "doctor") {
-    await profileRepository.upsert({ userId: decoded.uid, kind: "doctor" });
+    await new UpsertProfileUseCase().execute(
+      UpsertProfileUseCase.validate({ userId: decoded.uid, kind: "doctor" }),
+    );
   }
 
   // Auto-detect kind from the user's Firestore profile — never trust the client.

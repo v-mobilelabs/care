@@ -19,8 +19,8 @@ export interface BloodTestDocument {
   userId: string;
   /** ID of the uploaded file this test was extracted from */
   fileId: string;
-  /** Virtual session ID used for file storage */
-  sessionId: string;
+  /** Signed download URL for the source file */
+  fileUrl?: string;
   testName: string;
   labName?: string;
   orderedBy?: string;
@@ -37,7 +37,7 @@ export interface BloodTestDto {
   id: string;
   userId: string;
   fileId: string;
-  sessionId: string;
+  fileUrl?: string;
   testName: string;
   labName?: string;
   orderedBy?: string;
@@ -113,8 +113,6 @@ export const ExtractBloodTestInputSchema = z.object({
   userId: z.string().min(1),
   profileId: z.string().min(1),
   fileId: z.string().min(1),
-  /** Virtual session ID used for file storage. Defaults to the blood-tests session. */
-  sessionId: z.string().min(1),
   /** Optional: scopes blood test records to a dependent sub-collection. */
   dependentId: z.string().optional(),
 });
@@ -142,7 +140,7 @@ export function toBloodTestDto(
     id,
     userId: doc.userId,
     fileId: doc.fileId,
-    sessionId: doc.sessionId,
+    fileUrl: doc.fileUrl,
     testName: doc.testName,
     labName: doc.labName,
     orderedBy: doc.orderedBy,

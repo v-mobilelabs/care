@@ -6,11 +6,10 @@ import { ReinvitePatientUseCase } from "@/data/doctor-patients";
 export const POST = WithContext(
   { kind: "doctor" },
   async ({ user }, params: { patientId: string }) => {
-    const input = ReinvitePatientUseCase.validate({
+    const result = await new ReinvitePatientUseCase().execute({
       doctorId: user.uid,
       patientId: params.patientId,
     });
-    const result = await new ReinvitePatientUseCase().execute(input);
     return NextResponse.json(result);
   },
 );

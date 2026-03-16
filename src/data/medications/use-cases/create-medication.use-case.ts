@@ -8,7 +8,24 @@ import {
   type MedicationDto,
 } from "../models/medication.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({
+  type: "medication",
+  contentFields: [
+    "name",
+    "status",
+    "dosage",
+    "form",
+    "frequency",
+    "duration",
+    "condition",
+    "instructions",
+    "createdAt",
+  ],
+  sourceIdField: "id",
+  metadataFields: ["status", "createdAt"],
+})
 export class CreateMedicationUseCase extends UseCase<
   CreateMedicationInput,
   MedicationDto

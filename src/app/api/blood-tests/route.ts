@@ -1,7 +1,9 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   UploadFileUseCase,
+  ClassifyFileUseCase,
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from "@/data/sessions";
@@ -10,15 +12,16 @@ import {
   ExtractBloodTestUseCase,
 } from "@/data/blood-tests";
 
-// ── Virtual session ID for blood test file storage ────────────────────────────
+// ── Tag for grouping blood test files in the flat files collection ────────────
 
-export const BLOOD_TESTS_SESSION_ID = "blood-tests";
+const BLOOD_TESTS_SESSION_TAG = "blood-tests";
 
 // ── GET /api/blood-tests — list all extracted blood test records ──────────────
 
 export const GET = WithContext(async ({ user, dependentId }) => {
-  const input = ListBloodTestsUseCase.validate({ userId: user.uid });
-  const records = await new ListBloodTestsUseCase(dependentId).execute(input);
+  const records = await new ListBloodTestsUseCase(dependentId).execute({
+    userId: user.uid,
+  });
   return NextResponse.json(records);
 });
 
@@ -62,11 +65,11 @@ export const POST = WithContext(
       );
     }
 
-    const sessionId = BLOOD_TESTS_SESSION_ID;
+    const sessionId = BLOOD_TESTS_SESSION_TAG;
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // 1. Upload file to Cloud Storage / Firestore
-    const uploadInput = UploadFileUseCase.validate({
+    const uploaded = await new UploadFileUseCase().execute({
       userId: user.uid,
       profileId,
       sessionId,
@@ -75,18 +78,30 @@ export const POST = WithContext(
       size: file.size,
       buffer,
     });
-    const uploaded = await new UploadFileUseCase().execute(uploadInput);
+
+    after(async () => {
+      await new ClassifyFileUseCase()
+        .execute({
+          fileId: uploaded.id,
+          profileId,
+          userId: user.uid,
+          name: file.name,
+          mimeType: file.type,
+          buffer,
+        })
+        .catch((err: unknown) => {
+          console.error("[POST /api/blood-tests] classify error:", err);
+        });
+    });
 
     // 2. Immediately trigger AI extraction
     try {
-      const extractInput = ExtractBloodTestUseCase.validate({
+      const record = await new ExtractBloodTestUseCase().execute({
         userId: user.uid,
         profileId,
         dependentId,
         fileId: uploaded.id,
-        sessionId,
       });
-      const record = await new ExtractBloodTestUseCase().execute(extractInput);
       return NextResponse.json(record, { status: 201 });
     } catch (error_) {
       if (error_ instanceof ApiError) throw error_;

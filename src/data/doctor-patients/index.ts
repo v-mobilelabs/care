@@ -1,5 +1,7 @@
 export * from "./models/doctor-patient.model";
 export { doctorPatientRepository } from "./repositories/doctor-patient.repository";
+export { GetDoctorPatientUseCase } from "./use-cases/get-doctor-patient.use-case";
+export type { GetDoctorPatientInput } from "./use-cases/get-doctor-patient.use-case";
 export { InvitePatientUseCase } from "./use-cases/invite-patient.use-case";
 export type { InvitePatientInput } from "./use-cases/invite-patient.use-case";
 export { RevokePatientUseCase } from "./use-cases/revoke-patient.use-case";

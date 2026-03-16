@@ -27,6 +27,10 @@ export { DeleteSessionUseCase } from "./use-cases/delete-session.use-case";
 export { AddMessageUseCase } from "./use-cases/add-message.use-case";
 export { ListMessagesUseCase } from "./use-cases/list-messages.use-case";
 
+// Chat
+export { PrepareChatUseCase } from "./use-cases/prepare-chat.use-case";
+export type { PrepareChatResult } from "./use-cases/prepare-chat.use-case";
+
 // File
 export { UploadFileUseCase } from "./use-cases/upload-file.use-case";
 export { GetFileUseCase } from "./use-cases/get-file.use-case";
@@ -34,3 +38,4 @@ export { ListFilesUseCase } from "./use-cases/list-files.use-case";
 export { ListAllFilesUseCase } from "./use-cases/list-all-files.use-case";
 export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
 export { GetStorageMetricsUseCase } from "./use-cases/get-storage-metrics.use-case";
+export { ClassifyFileUseCase } from "./use-cases/classify-file.use-case";

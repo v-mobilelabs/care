@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
+import type { DietaryType } from "@/lib/constants";
+export type { DietaryType };
 
 // ── Shared sub-types ─────────────────────────────────────────────────────────
-
-export type DietaryType = "veg" | "non-veg" | "vegan";
 
 export interface DietFoodNutrition {
   protein: number; // grams

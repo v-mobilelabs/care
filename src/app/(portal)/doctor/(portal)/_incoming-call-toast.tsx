@@ -30,6 +30,7 @@ import { useMeetSession } from "@/lib/meet/meet-session-context";
 import { meetSessionKey, type MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 import { buildConversationId } from "@/lib/messaging/conversation-id";
 import { useCallRingtone } from "@/lib/meet/use-call-ringtone";
+import { showBrowserNotification } from "@/lib/notifications/browser-notifications";
 
 // ── Keyframe styles (injected once) ──────────────────────────────────────────
 
@@ -450,6 +451,30 @@ export function IncomingCallNotifications() {
 
     // Play ringtone when there are pending calls
     useCallRingtone(pending.length);
+
+    // Show browser notification when a new call arrives while tab is backgrounded
+    const notifiedCallsRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        for (const call of pending) {
+            if (!notifiedCallsRef.current.has(call.requestId)) {
+                notifiedCallsRef.current.add(call.requestId);
+                showBrowserNotification(
+                    `Incoming call from ${call.patientName}`,
+                    {
+                        body: "Tap to answer",
+                        tag: "call-" + call.requestId,
+                        requireInteraction: true,
+                    },
+                );
+            }
+        }
+        // Clean up stale IDs
+        for (const id of notifiedCallsRef.current) {
+            if (!pending.some((c) => c.requestId === id)) {
+                notifiedCallsRef.current.delete(id);
+            }
+        }
+    }, [pending]);
 
     // Inject keyframes once
     useEffect(() => {

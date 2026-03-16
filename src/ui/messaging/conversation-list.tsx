@@ -5,16 +5,17 @@ import {
     Box,
     Center,
     Group,
+    Indicator,
     Loader,
     ScrollArea,
     Stack,
     Text,
 } from "@mantine/core";
-import { IconMessageCircle, IconX } from "@tabler/icons-react";
+import { IconMail, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { useInbox } from "@/lib/messaging/use-inbox";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { getInitials } from "@/lib/get-initials";
+import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 import type { DmInboxEntry } from "@/lib/messaging/types";
 
 // ── Public component ──────────────────────────────────────────────────────────
@@ -34,22 +35,21 @@ export function ConversationList({
     return (
         <Stack gap={0} style={{ height: "100%" }}>
             {/* Header */}
-            {/* <Group
+            <Group
                 px="md"
                 py="sm"
                 justify="space-between"
                 style={{
-                    borderBottom:
-                        "1px solid var(--mantine-color-default-border)",
+                    borderBottom: "1px solid var(--mantine-color-default-border)",
+                    flexShrink: 0,
                 }}
+                bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))"
             >
-                <Text fw={600} size="lg">
-                    Messages
-                </Text>
-                <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close">
+                <Text fw={600} size="sm">Messages</Text>
+                <ActionIcon size="md" variant="subtle" color="gray" onClick={onClose} aria-label="Close messages">
                     <IconX size={18} />
                 </ActionIcon>
-            </Group> */}
+            </Group>
 
             {/* Body */}
             <ScrollArea style={{ flex: 1 }}>
@@ -66,7 +66,7 @@ export function ConversationList({
                         return (
                             <Center py="xl">
                                 <Stack align="center" gap="xs">
-                                    <IconMessageCircle
+                                    <IconMail
                                         size={40}
                                         stroke={1.2}
                                         color="var(--mantine-color-dimmed)"
@@ -99,8 +99,14 @@ function ConversationItem({
     onSelect,
 }: Readonly<{ entry: DmInboxEntry; onSelect: () => void }>) {
     const [hovered, setHovered] = useState(false);
-    const initials = getInitials(entry.otherName, null);
+    const { online } = usePresenceStatus(entry.otherUid);
     const time = entry.lastMessageAt ? formatTime(entry.lastMessageAt) : "";
+
+    function bgColor() {
+        if (hovered) return "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))";
+        if (entry.unread > 0) return "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.06))";
+        return undefined;
+    }
 
     return (
         <Box
@@ -112,18 +118,20 @@ function ConversationItem({
             style={{
                 cursor: "pointer",
                 borderBottom: "1px solid var(--mantine-color-default-border)",
-                backgroundColor: hovered
-                    ? "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7))"
-                    : entry.unread > 0
-                        ? "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.06))"
-                        : undefined,
+                backgroundColor: bgColor(),
                 transition: "background-color 150ms ease",
             }}
         >
-            <Group wrap="nowrap">
-                <Avatar size="md" radius="xl" color="primary">
-                    {initials}
-                </Avatar>
+            <Group wrap="nowrap" gap="sm">
+                <Indicator
+                    color={online ? "teal" : "gray"}
+                    size={10}
+                    offset={4}
+                    position="bottom-end"
+                    withBorder
+                >
+                    <Avatar size="sm" radius="xl" color="primary" name={entry.otherName} />
+                </Indicator>
 
                 <Box style={{ flex: 1, overflow: "hidden" }}>
                     <Group justify="space-between" wrap="nowrap">

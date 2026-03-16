@@ -92,6 +92,14 @@ export interface AskQuestionInput {
   scaleMaxLabel?: string;
 }
 
+export interface StartAssessmentInput {
+  title: string;
+  condition: string;
+  guideline: string;
+  estimatedQuestions: number;
+  estimatedMinutes: string;
+}
+
 export interface NextStepsInput {
   condition: string;
   immediate: string[];
@@ -128,6 +136,21 @@ export interface DietPlanInput {
   recommended: { food: string; reason: string }[];
   avoid: { food: string; reason: string }[];
   tips: string[];
+  groceryList?: {
+    weekOf: string;
+    totalItems: number;
+    categories: {
+      category: string;
+      items: {
+        name: string;
+        quantity: string;
+        unit: string;
+        category: string;
+        alternatives: string[];
+        isStaple: boolean;
+      }[];
+    }[];
+  };
 }
 
 export interface SoapNoteInput {
@@ -308,9 +331,11 @@ export function extractToolInput<T>(
   if (name !== toolName) return null;
   const state = getToolPartState(part);
   if (state === "input-streaming") return null;
-  const p = part as unknown as { input: T };
-  if (p.input == null) return null;
-  return p.input;
+  // Live SDK parts use `args`; DB-deserialized parts use `input`.
+  const p = part as unknown as { input?: T; args?: T };
+  const data = p.input ?? p.args ?? null;
+  if (data == null) return null;
+  return data;
 }
 
 // ── Answer tracking helper ────────────────────────────────────────────────────

@@ -59,13 +59,7 @@ import { colors } from "@/ui/tokens";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+import { DateText } from "@/ui/DateText";
 
 function fmtMoney(amount: number): string {
     return new Intl.NumberFormat(undefined, {
@@ -556,9 +550,9 @@ function InsuranceCard({
                     <Group gap="xs">
                         <Text size="xs" c="dimmed" style={{ minWidth: 110 }}>Coverage</Text>
                         <Text size="xs" fw={600}>
-                            {record.effectiveDate ? formatDate(record.effectiveDate) : "—"}
-                            {" → "}
-                            {record.expirationDate ? formatDate(record.expirationDate) : "ongoing"}
+                            {record.effectiveDate ? <DateText date={record.effectiveDate} /> : "—"}
+                            {"  "}
+                            {record.expirationDate ? <DateText date={record.expirationDate} /> : "ongoing"}
                         </Text>
                     </Group>
                 )}
@@ -740,77 +734,77 @@ export function InsuranceContent() {
                             </Box>
                         </Group>
                         {/* Mobile: Icon-only button */}
-                        <Tooltip label=\"Upload Insurance Card\" withArrow hiddenFrom=\"sm\">
-                        <ActionIcon
-                            size={32}
-                            variant=\"filled\"
-                        color=\"primary\"
-                        onClick={handleUploadClick}
-                        loading={extractMutation.isPending}
-                        hiddenFrom=\"sm\"
-                        aria-label=\"Upload Insurance Card\"
+                        <Tooltip label="Upload Insurance Card" withArrow hiddenFrom="sm">
+                            <ActionIcon
+                                size={32}
+                                variant="filled"
+                                color="primary"
+                                onClick={handleUploadClick}
+                                loading={extractMutation.isPending}
+                                hiddenFrom="sm"
+                                aria-label="Upload Insurance Card"
+                            >
+                                <IconUpload size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                        {/* Desktop: Full button */}
+                        <Button
+                            leftSection={<IconUpload size={16} />}
+                            onClick={handleUploadClick}
+                            loading={extractMutation.isPending}
+                            visibleFrom="sm"
                         >
-                        <IconUpload size={16} />
-                    </ActionIcon>
-                </Tooltip>
-                {/* Desktop: Full button */}
-                <Button
-                    leftSection={<IconUpload size={16} />}
-                    onClick={handleUploadClick}
-                    loading={extractMutation.isPending}
-                    visibleFrom=\"sm\"
-                    >
-                {extractMutation.isPending ? "Extracting…" : "Upload Card"}
-            </Button>
-        </Group>
-                </Card.Section >
-        <Card.Section p="md">
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box maw={840} mx="auto">
-                        {(() => {
-                            if (extractMutation.isPending) {
-                                return (
-                                    <Stack gap="md">
-                                        {["sk-a", "sk-b"].map((k) => (
-                                            <Skeleton key={k} height={180} radius="lg" />
-                                        ))}
-                                    </Stack>
-                                );
-                            }
+                            {extractMutation.isPending ? "Extracting…" : "Upload Card"}
+                        </Button>
+                    </Group>
+                </Card.Section>
+                <Card.Section p="md">
+                    <Box style={{ flex: 1, overflow: "hidden" }}>
+                        <ScrollArea style={{ height: "100%" }}>
+                            <Box maw={840} mx="auto">
+                                {(() => {
+                                    if (extractMutation.isPending) {
+                                        return (
+                                            <Stack gap="md">
+                                                {["sk-a", "sk-b"].map((k) => (
+                                                    <Skeleton key={k} height={180} radius="lg" />
+                                                ))}
+                                            </Stack>
+                                        );
+                                    }
 
-                            if (isLoading) {
-                                return (
-                                    <Stack gap="md">
-                                        {["sk-c", "sk-d"].map((k) => (
-                                            <Skeleton key={k} height={180} radius="lg" />
-                                        ))}
-                                    </Stack>
-                                );
-                            }
+                                    if (isLoading) {
+                                        return (
+                                            <Stack gap="md">
+                                                {["sk-c", "sk-d"].map((k) => (
+                                                    <Skeleton key={k} height={180} radius="lg" />
+                                                ))}
+                                            </Stack>
+                                        );
+                                    }
 
-                            if (records.length === 0) {
-                                return <EmptyState onUpload={handleUploadClick} />;
-                            }
+                                    if (records.length === 0) {
+                                        return <EmptyState onUpload={handleUploadClick} />;
+                                    }
 
-                            return (
-                                <Stack gap="md" maw={840} mx="auto">
-                                    {records.map((record) => (
-                                        <InsuranceCard
-                                            key={record.id}
-                                            record={record}
-                                            onEdit={() => setEditingRecord(record)}
-                                            onDelete={() => handleDelete(record)}
-                                        />
-                                    ))}
-                                </Stack>
-                            );
-                        })()}
+                                    return (
+                                        <Stack gap="md" maw={840} mx="auto">
+                                            {records.map((record) => (
+                                                <InsuranceCard
+                                                    key={record.id}
+                                                    record={record}
+                                                    onEdit={() => setEditingRecord(record)}
+                                                    onDelete={() => handleDelete(record)}
+                                                />
+                                            ))}
+                                        </Stack>
+                                    );
+                                })()}
+                            </Box>
+                        </ScrollArea>
                     </Box>
-                </ScrollArea>
-            </Box>
-        </Card.Section>
-            </Card >
-        </Container >
+                </Card.Section>
+            </Card>
+        </Container>
     );
 }

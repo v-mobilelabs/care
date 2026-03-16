@@ -11,15 +11,18 @@ function FileCardSkeleton() {
                 border: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
             }}
         >
-            <Group justify="space-between" mb={12}>
-                <Skeleton circle h={40} w={40} />
-                <Skeleton circle h={22} w={22} />
+            <Skeleton height={130} radius="md" mb={16} />
+            <Skeleton height={12} width="80%" mb={8} />
+            <Group gap={6} mb={8}>
+                <Skeleton height={20} width={64} radius="xl" />
+                <Skeleton height={20} width={48} radius="xl" />
             </Group>
-            <Skeleton height={10} width="80%" mb={6} />
-            <Skeleton height={8} width={64} mb={12} />
-            <Group justify="space-between">
-                <Skeleton height={8} width={48} />
-                <Skeleton height={22} width={50} radius="xl" />
+            <Skeleton height={8} width={100} mb={16} />
+            <Group justify="flex-end" gap={4}>
+                <Skeleton circle h={32} w={32} />
+                <Skeleton circle h={32} w={32} />
+                <Skeleton circle h={32} w={32} />
+                <Skeleton circle h={32} w={32} />
             </Group>
         </Box>
     );

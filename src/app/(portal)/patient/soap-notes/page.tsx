@@ -20,14 +20,14 @@ export default async function HealthRecordsPage() {
                 queryKey: [...chatKeys.conditions(), undefined],
                 queryFn: () =>
                     new ListConditionsUseCase().execute(
-                        ListConditionsUseCase.validate({ userId: user.uid }),
+                        { userId: user.uid },
                     ),
             }),
             queryClient.prefetchQuery({
                 queryKey: [...chatKeys.soapNotes(), undefined],
                 queryFn: () =>
                     new ListSoapNotesUseCase().execute(
-                        ListSoapNotesUseCase.validate({ userId: user.uid }),
+                        { userId: user.uid },
                     ),
             }),
         ]);

@@ -8,10 +8,20 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
 export { chatKeys } from "@/app/(portal)/patient/_keys";
+import {
+  revalidateUsage,
+  revalidateProfile,
+  revalidateFiles,
+} from "@/data/actions";
 import type { ExtractResult } from "@/data/prescriptions/models/extract.model";
 import { trackEvent } from "@/lib/analytics";
 export type {
@@ -35,13 +45,18 @@ export interface MessageRecord {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
-export interface CreditsDto {
-  remaining: number;
-  total: number;
-  /** ISO-8601 timestamp at which credits reset (next UTC midnight). */
-  resetsAt: string;
+export interface UsageDto {
+  credits: number;
+  minutes: number;
+  storage: number;
+  lastReset: string; // ISO YYYY-MM
 }
 
 export interface ConditionRecord {
@@ -70,6 +85,15 @@ export interface SoapNoteRecord {
   createdAt: string;
 }
 
+export type FileLabel =
+  | "xray"
+  | "blood_test"
+  | "prescription"
+  | "scan"
+  | "report"
+  | "vaccination"
+  | "other";
+
 export interface FileRecord {
   id: string;
   sessionId: string;
@@ -82,6 +106,51 @@ export interface FileRecord {
   createdAt: string;
   /** AI-extracted prescription data, populated after user triggers extraction. */
   extractedData?: ExtractResult;
+  /** AI-assigned classification label (set asynchronously after upload). */
+  label?: FileLabel;
+  /** Confidence score 0–1 for the assigned label. */
+  labelConfidence?: number;
+}
+
+export type MedicationForm =
+  | "Tablet"
+  | "Capsule"
+  | "Oral Solution"
+  | "Suspension"
+  | "Injection"
+  | "Topical"
+  | "Patch"
+  | "Inhaler"
+  | "Eye Drops"
+  | "Syrup"
+  | "Other";
+
+export interface PrescriptionMedicationRecord {
+  name: string;
+  dosage: string;
+  form: MedicationForm;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+  indication: string;
+  monitoring?: string;
+}
+
+export interface PrescriptionRecord {
+  id: string;
+  userId: string;
+  fileId?: string;
+  fileUrl?: string;
+  source: "extracted" | "generated";
+  medications: PrescriptionMedicationRecord[];
+  generalInstructions?: string;
+  followUp?: string;
+  urgent?: boolean;
+  prescribedBy?: string;
+  prescriptionDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface StorageMetricsRecord {
@@ -223,21 +292,34 @@ export function useSessionsQuery() {
   });
 }
 
-/** Current daily credit balance for the authenticated user. */
+/** Current monthly credit balance for the authenticated user. */
 export function useCreditsQuery() {
   return useQuery({
     queryKey: chatKeys.credits(),
-    queryFn: () => apiFetch<CreditsDto>("/api/credits"),
-    staleTime: 10_000,
-    // Refresh whenever the window is re-focused so the count stays accurate.
-    refetchOnWindowFocus: true,
+    queryFn: () => apiFetch<UsageDto>("/api/credits"),
+    placeholderData: keepPreviousData,
   });
+}
+
+/** Optimistically deduct one credit immediately, then refetch to sync with server. */
+export function useOptimisticDeductCredit() {
+  const qc = useQueryClient();
+  return () => {
+    qc.setQueryData<UsageDto>(chatKeys.credits(), (prev) =>
+      prev ? { ...prev, credits: Math.max(0, prev.credits - 1) } : prev,
+    );
+    void qc.invalidateQueries({ queryKey: chatKeys.credits() });
+    void revalidateUsage();
+  };
 }
 
 /** Invalidate the credits cache — call after each message is sent. */
 export function useInvalidateCredits() {
   const qc = useQueryClient();
-  return () => void qc.invalidateQueries({ queryKey: chatKeys.credits() });
+  return () => {
+    void qc.invalidateQueries({ queryKey: chatKeys.credits() });
+    void revalidateUsage();
+  };
 }
 
 /** Invalidate the conditions cache — call after a message finishes streaming (AI tools may have saved new conditions). */
@@ -254,6 +336,13 @@ export function useInvalidateSoapNotes() {
   const pid = useActiveDependentId();
   return () =>
     void qc.invalidateQueries({ queryKey: [...chatKeys.soapNotes(), pid] });
+}
+
+/** Invalidate the messages cache — call after a message finishes streaming to refetch with usage data. */
+export function useInvalidateMessages(sessionId: string) {
+  const qc = useQueryClient();
+  return () =>
+    void qc.invalidateQueries({ queryKey: chatKeys.messages(sessionId) });
 }
 
 /**
@@ -362,6 +451,7 @@ export interface AddConditionPayload {
 export function useAddConditionMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
+  const key = [...chatKeys.conditions(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddConditionPayload) =>
       apiFetch<ConditionRecord>("/api/conditions", {
@@ -369,8 +459,37 @@ export function useAddConditionMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.conditions(), pid] });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<ConditionRecord[]>(key);
+      const optimistic: ConditionRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        sessionId: payload.sessionId,
+        name: payload.name,
+        icd10: payload.icd10,
+        severity: payload.severity,
+        status: payload.status,
+        description: payload.description,
+        symptoms: payload.symptoms,
+        createdAt: new Date().toISOString(),
+      };
+      qc.setQueryData<ConditionRecord[]>(key, (old = []) => [
+        optimistic,
+        ...old,
+      ]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<ConditionRecord[]>(key, (old = []) =>
+        old.map((c) => (c.id.startsWith("__optimistic__") ? newRecord : c)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -484,6 +603,12 @@ export function useUploadFileMutation() {
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: chatKeys.files() });
       void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
+      void revalidateFiles();
+      // Re-invalidate after a short delay to pick up the background AI classification label.
+      setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: chatKeys.files() });
+        void revalidateFiles();
+      }, 5_000);
       trackEvent({
         name: "file_uploaded",
         params: { file_type: data.mimeType },
@@ -539,6 +664,7 @@ export function useDeleteFileMutation() {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.files() });
       void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
+      void revalidateFiles();
     },
   });
 }
@@ -596,17 +722,17 @@ export function useExtractPersonFromFileMutation() {
 
 // ── Prescriptions ─────────────────────────────────────────────────────────────
 
-/** Fetch all prescription files for the authenticated user (or active dependent). */
+/** Fetch all prescription records for the authenticated user (or active dependent). */
 export function usePrescriptionsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
     queryKey: [...chatKeys.prescriptions(), pid],
-    queryFn: () => apiFetch<FileRecord[]>("/api/prescriptions"),
+    queryFn: () => apiFetch<PrescriptionRecord[]>("/api/prescriptions"),
     staleTime: 30_000,
   });
 }
 
-/** Upload a prescription image directly. Pass `sessionId` when uploading from within a chat session. */
+/** Upload a prescription image, then auto-extract medications. */
 export function useUploadPrescriptionMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
@@ -617,26 +743,49 @@ export function useUploadPrescriptionMutation() {
     }: {
       file: File;
       sessionId?: string;
-    }): Promise<FileRecord> => {
+    }): Promise<PrescriptionRecord> => {
+      const tag = sessionId ?? "prescriptions";
+      const headers: HeadersInit = pid ? { "x-dependent-id": pid } : {};
+
+      // Step 1 — upload file via the generic files API
       const formData = new FormData();
       formData.append("file", file);
-      if (sessionId) formData.append("sessionId", sessionId);
-      const headers = new Headers();
-      if (pid) headers.set("x-dependent-id", pid);
-      const res = await fetch("/api/prescriptions", {
+      const uploadRes = await fetch(`/api/sessions/${tag}/files`, {
         method: "POST",
         body: formData,
         headers,
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
+      if (!uploadRes.ok) {
+        const body = (await uploadRes.json().catch(() => ({}))) as {
           error?: { message?: string };
         };
-        throw new Error(body.error?.message ?? `Upload failed (${res.status})`);
+        throw new Error(
+          body.error?.message ?? `Upload failed (${uploadRes.status})`,
+        );
       }
-      return res.json() as Promise<FileRecord>;
+      const uploaded = (await uploadRes.json()) as FileRecord;
+
+      // Step 2 — extract prescription data from the uploaded file
+      const extractRes = await fetch("/api/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ fileId: uploaded.id }),
+      });
+      if (!extractRes.ok) {
+        const body = (await extractRes.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(
+          body.error?.message ?? `Extraction failed (${extractRes.status})`,
+        );
+      }
+      return extractRes.json() as Promise<PrescriptionRecord>;
     },
-    onSuccess: () => {
+    onSuccess: (prescription) => {
+      qc.setQueryData<PrescriptionRecord[]>(
+        [...chatKeys.prescriptions(), pid],
+        (old = []) => [prescription, ...old],
+      );
       void qc.invalidateQueries({
         queryKey: [...chatKeys.prescriptions(), pid],
       });
@@ -644,7 +793,7 @@ export function useUploadPrescriptionMutation() {
   });
 }
 
-/** Delete a prescription file — optimistically removes it from the cache. */
+/** Delete a prescription — optimistically removes it from the cache. */
 export function useDeletePrescriptionMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
@@ -656,9 +805,9 @@ export function useDeletePrescriptionMutation() {
       }),
     onMutate: async ({ fileId }) => {
       await qc.cancelQueries({ queryKey: prescKey });
-      const snapshot = qc.getQueryData<FileRecord[]>(prescKey);
-      qc.setQueryData<FileRecord[]>(prescKey, (old = []) =>
-        old.filter((f) => f.id !== fileId),
+      const snapshot = qc.getQueryData<PrescriptionRecord[]>(prescKey);
+      qc.setQueryData<PrescriptionRecord[]>(prescKey, (old = []) =>
+        old.filter((p) => p.fileId !== fileId),
       );
       return { snapshot };
     },
@@ -671,31 +820,30 @@ export function useDeletePrescriptionMutation() {
   });
 }
 
-/** Extract medication details from a prescription image using AI vision. Persists the result to the prescription. */
+/** Re-extract medication details from a prescription image using AI. */
 export function useExtractPrescriptionMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
   return useMutation({
-    mutationFn: ({
-      fileId,
-      sessionId,
-    }: {
-      fileId: string;
-      sessionId?: string;
-    }) =>
-      apiFetch<ExtractResult>(`/api/prescriptions/${fileId}/extract`, {
+    mutationFn: ({ fileId }: { fileId: string }) =>
+      apiFetch<PrescriptionRecord>(`/api/prescriptions/${fileId}/extract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({}),
       }),
-    onSuccess: (result, { fileId }) => {
-      // Update the cached prescription record so the UI reflects the extracted data immediately.
-      qc.setQueryData<FileRecord[]>(
+    onSuccess: (prescription) => {
+      // Upsert the prescription into the cache.
+      qc.setQueryData<PrescriptionRecord[]>(
         [...chatKeys.prescriptions(), pid],
-        (old = []) =>
-          old.map((f) =>
-            f.id === fileId ? { ...f, extractedData: result } : f,
-          ),
+        (old = []) => {
+          const idx = old.findIndex((p) => p.id === prescription.id);
+          if (idx >= 0) {
+            const next = [...old];
+            next[idx] = prescription;
+            return next;
+          }
+          return [prescription, ...old];
+        },
       );
     },
   });
@@ -737,6 +885,7 @@ export interface AddMedicationPayload {
 export function useAddMedicationMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
+  const key = [...chatKeys.medications(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddMedicationPayload) =>
       apiFetch<MedicationRecord>("/api/medications", {
@@ -744,8 +893,41 @@ export function useAddMedicationMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.medications(), pid] });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<MedicationRecord[]>(key);
+      const now = new Date().toISOString();
+      const optimistic: MedicationRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        sessionId: undefined,
+        name: payload.name,
+        dosage: payload.dosage,
+        form: payload.form,
+        frequency: payload.frequency,
+        duration: payload.duration,
+        instructions: payload.instructions,
+        condition: payload.condition,
+        status: payload.status ?? "active",
+        createdAt: now,
+        updatedAt: now,
+      };
+      qc.setQueryData<MedicationRecord[]>(key, (old = []) => [
+        optimistic,
+        ...old,
+      ]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<MedicationRecord[]>(key, (old = []) =>
+        old.map((m) => (m.id.startsWith("__optimistic__") ? newRecord : m)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -854,6 +1036,7 @@ export interface AddDietPlanPayload {
 export function useAddDietPlanMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
+  const key = [...chatKeys.dietPlans(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddDietPlanPayload) =>
       apiFetch<DietPlanRecord>("/api/diet-plans", {
@@ -861,8 +1044,39 @@ export function useAddDietPlanMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.dietPlans(), pid] });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<DietPlanRecord[]>(key);
+      const optimistic: DietPlanRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        sessionId: payload.sessionId,
+        condition: payload.condition,
+        overview: payload.overview,
+        weeklyWeightLossEstimate: payload.weeklyWeightLossEstimate,
+        totalDailyCalories: payload.totalDailyCalories,
+        weeklyPlan: payload.weeklyPlan,
+        recommended: payload.recommended,
+        avoid: payload.avoid,
+        tips: payload.tips,
+        createdAt: new Date().toISOString(),
+      };
+      qc.setQueryData<DietPlanRecord[]>(key, (old = []) => [
+        optimistic,
+        ...old,
+      ]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<DietPlanRecord[]>(key, (old = []) =>
+        old.map((p) => (p.id.startsWith("__optimistic__") ? newRecord : p)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -948,6 +1162,7 @@ export function useDoctorsQuery() {
 /** Add a new doctor. */
 export function useAddDoctorMutation() {
   const qc = useQueryClient();
+  const key = chatKeys.doctors();
   return useMutation({
     mutationFn: (payload: AddDoctorPayload) =>
       apiFetch<DoctorRecord>("/api/doctors", {
@@ -955,8 +1170,34 @@ export function useAddDoctorMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.doctors() });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<DoctorRecord[]>(key);
+      const now = new Date().toISOString();
+      const optimistic: DoctorRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        name: payload.name,
+        specialty: payload.specialty,
+        address: payload.address,
+        clinic: payload.clinic,
+        notes: payload.notes,
+        createdAt: now,
+        updatedAt: now,
+      };
+      qc.setQueryData<DoctorRecord[]>(key, (old = []) => [optimistic, ...old]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<DoctorRecord[]>(key, (old = []) =>
+        old.map((d) => (d.id.startsWith("__optimistic__") ? newRecord : d)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1170,6 +1411,32 @@ export function useProfileQuery() {
   });
 }
 
+// ── Patient health details ────────────────────────────────────────────────────
+
+export interface PatientRecord {
+  userId: string;
+  dateOfBirth?: string;
+  sex?: "male" | "female";
+  height?: number;
+  weight?: number;
+  waistCm?: number;
+  neckCm?: number;
+  hipCm?: number;
+  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  foodPreferences?: string[];
+  bloodGroup?: string;
+  consentedAt?: string;
+  updatedAt?: string;
+}
+
+export function usePatientQuery() {
+  return useQuery({
+    queryKey: chatKeys.patientDetails(),
+    queryFn: () => apiFetch<PatientRecord>("/api/patients/me"),
+    staleTime: 60_000,
+  });
+}
+
 export function useUpsertProfileMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -1181,6 +1448,7 @@ export function useUpsertProfileMutation() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+      void revalidateProfile();
     },
   });
 }
@@ -1197,6 +1465,7 @@ export function useConsentMutation() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+      void revalidateProfile();
     },
   });
 }
@@ -1291,6 +1560,7 @@ export function useDependentsQuery() {
 
 export function useCreateDependentMutation() {
   const qc = useQueryClient();
+  const key = chatKeys.dependents();
   return useMutation({
     mutationFn: (data: CreateDependentPayload) =>
       apiFetch<DependentRecord>("/api/dependents", {
@@ -1298,14 +1568,52 @@ export function useCreateDependentMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.dependents() });
+    onMutate: async (data) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<DependentRecord[]>(key);
+      const now = new Date().toISOString();
+      const optimistic: DependentRecord = {
+        id: `__optimistic__${Date.now()}`,
+        ownerId: "",
+        firstName: data.firstName,
+        lastName: data.lastName ?? "",
+        relationship: data.relationship,
+        dateOfBirth: data.dateOfBirth,
+        sex: data.sex,
+        height: data.height,
+        weight: data.weight,
+        waistCm: data.waistCm,
+        neckCm: data.neckCm,
+        hipCm: data.hipCm,
+        activityLevel: data.activityLevel,
+        country: data.country,
+        city: data.city,
+        createdAt: now,
+        updatedAt: now,
+      };
+      qc.setQueryData<DependentRecord[]>(key, (old = []) => [
+        ...old,
+        optimistic,
+      ]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<DependentRecord[]>(key, (old = []) =>
+        old.map((d) => (d.id.startsWith("__optimistic__") ? newRecord : d)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
 
 export function useUpdateDependentMutation() {
   const qc = useQueryClient();
+  const key = chatKeys.dependents();
   return useMutation({
     mutationFn: ({ dependentId, ...data }: UpdateDependentPayload) =>
       apiFetch<DependentRecord>(`/api/dependents/${dependentId}`, {
@@ -1313,8 +1621,19 @@ export function useUpdateDependentMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.dependents() });
+    onMutate: async ({ dependentId, ...updates }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<DependentRecord[]>(key);
+      qc.setQueryData<DependentRecord[]>(key, (old = []) =>
+        old.map((d) => (d.id === dependentId ? { ...d, ...updates } : d)),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1414,6 +1733,7 @@ export function useInsuranceQuery() {
 export function useAddInsuranceMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
+  const key = [...chatKeys.insurance(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddInsurancePayload) =>
       apiFetch<InsuranceRecord>("/api/insurance", {
@@ -1421,8 +1741,47 @@ export function useAddInsuranceMutation() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.insurance(), pid] });
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<InsuranceRecord[]>(key);
+      const now = new Date().toISOString();
+      const optimistic: InsuranceRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        providerName: payload.providerName,
+        policyNumber: payload.policyNumber,
+        groupNumber: payload.groupNumber,
+        planName: payload.planName,
+        type: payload.type ?? "health",
+        subscriberName: payload.subscriberName,
+        memberId: payload.memberId,
+        effectiveDate: payload.effectiveDate,
+        expirationDate: payload.expirationDate,
+        copay: payload.copay,
+        deductible: payload.deductible,
+        outOfPocketMax: payload.outOfPocketMax,
+        notes: payload.notes,
+        documentStoragePath: payload.documentStoragePath,
+        documentUrl: payload.documentUrl,
+        createdAt: now,
+        updatedAt: now,
+      };
+      qc.setQueryData<InsuranceRecord[]>(key, (old = []) => [
+        optimistic,
+        ...old,
+      ]);
+      return { snapshot };
+    },
+    onSuccess: (newRecord) => {
+      qc.setQueryData<InsuranceRecord[]>(key, (old = []) =>
+        old.map((r) => (r.id.startsWith("__optimistic__") ? newRecord : r)),
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key });
     },
   });
 }

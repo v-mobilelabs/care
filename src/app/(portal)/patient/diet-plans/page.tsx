@@ -14,7 +14,7 @@ export default async function DietPlansPage() {
             queryKey: [...chatKeys.dietPlans(), undefined],
             queryFn: () =>
                 new ListDietPlansUseCase().execute(
-                    ListDietPlansUseCase.validate({ userId: user.uid }),
+                    { userId: user.uid },
                 ),
         });
     }

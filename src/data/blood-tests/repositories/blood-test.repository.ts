@@ -53,10 +53,7 @@ export const bloodTestRepository = {
   async update(
     userId: string,
     bloodTestId: string,
-    data: Omit<
-      BloodTestDocument,
-      "userId" | "fileId" | "sessionId" | "createdAt"
-    >,
+    data: Omit<BloodTestDocument, "userId" | "fileId" | "createdAt">,
     dependentId?: string,
   ): Promise<BloodTestDto> {
     const now = Timestamp.now();

@@ -4,7 +4,8 @@ import { ListPatientInvitesUseCase } from "@/data/doctor-patients";
 
 // GET /api/doctor-patients/invites — patient sees all their doctor invites
 export const GET = WithContext({}, async ({ user }) => {
-  const input = ListPatientInvitesUseCase.validate({ patientId: user.uid });
-  const invites = await new ListPatientInvitesUseCase().execute(input);
+  const invites = await new ListPatientInvitesUseCase().execute({
+    patientId: user.uid,
+  });
   return NextResponse.json(invites);
 });

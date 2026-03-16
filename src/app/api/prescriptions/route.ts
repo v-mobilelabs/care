@@ -1,73 +1,48 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { WithContext, ApiError } from "@/lib/api/with-context";
+import { GetFileUseCase } from "@/data/sessions";
 import {
-  ListFilesUseCase,
-  UploadFileUseCase,
-  ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE_BYTES,
-} from "@/data/sessions";
-import { PRESCRIPTIONS_SESSION_ID } from "./constants";
+  ExtractPrescriptionUseCase,
+  ListPrescriptionsUseCase,
+} from "@/data/prescriptions";
 
-// GET /api/prescriptions — list all prescription files for the current user
-export const GET = WithContext(async ({ user, profileId }) => {
-  const input = ListFilesUseCase.validate({
-    userId: user.uid,
-    profileId,
-    sessionId: PRESCRIPTIONS_SESSION_ID,
-  });
-  const files = await new ListFilesUseCase().execute(input);
-  return NextResponse.json(files);
+// GET /api/prescriptions — list all prescription records for the current user
+export const GET = WithContext(async ({ user, dependentId }) => {
+  const prescriptions = await new ListPrescriptionsUseCase(dependentId).execute(
+    {
+      userId: user.uid,
+    },
+  );
+  return NextResponse.json(prescriptions);
 });
 
-// POST /api/prescriptions — upload a prescription image
+const PostBodySchema = z.object({
+  fileId: z.string().min(1),
+});
+
+// POST /api/prescriptions — extract & create prescription from an already-uploaded file
 export const POST = WithContext(async ({ user, profileId, req }) => {
-  const formData = await req.formData().catch(() => null);
-  if (!formData) throw ApiError.badRequest("Expected multipart/form-data.");
+  const body = await req.json().catch(() => null);
+  if (!body) throw ApiError.badRequest("Expected JSON body with fileId.");
 
-  const file = formData.get("file");
-  if (!(file instanceof File))
-    throw ApiError.badRequest("'file' field is required.");
+  const parsed = PostBodySchema.safeParse(body);
+  if (!parsed.success) throw ApiError.badRequest("fileId is required.");
+  const { fileId } = parsed.data;
 
-  // Optional session — if uploading from within a chat, pass the sessionId;
-  // otherwise falls back to the virtual prescriptions session.
-  const sessionId =
-    (formData.get("sessionId") as string | null) ?? PRESCRIPTIONS_SESSION_ID;
-
-  // Accept only image types for prescriptions
-  const isImage = file.type.startsWith("image/");
-  const isPdf = file.type === "application/pdf";
-  if (!isImage && !isPdf) {
-    throw ApiError.badRequest(
-      "Prescriptions must be an image (JPEG, PNG, WEBP, HEIC) or PDF.",
-    );
-  }
-
-  if (
-    !ALLOWED_MIME_TYPES.includes(
-      file.type as (typeof ALLOWED_MIME_TYPES)[number],
-    )
-  ) {
-    throw ApiError.badRequest(`Unsupported file type '${file.type}'.`);
-  }
-
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw ApiError.badRequest(
-      `File exceeds the ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB limit.`,
-    );
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const input = UploadFileUseCase.validate({
+  // Verify the file exists and belongs to the caller
+  const file = await new GetFileUseCase().execute({
     userId: user.uid,
     profileId,
-    sessionId,
-    name: file.name,
-    mimeType: file.type,
-    size: file.size,
-    buffer,
+    fileId,
+  });
+  if (!file) throw ApiError.notFound("File not found.");
+
+  const prescription = await new ExtractPrescriptionUseCase().execute({
+    userId: user.uid,
+    profileId,
+    fileId,
   });
 
-  const uploaded = await new UploadFileUseCase().execute(input);
-  return NextResponse.json(uploaded, { status: 201 });
+  return NextResponse.json(prescription, { status: 201 });
 });

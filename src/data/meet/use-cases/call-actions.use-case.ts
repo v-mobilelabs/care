@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { meetRepository } from "../repositories/meet.repository";
 import { rtdb } from "@/lib/firebase/admin";
 import { deleteChimeMeeting } from "@/lib/meet/chime";
@@ -33,8 +34,8 @@ export class RejectCallUseCase {
       rtdb.ref(`call-requests/${doctorId}/${requestId}`).remove(),
     ]);
 
-    // Recompute queue positions for remaining requests
-    await recomputeQueuePositions(doctorId);
+    // Recompute queue positions after the response — caller doesn't need the result.
+    after(() => recomputeQueuePositions(doctorId).catch(console.error));
   }
 }
 
@@ -74,9 +75,6 @@ export class EndCallUseCase {
 
     await meetRepository.updateStatus(requestId, "ended");
 
-    // Complete the encounter record via the encounters repository
-    await encounterRepository.completeByRequestId(requestId);
-
     await Promise.all([
       rtdb.ref(`call-state/${request.patientId}`).update({ status: "ended" }),
       rtdb.ref(`call-requests/${request.doctorId}/${requestId}`).remove(),
@@ -87,8 +85,11 @@ export class EndCallUseCase {
       rtdb.ref(`call-ended/${requestId}/${userId}`).set(true),
     ]);
 
-    // Recompute queue positions for remaining requests
-    await recomputeQueuePositions(request.doctorId);
+    // Deferred post-response work — neither blocks the caller.
+    after(() =>
+      encounterRepository.completeByRequestId(requestId).catch(console.error),
+    );
+    after(() => recomputeQueuePositions(request.doctorId).catch(console.error));
   }
 }
 
@@ -132,7 +133,7 @@ export class CancelCallUseCase {
         : []),
     ]);
 
-    // Recompute queue positions for remaining requests
-    await recomputeQueuePositions(request.doctorId);
+    // Recompute queue positions after the response — caller doesn't need the result.
+    after(() => recomputeQueuePositions(request.doctorId).catch(console.error));
   }
 }

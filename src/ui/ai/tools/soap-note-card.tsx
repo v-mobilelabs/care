@@ -3,9 +3,10 @@ import { ActionIcon, Badge, Box, Collapse, Divider, Group, List, Paper, Stack, T
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { IconChevronDown, IconCopy, IconNotes } from "@tabler/icons-react";
+import { motion } from "framer-motion";
 import { RISK_COLOR } from "@/app/(portal)/patient/_types";
 import type { SoapNoteInput } from "@/app/(portal)/patient/_types";
-import { parseInline, MarkdownContent } from "@/app/(portal)/patient/_components/markdown";
+import { parseInline, MarkdownContent } from "@/ui/chat/components/markdown";
 
 export interface SoapNoteCardProps {
     data: SoapNoteInput;
@@ -56,13 +57,22 @@ export function SoapNoteCard({ data }: Readonly<SoapNoteCardProps>) {
                             title="Copy to clipboard"
                             onClick={handleCopy}
                         >
-                            <IconCopy size={14} />
+                            <motion.div
+                                whileTap={{ scale: 0.75 }}
+                                whileHover={{ scale: 1.2 }}
+                                transition={{ duration: 0.15, ease: "easeInOut" }}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                            >
+                                <IconCopy size={14} />
+                            </motion.div>
                         </ActionIcon>
-                        <IconChevronDown
-                            size={15}
-                            color="var(--mantine-color-dimmed)"
-                            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms ease", flexShrink: 0 }}
-                        />
+                        <motion.div
+                            animate={{ rotate: open ? 180 : 0 }}
+                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                        >
+                            <IconChevronDown size={15} color="var(--mantine-color-dimmed)" />
+                        </motion.div>
                     </Group>
                 </Group>
             </Box>

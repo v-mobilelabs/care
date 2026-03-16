@@ -17,7 +17,6 @@ export {
   FONT_SIZES as fontSizes,
   LINE_HEIGHTS as lineHeights,
   RADIUS as radius,
-  SHADOWS as shadows,
   SPACING as spacing,
 } from "@/ui/theme";
 

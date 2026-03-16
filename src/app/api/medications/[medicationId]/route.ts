@@ -9,14 +9,11 @@ import {
 export const PATCH = WithContext<{ medicationId: string }>(
   async ({ user, req, dependentId }, { medicationId }) => {
     const body = (await req.json()) as unknown;
-    const input = UpdateMedicationUseCase.validate({
+    const medication = await new UpdateMedicationUseCase(dependentId).execute({
       ...(body as object),
       userId: user.uid,
       medicationId,
     });
-    const medication = await new UpdateMedicationUseCase(dependentId).execute(
-      input,
-    );
     return NextResponse.json(medication);
   },
 );
@@ -24,11 +21,10 @@ export const PATCH = WithContext<{ medicationId: string }>(
 // DELETE /api/medications/[medicationId]
 export const DELETE = WithContext<{ medicationId: string }>(
   async ({ user, dependentId }, { medicationId }) => {
-    const input = DeleteMedicationUseCase.validate({
+    await new DeleteMedicationUseCase(dependentId).execute({
       userId: user.uid,
       medicationId,
     });
-    await new DeleteMedicationUseCase(dependentId).execute(input);
     return NextResponse.json({ ok: true });
   },
 );

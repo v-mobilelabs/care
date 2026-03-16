@@ -1,20 +1,47 @@
 "use client";
-import { ActionIcon, Indicator, Tooltip } from "@mantine/core";
+import { ActionIcon, Indicator, Loader, Tooltip } from "@mantine/core";
 import { IconBell } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { useNotificationCenter } from "../providers/notification-provider";
+
+function BellIcon() {
+    const { pending } = useLinkStatus();
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            {pending ? (
+                <motion.div
+                    key="loader"
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.6, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                    <Loader size={18} />
+                </motion.div>
+            ) : (
+                <motion.div
+                    key="bell"
+                    initial={{ rotate: -30, scale: 0.6, opacity: 0 }}
+                    animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                    exit={{ rotate: 30, scale: 0.6, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                    <IconBell size={20} stroke={1.5} />
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+}
 
 /**
  * Header icon button for notifications.
- * Works as a toggle: first click shows toasts, second click dismisses them.
  */
 export function NotificationsButton() {
     const { unreadCount } = useNotificationCenter();
-    const router = useRouter();
-
-    function handleClick() {
-        router.push("/notifications");
-    }
 
     return (
         <Tooltip label="Notifications" position="bottom" withArrow>
@@ -29,13 +56,14 @@ export function NotificationsButton() {
                 offset={4}
             >
                 <ActionIcon
+                    component={Link}
+                    href="/notifications"
                     variant={"light"}
                     size="lg"
                     radius="xl"
-                    onClick={handleClick}
                     aria-label="Notifications"
                 >
-                    <IconBell size={20} stroke={1.5} />
+                    <BellIcon />
                 </ActionIcon>
             </Indicator>
         </Tooltip>

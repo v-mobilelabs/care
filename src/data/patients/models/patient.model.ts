@@ -29,9 +29,26 @@ export interface PatientDocument {
   activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
   /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
   foodPreferences?: string[];
+  /** ABO/Rh blood group e.g. "A+", "O-" */
+  bloodGroup?: string;
   /** Set once when the user accepts the informed-consent terms. */
   consentedAt?: Timestamp;
   updatedAt: Timestamp;
+}
+
+// ── Serialized DTO (client-safe, no Firestore classes) ──────────────────────
+
+export type PatientDto = Omit<PatientDocument, "consentedAt" | "updatedAt"> & {
+  consentedAt?: string;
+  updatedAt: string;
+};
+
+export function toPatientDto(doc: PatientDocument): PatientDto {
+  return {
+    ...doc,
+    consentedAt: doc.consentedAt?.toDate().toISOString(),
+    updatedAt: doc.updatedAt.toDate().toISOString(),
+  };
 }
 
 // ── Input type ────────────────────────────────────────────────────────────────
@@ -59,5 +76,6 @@ export const UpsertPatientSchema = z.object({
     .enum(["sedentary", "light", "moderate", "active", "very_active"])
     .optional(),
   foodPreferences: z.array(z.string().min(1)).optional(),
+  bloodGroup: z.string().optional(),
   consentedAt: z.iso.datetime().optional(),
 });

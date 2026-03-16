@@ -145,13 +145,7 @@ type Props = Readonly<{ patientId: string }>;
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+import { DateText } from "@/ui/DateText";
 
 function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
@@ -444,7 +438,7 @@ function ConditionCard({ condition }: Readonly<{ condition: ConditionRecord }>) 
                             {condition.icd10 && (
                                 <Text size="xs" c="dimmed" ff="monospace">ICD-10: {condition.icd10}</Text>
                             )}
-                            <Text size="xs" c="dimmed">{formatDate(condition.createdAt)}</Text>
+                            <Text size="xs" c="dimmed"><DateText date={condition.createdAt} /></Text>
                         </Group>
                     </Box>
                 </Group>
@@ -505,7 +499,7 @@ function SoapNoteCard({ note }: Readonly<{ note: SoapNoteRecord }>) {
                             <Badge size="xs" variant="light" color={RISK_COLOR[note.riskLevel]} radius="xl">
                                 {note.riskLevel} risk
                             </Badge>
-                            <Text size="xs" c="dimmed">{formatDate(note.createdAt)}</Text>
+                            <Text size="xs" c="dimmed"><DateText date={note.createdAt} /></Text>
                         </Group>
                     </Box>
                 </Group>
@@ -587,7 +581,7 @@ function MedicationCard({ med }: Readonly<{ med: MedicationRecord }>) {
                         {med.condition && (
                             <Badge size="xs" variant="outline" color="gray" radius="xl">{med.condition}</Badge>
                         )}
-                        <Text size="xs" c="dimmed">{formatDate(med.createdAt)}</Text>
+                        <Text size="xs" c="dimmed"><DateText date={med.createdAt} /></Text>
                     </Group>
                     {med.instructions && (
                         <Text size="xs" c="dimmed" mt={4} lh={1.5}>{med.instructions}</Text>
@@ -654,7 +648,7 @@ function BloodTestCard({ record }: Readonly<{ record: BloodTestRecord }>) {
                     </Text>
                 </Group>
                 <Group gap="xs" mt={6} wrap="wrap">
-                    {record.testDate && <Text size="xs" c="dimmed">{formatDate(record.testDate)}</Text>}
+                    {record.testDate && <Text size="xs" c="dimmed"><DateText date={record.testDate} /></Text>}
                     {record.labName && <Text size="xs" c="dimmed">&middot; {record.labName}</Text>}
                     {record.orderedBy && <Text size="xs" c="dimmed">&middot; Dr. {record.orderedBy}</Text>}
                 </Group>

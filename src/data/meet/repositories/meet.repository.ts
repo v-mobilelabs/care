@@ -75,19 +75,6 @@ export const meetRepository = {
       });
   },
 
-  // ── Save recording metadata (called after upload completes) ───────────────
-
-  async saveRecording(
-    requestId: string,
-    data: { recordingUrl: string; durationSeconds: number },
-  ): Promise<void> {
-    await db.collection(COL).doc(requestId).update({
-      recordingUrl: data.recordingUrl,
-      durationSeconds: data.durationSeconds,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-  },
-
   // ── List pending for doctor ───────────────────────────────────────────────
 
   async listPendingForDoctor(doctorId: string): Promise<CallRequestDto[]> {

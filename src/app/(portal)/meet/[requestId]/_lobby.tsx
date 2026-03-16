@@ -28,6 +28,7 @@ import {
     IconVideoOff,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { getInitials } from "@/lib/get-initials";
 
 export interface LobbyResult {
@@ -380,11 +381,18 @@ export function PreJoinLobby({
                                             }}
                                         />
                                     )}
-                                    {micOn ? (
-                                        <IconMicrophone size={20} />
-                                    ) : (
-                                        <IconMicrophoneOff size={20} />
-                                    )}
+                                    <AnimatePresence mode="wait" initial={false}>
+                                        <motion.div
+                                            key={micOn ? "mic-on" : "mic-off"}
+                                            initial={{ rotate: -45, opacity: 0, scale: 0.5 }}
+                                            animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                                            exit={{ rotate: 45, opacity: 0, scale: 0.5 }}
+                                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                                            style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                        >
+                                            {micOn ? <IconMicrophone size={20} /> : <IconMicrophoneOff size={20} />}
+                                        </motion.div>
+                                    </AnimatePresence>
                                 </ActionIcon>
                             </Tooltip>
                             <Tooltip
@@ -407,11 +415,18 @@ export function PreJoinLobby({
                                             : "var(--mantine-color-red-6)",
                                     }}
                                 >
-                                    {cameraOn ? (
-                                        <IconVideo size={20} />
-                                    ) : (
-                                        <IconVideoOff size={20} />
-                                    )}
+                                    <AnimatePresence mode="wait" initial={false}>
+                                        <motion.div
+                                            key={cameraOn ? "cam-on" : "cam-off"}
+                                            initial={{ rotate: -45, opacity: 0, scale: 0.5 }}
+                                            animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                                            exit={{ rotate: 45, opacity: 0, scale: 0.5 }}
+                                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                                            style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                        >
+                                            {cameraOn ? <IconVideo size={20} /> : <IconVideoOff size={20} />}
+                                        </motion.div>
+                                    </AnimatePresence>
                                 </ActionIcon>
                             </Tooltip>
                         </Group>

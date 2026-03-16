@@ -1,16 +1,33 @@
-import { vitalService, type VitalService } from "../service/vital.service";
+import { vitalRepository } from "../repositories/vital.repository";
 import {
   CreateVitalSchema,
   type CreateVitalInput,
   type VitalDto,
 } from "../models/vital.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({
+  type: "vital",
+  contentFields: [
+    "systolicBp",
+    "diastolicBp",
+    "restingHr",
+    "temperatureC",
+    "spo2",
+    "respiratoryRate",
+    "glucoseMmol",
+    "waistCm",
+    "hipCm",
+    "neckCm",
+    "note",
+    "createdAt",
+  ],
+  sourceIdField: "id",
+  metadataFields: ["createdAt"],
+})
 export class CreateVitalUseCase extends UseCase<CreateVitalInput, VitalDto> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: VitalService = vitalService,
-  ) {
+  constructor(private readonly dependentId?: string) {
     super();
   }
 
@@ -19,6 +36,6 @@ export class CreateVitalUseCase extends UseCase<CreateVitalInput, VitalDto> {
   }
 
   protected async run(input: CreateVitalInput): Promise<VitalDto> {
-    return this.service.create(input, this.dependentId);
+    return vitalRepository.create(input.userId, input, this.dependentId);
   }
 }

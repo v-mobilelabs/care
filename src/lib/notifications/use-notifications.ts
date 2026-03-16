@@ -6,20 +6,23 @@ import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 import type { AppNotification } from "./types";
 
 function parseNotifications(
-  data: Record<string, any> | null,
+  data: Record<string, unknown> | null,
 ): AppNotification[] {
   if (!data) return [];
 
   return Object.entries(data)
-    .map(([key, val]) => ({
-      id: key,
-      title: (val.title as string) ?? "",
-      message: (val.message as string) ?? "",
-      type: (val.type as AppNotification["type"]) ?? "info",
-      read: (val.read as boolean) ?? false,
-      createdAt: (val.createdAt as number) ?? 0,
-      link: (val.link as string) ?? undefined,
-    }))
+    .map(([key, val]) => {
+      const v = val as Record<string, unknown>;
+      return {
+        id: key,
+        title: (v.title as string) ?? "",
+        message: (v.message as string) ?? "",
+        type: (v.type as AppNotification["type"]) ?? "info",
+        read: (v.read as boolean) ?? false,
+        createdAt: (v.createdAt as number) ?? 0,
+        link: (v.link as string) ?? undefined,
+      };
+    })
     .sort((a, b) => b.createdAt - a.createdAt); // Newest first
 }
 
@@ -39,7 +42,7 @@ export function useNotifications(uid?: string) {
     loadingMore,
     hasMore,
     loadMore: loadMoreFn,
-  } = useRTDBListener<Record<string, any>>(path, {
+  } = useRTDBListener<Record<string, unknown>>(path, {
     pageSize: 5,
     orderBy: { type: "key" },
     orderDirection: "desc", // Newest first

@@ -1,4 +1,4 @@
-import { vitalService, type VitalService } from "../service/vital.service";
+import { vitalRepository } from "../repositories/vital.repository";
 import {
   VitalRefSchema,
   type VitalRefInput,
@@ -7,10 +7,7 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class GetVitalUseCase extends UseCase<VitalRefInput, VitalDto | null> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: VitalService = vitalService,
-  ) {
+  constructor(private readonly dependentId?: string) {
     super();
   }
 
@@ -19,6 +16,10 @@ export class GetVitalUseCase extends UseCase<VitalRefInput, VitalDto | null> {
   }
 
   protected async run(input: VitalRefInput): Promise<VitalDto | null> {
-    return this.service.getById(input, this.dependentId);
+    return vitalRepository.findById(
+      input.userId,
+      input.vitalId,
+      this.dependentId,
+    );
   }
 }

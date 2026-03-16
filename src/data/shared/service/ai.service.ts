@@ -1,19 +1,67 @@
 // AI Service — server-only. Never import in client components.
-import { google } from "@ai-sdk/google";
-import { generateText, streamText, Output } from "ai";
-import type { LanguageModel, ModelMessage, ToolSet } from "ai";
+import { google, GoogleLanguageModelOptions } from "@ai-sdk/google";
+import {
+  generateText,
+  streamText,
+  Output,
+  stepCountIs,
+  wrapLanguageModel,
+  smoothStream,
+} from "ai";
+import type {
+  LanguageModel,
+  LanguageModelMiddleware,
+  ModelMessage,
+  ToolSet,
+} from "ai";
 import type { z } from "zod";
-import { ConsumeCreditUseCase } from "@/data/credits";
+import { UsageService } from "@/data/usage/service/lazy-reset-usage.service";
+import { UsageRepository } from "@/data/usage/repositories/usage.repository";
+import { CreditsExhaustedError } from "@/lib/errors";
+import { ragContextBuilder } from "./rag/rag-context-builder.service";
 
-// ── Service ───────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Token usage returned by AI SDK */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/** RAG context options for AI service */
+export interface RAGOptions {
+  /** Profile ID for RAG search */
+  profileId: string;
+  /** Optional dependent ID for RAG search */
+  dependentId?: string;
+  /** User query for semantic RAG search */
+  userQuery: string;
+  /** Enable/disable RAG (default: true) */
+  enabled?: boolean;
+  /** Max chunks to retrieve in initial search (default: 30 with reranking, 10 without) */
+  limit?: number;
+  /** Minimum similarity score for initial search (default: 0.4) */
+  minScore?: number;
+  /** Enable LLM-based reranking for better relevance (default: true) */
+  rerank?: boolean;
+  /** Number of results to return after reranking (default: 10) */
+  rerankTopK?: number;
+  /** Minimum rerank score threshold 0-1 for AWS Bedrock (default: 0.5) */
+  rerankMinScore?: number;
+  /** Minimum score as a ratio of the top result's score (0-1) */
+  rerankMinScoreRatio?: number;
+}
 
 /**
  * Central AI service — owns model instances, streaming, and structured
  * extraction (with automatic credit gating).
  *
- * Both `stream()` and `extractObject()` consume one credit per call.
- * If the daily limit is reached they throw `{ code: "CREDITS_EXHAUSTED" }`
- * so API routes can return a 402.
+ * All paths to the LLM are credit-gated:
+ * - `stream()` and `extractObject()` check credits before calling the model.
+ * - `forUser(userId)` returns wrapped models for direct `generateText` /
+ *   `generateObject` calls — the middleware throws `CreditsExhaustedError`
+ *   when the daily limit is reached so API routes can return a 402.
  *
  * Usage:
  * ```ts
@@ -24,57 +72,233 @@ import { ConsumeCreditUseCase } from "@/data/credits";
  * // Credit-gated structured extraction:
  * const data = await aiService.extractObject(MySchema, messages, { userId });
  *
- * // Raw model access for one-off calls (e.g. with Google Search grounding):
- * const { text } = await generateText({ model: aiService.fast, ... });
+ * // Direct model use (e.g. with Google Search grounding) — must use forUser():
+ * const { chat, fast } = aiService.forUser(userId);
+ * const { text } = await generateText({ model: fast, ... });
  * ```
  */
 export class AIService {
-  /** Full-capability model — for chat, reasoning, and multimodal extraction. */
-  readonly chat: LanguageModel = google("gemini-2.5-pro");
+  /** @internal Raw pro model — use forUser().chat for credit-gated access. */
+  private readonly _chat = google("gemini-3.1-pro-preview");
 
-  /** Fast / grounding model — for quick lookups and search-grounded tasks. */
-  readonly fast: LanguageModel = google("gemini-2.5-flash");
+  /** @internal Raw fast model — use forUser().fast for credit-gated access. */
+  private readonly _fast = google("gemini-3-flash-preview");
 
-  constructor(
-    private readonly consumeCredit: ConsumeCreditUseCase = new ConsumeCreditUseCase(),
-  ) {}
+  /** @internal Lite model for ultra-fast classification tasks (gateway routing). */
+  private readonly _lite = google("gemini-2.5-flash-lite");
+
+  private readonly usageService = new UsageService(new UsageRepository());
+
+  constructor() {}
 
   /**
-   * Stream a text completion, defaulting to the `chat` model.
-   * Consumes one credit for `userId` before the model is invoked.
-   * Throws `{ code: "CREDITS_EXHAUSTED" }` if the daily limit is reached.
+   * Returns credit-gated model instances bound to `userId`.
+   * Every call to `.chat` or `.fast` consumes one credit and throws
+   * `CreditsExhaustedError` if the daily limit is reached.
    *
-   * The generic `TOOLS` parameter is forwarded so `toUIMessageStreamResponse`
-   * retains full type information on the returned `StreamTextResult`.
+   * Use these for direct `generateText` / `generateObject` calls anywhere
+   * in the codebase that doesn't go through `stream()` or `extractObject()`.
    */
-  async stream<TOOLS extends ToolSet = ToolSet>(
-    options: { userId: string; model?: LanguageModel } & Omit<
-      Parameters<typeof streamText<TOOLS>>[0],
-      "model"
-    >,
-  ) {
-    // ── Credit check ─────────────────────────────────────────────────────────
-    const credit = await this.consumeCredit.execute(
-      ConsumeCreditUseCase.validate({ userId: options.userId }),
-    );
-    if (!credit.ok) {
-      throw Object.assign(new Error("Credits exhausted"), {
-        code: "CREDITS_EXHAUSTED",
-        remaining: credit.remaining,
+  forUser(userId: string): { chat: LanguageModel; fast: LanguageModel } {
+    const gate = async () => {
+      const usage = await this.usageService.getUsage(userId);
+      if (usage.credits <= 0) throw new CreditsExhaustedError(0);
+      await this.usageService.updateUsage(userId, {
+        credits: usage.credits - 1,
       });
+    };
+    const creditMiddleware: LanguageModelMiddleware = {
+      specificationVersion: "v3",
+      wrapGenerate: async ({ doGenerate }) => {
+        await gate();
+        return doGenerate();
+      },
+      wrapStream: async ({ doStream }) => {
+        await gate();
+        return doStream();
+      },
+    };
+    const wrap = (base: typeof this._chat) =>
+      wrapLanguageModel({ model: base, middleware: creditMiddleware });
+    return { chat: wrap(this._chat), fast: wrap(this._fast) };
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────────────────
+
+  private async fetchRagContext(
+    userId: string,
+    ragOptions: RAGOptions,
+  ): Promise<string> {
+    const ragStart = performance.now();
+    const rerank = ragOptions.rerank ?? true;
+    console.log(
+      `[AIService] RAG enabled (reranking: ${rerank}), fetching context...`,
+    );
+
+    try {
+      const ragResult = await Promise.race([
+        ragContextBuilder.buildContext({
+          userId,
+          profileId: ragOptions.profileId,
+          dependentId: ragOptions.dependentId,
+          query: ragOptions.userQuery,
+          limit: ragOptions.limit,
+          minScore: ragOptions.minScore,
+          rerank: ragOptions.rerank,
+          rerankTopK: ragOptions.rerankTopK,
+          rerankMinScore: ragOptions.rerankMinScore,
+          rerankMinScoreRatio: ragOptions.rerankMinScoreRatio,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+
+      if (!ragResult) {
+        console.warn(
+          "[AIService] RAG timed out (3s), continuing without context",
+        );
+        return "";
+      }
+      console.log(
+        `[AIService] RAG context retrieved: ${ragResult.count} chunks, ${(performance.now() - ragStart).toFixed(0)}ms`,
+      );
+      return ragResult.context;
+    } catch (err) {
+      console.error("[AIService] RAG failed:", err);
+      return "";
+    }
+  }
+
+  private buildSystemMessages(
+    opts: {
+      cachedSystemPrompt?: string;
+      dynamicSystemPrompt?: string;
+      system?: string;
+    },
+    ragContext: string,
+  ):
+    | Array<{
+        role: "system";
+        content: string;
+        experimental_cacheControl?: { type: "ephemeral" };
+      }>
+    | string
+    | undefined {
+    if (!opts.cachedSystemPrompt && !opts.dynamicSystemPrompt && !ragContext) {
+      return opts.system;
     }
 
-    // ── Stream ───────────────────────────────────────────────────────────────
+    const messages: Array<{
+      role: "system";
+      content: string;
+      experimental_cacheControl?: { type: "ephemeral" };
+    }> = [];
+
+    if (opts.cachedSystemPrompt) {
+      messages.push({
+        role: "system",
+        content: opts.cachedSystemPrompt,
+        experimental_cacheControl: { type: "ephemeral" },
+      });
+      console.log(
+        "[AIService] Using cached system prompt:",
+        opts.cachedSystemPrompt.length,
+        "chars",
+      );
+    }
+
+    const combinedDynamic = [opts.dynamicSystemPrompt, ragContext]
+      .filter(Boolean)
+      .join("\n\n");
+    if (combinedDynamic) {
+      messages.push({ role: "system", content: combinedDynamic });
+      console.log(
+        "[AIService] Dynamic prompt:",
+        combinedDynamic.length,
+        "chars",
+        ragContext
+          ? `(includes ${ragContext.split("\n").length} lines of RAG context)`
+          : "",
+      );
+    }
+
+    return messages;
+  }
+
+  // ── Public API ───────────────────────────────────────────────────────────────
+
+  /*
+   * RAG Integration:
+   * - When `ragOptions` is provided, automatically fetches semantic context
+   * - RAG context is injected into the dynamic system prompt
+   * - Gracefully handles RAG failures with 3s timeout
+   */
+  async stream<TOOLS extends ToolSet = ToolSet>(
+    options: {
+      userId: string;
+      model?: LanguageModel;
+      // For backward compatibility
+      system?: string;
+      // NEW: For context caching
+      cachedSystemPrompt?: string;
+      dynamicSystemPrompt?: string;
+      /** RAG options for semantic context retrieval */
+      ragOptions?: RAGOptions;
+      /** Forward request AbortSignal so client disconnect cancels the stream */
+      abortSignal?: AbortSignal;
+    } & Omit<
+      Parameters<typeof streamText<TOOLS>>[0],
+      "model" | "system" | "abortSignal"
+    >,
+  ) {
+    const ragContext =
+      options.ragOptions && options.ragOptions.enabled !== false
+        ? await this.fetchRagContext(options.userId, options.ragOptions)
+        : "";
+
+    const systemMessages = this.buildSystemMessages(options, ragContext);
+
+    // Credit check — usage-based system
+    const usage = await this.usageService.getUsage(options.userId);
+    if (usage.credits <= 0) throw new CreditsExhaustedError(0);
+    await this.usageService.updateUsage(options.userId, {
+      credits: usage.credits - 1,
+    });
+
+    // Only apply high-level thinking to the pro (chat) model.
+    // Flash is used for onboarding where speed matters over reasoning depth.
+    const resolvedModel = options.model ?? this._chat;
+    const isProModel = resolvedModel === this._chat;
+
+    // Stream with AI SDK — maxSteps enables server-side tool loop so the model
+    // can chain multiple tool calls (reason → call → result → reason → ...) in
+    // a single HTTP request, eliminating client round-trips between steps.
     return streamText<TOOLS>({
       ...(options as Parameters<typeof streamText<TOOLS>>[0]),
-      model: options.model ?? this.chat,
+      model: resolvedModel,
+      system: systemMessages,
+      stopWhen: stepCountIs(10),
+      abortSignal: options.abortSignal,
+      experimental_transform: smoothStream(),
+      onError({ error }) {
+        console.error("[AIService] Stream error:", error);
+      },
+      providerOptions: isProModel
+        ? {
+            google: {
+              thinkingConfig: {
+                thinkingLevel: "high",
+                includeThoughts: true,
+              },
+            } satisfies GoogleLanguageModelOptions,
+          }
+        : undefined,
     });
   }
 
   /**
    * Extract a typed object from a conversation using structured output.
    * Consumes one credit for `userId` before calling the model.
-   * Throws `{ code: "CREDITS_EXHAUSTED" }` if the daily limit is reached.
+   * Throws `CreditsExhaustedError` if the daily limit is reached.
    *
    * @param schema  - Zod schema describing the expected output shape.
    * @param messages - Model messages (can include image / file parts).
@@ -84,22 +308,35 @@ export class AIService {
   async extractObject<T extends z.ZodTypeAny>(
     schema: T,
     messages: ModelMessage[],
-    opts: { userId: string; model?: LanguageModel },
+    opts: {
+      userId: string;
+      /** Use the fast (Flash) model instead of the default pro model. */
+      useFast?: boolean;
+      /** Use the lite model for ultra-fast classification. */
+      useLite?: boolean;
+      /** Skip credit consumption (e.g. gateway routing is free). */
+      skipCredit?: boolean;
+    },
   ): Promise<z.infer<T>> {
-    // ── 1. Credit check ───────────────────────────────────────────────────────
-    const credit = await this.consumeCredit.execute(
-      ConsumeCreditUseCase.validate({ userId: opts.userId }),
-    );
-    if (!credit.ok) {
-      throw Object.assign(new Error("Credits exhausted"), {
-        code: "CREDITS_EXHAUSTED",
-        remaining: credit.remaining,
+    // 1. Credit check (skippable for meta-operations like gateway routing)
+    if (!opts.skipCredit) {
+      const usage = await this.usageService.getUsage(opts.userId);
+      if (usage.credits <= 0) {
+        throw new CreditsExhaustedError(0);
+      }
+      await this.usageService.updateUsage(opts.userId, {
+        credits: usage.credits - 1,
       });
     }
 
-    // ── 2. Run extraction ─────────────────────────────────────────────────────
+    // 2. Run extraction — lite model bypasses credit-gated wrapper
+    let model;
+    if (opts.useLite) model = this._lite;
+    else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
+    else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
+
     const result = await generateText({
-      model: opts.model ?? this.chat,
+      model,
       output: Output.object({ schema }),
       messages,
     });

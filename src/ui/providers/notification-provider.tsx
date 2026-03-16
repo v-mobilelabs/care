@@ -5,6 +5,7 @@ import { useAuth } from "@/ui/providers/auth-provider";
 import { useNotifications } from "@/lib/notifications/use-notifications";
 import type { AppNotification } from "@/lib/notifications/types";
 import { showNotification } from "@mantine/notifications";
+import { showBrowserNotification } from "@/lib/notifications/browser-notifications";
 
 interface NotificationContextValue {
     /** All loaded notifications (newest first). */
@@ -68,6 +69,16 @@ export function NotificationProvider({
                 showNotification({
                     title: n.title,
                     message: n.message,
+                    onClick: () => {
+                        markAsRead(n.id).catch(() => { });
+                        if (n.link) router.push(n.link);
+                    },
+                });
+
+                // Also fire a browser notification when the tab is backgrounded
+                showBrowserNotification(n.title, {
+                    body: n.message,
+                    tag: "notif-" + n.id,
                     onClick: () => {
                         markAsRead(n.id).catch(() => { });
                         if (n.link) router.push(n.link);

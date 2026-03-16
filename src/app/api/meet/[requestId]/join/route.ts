@@ -8,6 +8,7 @@ export const GET = WithContext(
     const joinInfo = await new GetMeetingJoinInfoUseCase().execute({
       requestId,
       userId: user.uid,
+      userKind: user.kind,
     });
 
     return NextResponse.json(joinInfo);

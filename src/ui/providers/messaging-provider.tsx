@@ -1,5 +1,7 @@
 "use client";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useAuth } from "@/ui/providers/auth-provider";
+import { useMessageSound } from "@/lib/messaging/use-message-sound";
 
 interface MessagingContextValue {
     /** Whether the messaging drawer is open. */
@@ -35,7 +37,11 @@ export function useMessaging() {
 export function MessagingProvider({
     children,
 }: Readonly<{ children: ReactNode }>) {
+    const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
+
+    // Play a notification sound when new messages arrive while the drawer is closed.
+    useMessageSound(user?.uid ?? null, isOpen);
     const [activeConversationId, setActiveConversationId] = useState<
         string | null
     >(null);
@@ -62,18 +68,15 @@ export function MessagingProvider({
         setIsOpen(true);
     }
 
-    const value = useMemo(
-        () => ({
-            isOpen,
-            open,
-            close,
-            toggle,
-            activeConversationId,
-            setActiveConversationId,
-            openConversation,
-        }),
-        [isOpen, activeConversationId]
-    );
+    const value = useMemo(() => ({
+        isOpen,
+        open,
+        close,
+        toggle,
+        activeConversationId,
+        setActiveConversationId,
+        openConversation,
+    }), [isOpen, activeConversationId]);
 
     return (
         <MessagingContext.Provider value={value}>

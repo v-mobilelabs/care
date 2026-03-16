@@ -7,7 +7,9 @@ import {
   type AssessmentRefInput,
 } from "../models/assessment.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({ sourceIdField: "assessmentId", remove: true })
 export class DeleteAssessmentUseCase extends UseCase<AssessmentRefInput, void> {
   constructor(
     private readonly dependentId?: string,
@@ -21,6 +23,6 @@ export class DeleteAssessmentUseCase extends UseCase<AssessmentRefInput, void> {
   }
 
   protected async run(input: AssessmentRefInput): Promise<void> {
-    return this.service.delete(input, this.dependentId);
+    await this.service.delete(input, this.dependentId);
   }
 }

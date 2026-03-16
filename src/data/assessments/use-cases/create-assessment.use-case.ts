@@ -8,7 +8,21 @@ import {
   type AssessmentDto,
 } from "../models/assessment.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({
+  type: "assessment",
+  contentFields: [
+    "title",
+    "condition",
+    "riskLevel",
+    "summary",
+    "qa",
+    "createdAt",
+  ],
+  sourceIdField: "id",
+  metadataFields: ["condition", "createdAt"],
+})
 export class CreateAssessmentUseCase extends UseCase<
   CreateAssessmentInput,
   AssessmentDto

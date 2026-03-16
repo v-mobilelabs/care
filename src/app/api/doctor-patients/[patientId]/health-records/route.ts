@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { doctorPatientRepository } from "@/data/doctor-patients";
+import { GetDoctorPatientUseCase } from "@/data/doctor-patients";
 import { ListConditionsUseCase } from "@/data/conditions";
 import { ListSoapNotesUseCase } from "@/data/soap-notes";
 import { ListMedicationsUseCase } from "@/data/medications";
 import { ListAssessmentsUseCase } from "@/data/assessments";
 import { ListBloodTestsUseCase } from "@/data/blood-tests";
-import { profileRepository } from "@/data/profile";
-import { patientRepository } from "@/data/patients";
+import { GetProfileUseCase } from "@/data/profile";
+import { GetPatientUseCase } from "@/data/patients";
 
 // GET /api/doctor-patients/[patientId]/health-records
 // Returns the full health record portfolio for a patient the doctor
@@ -18,7 +18,9 @@ export const GET = WithContext(
     const { patientId } = params;
 
     // ── Verify accepted consent ───────────────────────────────────────────
-    const link = await doctorPatientRepository.get(user.uid, patientId);
+    const link = await new GetDoctorPatientUseCase().execute(
+      GetDoctorPatientUseCase.validate({ doctorId: user.uid, patientId }),
+    );
     if (!link || link.status !== "accepted") {
       throw ApiError.forbidden(
         "You do not have consent to view this patient\u2019s health records.",
@@ -35,23 +37,17 @@ export const GET = WithContext(
       profile,
       patient,
     ] = await Promise.all([
-      new ListConditionsUseCase().execute(
-        ListConditionsUseCase.validate({ userId: patientId }),
+      new ListConditionsUseCase().execute({ userId: patientId }),
+      new ListSoapNotesUseCase().execute({ userId: patientId }),
+      new ListMedicationsUseCase().execute({ userId: patientId }),
+      new ListAssessmentsUseCase().execute({ userId: patientId }),
+      new ListBloodTestsUseCase().execute({ userId: patientId }),
+      new GetProfileUseCase().execute(
+        GetProfileUseCase.validate({ userId: patientId }),
       ),
-      new ListSoapNotesUseCase().execute(
-        ListSoapNotesUseCase.validate({ userId: patientId }),
+      new GetPatientUseCase().execute(
+        GetPatientUseCase.validate({ userId: patientId }),
       ),
-      new ListMedicationsUseCase().execute(
-        ListMedicationsUseCase.validate({ userId: patientId }),
-      ),
-      new ListAssessmentsUseCase().execute(
-        ListAssessmentsUseCase.validate({ userId: patientId }),
-      ),
-      new ListBloodTestsUseCase().execute(
-        ListBloodTestsUseCase.validate({ userId: patientId }),
-      ),
-      profileRepository.get(patientId),
-      patientRepository.get(patientId),
     ]);
 
     return NextResponse.json({

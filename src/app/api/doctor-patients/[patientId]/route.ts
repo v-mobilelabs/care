@@ -6,11 +6,10 @@ import { RevokePatientUseCase } from "@/data/doctor-patients";
 export const DELETE = WithContext(
   { kind: "doctor" },
   async ({ user }, params: { patientId: string }) => {
-    const input = RevokePatientUseCase.validate({
+    await new RevokePatientUseCase().execute({
       doctorId: user.uid,
       patientId: params.patientId,
     });
-    await new RevokePatientUseCase().execute(input);
     return NextResponse.json({ success: true });
   },
 );

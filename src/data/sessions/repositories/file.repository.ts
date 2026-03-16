@@ -1,8 +1,9 @@
 import {
   Timestamp,
+  type Query,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db, bucket } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import type {
   FileDocument,
@@ -11,36 +12,21 @@ import type {
 } from "../models/file.model";
 import { toFileDto, USER_STORAGE_LIMIT_BYTES } from "../models/file.model";
 
-const firebaseService = FirebaseService.getInstance();
-const db = firebaseService.getDb();
-const bucket = firebaseService.getBucket();
-
 // ── Path helpers ─────────────────────────────────────────────────────────────
+// Flat collection: profiles/{profileId}/files/{fileId}
 
-const filesCol = (userId: string, profileId: string, sessionId: string) =>
-  db.collection(`profiles/${profileId}/sessions/${sessionId}/files`);
+const filesCol = (profileId: string) =>
+  db.collection(`profiles/${profileId}/files`);
 
-const fileDoc = (
-  userId: string,
-  profileId: string,
-  sessionId: string,
-  fileId: string,
-) => filesCol(userId, profileId, sessionId).doc(fileId);
+const fileDoc = (profileId: string, fileId: string) =>
+  filesCol(profileId).doc(fileId);
 
 /** GCS object path for a file */
-const storagePath = (
-  userId: string,
-  profileId: string,
-  sessionId: string,
-  fileId: string,
-  name: string,
-) => `profiles/${profileId}/sessions/${sessionId}/files/${fileId}/${name}`;
+const gcStoragePath = (profileId: string, fileId: string, name: string) =>
+  `profiles/${profileId}/files/${fileId}/${name}`;
 
 /** Signed URL expiry — 7 days (GCS maximum for service-account-signed URLs). */
 const SIGNED_URL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Refresh URLs that expire within this window (1 day). */
-const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -52,21 +38,15 @@ export const fileRepository = {
   async upload(
     userId: string,
     profileId: string,
-    sessionId: string,
     data: Pick<FileDocument, "name" | "mimeType" | "size"> & {
       buffer: Buffer;
+      sessionId?: string;
     },
   ): Promise<FileDto> {
     // 1. Reserve a Firestore doc ID so we can embed it in the storage path.
-    const ref = filesCol(userId, profileId, sessionId).doc();
+    const ref = filesCol(profileId).doc();
     const fileId = ref.id;
-    const gcsPath = storagePath(
-      userId,
-      profileId,
-      sessionId,
-      fileId,
-      data.name,
-    );
+    const gcsPath = gcStoragePath(profileId, fileId, data.name);
 
     // 2. Upload to Cloud Storage.
     const gcsFile = bucket.file(gcsPath);
@@ -84,7 +64,7 @@ export const fileRepository = {
 
     // 4. Write Firestore metadata.
     const doc: FileDocument = {
-      sessionId,
+      sessionId: data.sessionId,
       userId,
       name: data.name,
       mimeType: data.mimeType,
@@ -98,20 +78,19 @@ export const fileRepository = {
     return toFileDto(fileId, doc);
   },
 
+  /** Get file metadata without refreshing the signed URL. */
   async findByIdRaw(
-    userId: string,
     profileId: string,
-    sessionId: string,
     fileId: string,
   ): Promise<FileDto | null> {
-    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
+    const snap = await fileDoc(profileId, fileId).get();
     if (!snap.exists) return null;
     return toFileDto(snap.id, snap.data() as FileDocument);
   },
 
   /**
-   * Find a file by ID for a user across ALL sessions (collectionGroup).
-   * Use this when the sessionId is unknown or may not match the stored value.
+   * Find a file by ID for a user across ALL profiles (collectionGroup).
+   * Use this when the profileId is unknown.
    */
   async findByIdForUser(
     userId: string,
@@ -126,13 +105,9 @@ export const fileRepository = {
     return toFileDto(match.id, match.data() as FileDocument);
   },
 
-  async findById(
-    userId: string,
-    profileId: string,
-    sessionId: string,
-    fileId: string,
-  ): Promise<FileDto | null> {
-    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
+  /** Get file metadata and refresh the signed URL. */
+  async findById(profileId: string, fileId: string): Promise<FileDto | null> {
+    const snap = await fileDoc(profileId, fileId).get();
     if (!snap.exists) return null;
     const doc = snap.data() as FileDocument;
 
@@ -148,20 +123,22 @@ export const fileRepository = {
     return toFileDto(snap.id, { ...doc, downloadUrl: freshUrl, urlExpiresAt });
   },
 
-  async list(
-    userId: string,
-    profileId: string,
-    sessionId: string,
-  ): Promise<FileDto[]> {
-    const snap = await filesCol(userId, profileId, sessionId)
-      .orderBy("createdAt", "asc")
-      .get();
+  /**
+   * List files for a profile. Optionally filter by `sessionId` tag.
+   */
+  async list(profileId: string, sessionId?: string): Promise<FileDto[]> {
+    let query: Query = filesCol(profileId);
+    if (sessionId) {
+      query = query.where("sessionId", "==", sessionId);
+    }
+    query = query.orderBy("createdAt", "asc");
+    const snap = await query.get();
     return snap.docs.map((d: QueryDocumentSnapshot) =>
       toFileDto(d.id, d.data() as FileDocument),
     );
   },
 
-  /** List all files for a user across every session, newest first. */
+  /** List all files for a user across every profile, newest first. */
   async listAllForUser(userId: string): Promise<FileDto[]> {
     const snap = await db
       .collectionGroup("files")
@@ -173,7 +150,7 @@ export const fileRepository = {
     );
   },
 
-  /** Same as listAllForUser but without orderBy — avoids the composite index requirement. */
+  /** Same as listAllForUser but sorts client-side — avoids the composite index requirement. */
   async listAllForUserUnordered(userId: string): Promise<FileDto[]> {
     try {
       const snap = await db
@@ -183,14 +160,11 @@ export const fileRepository = {
       const docs = snap.docs.map((d: QueryDocumentSnapshot) =>
         toFileDto(d.id, d.data() as FileDocument),
       );
-      // Sort client-side so we don't require the composite index to be deployed
       return docs.sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
     } catch (err) {
-      // Firestore single-field collection-group index may not be deployed yet.
-      // Return an empty list so the Files page degrades gracefully instead of 500.
       console.error(
         "[fileRepository.listAllForUserUnordered] query failed:",
         err,
@@ -200,17 +174,11 @@ export const fileRepository = {
   },
 
   /** Delete GCS object and Firestore metadata. */
-  async delete(
-    userId: string,
-    profileId: string,
-    sessionId: string,
-    fileId: string,
-  ): Promise<void> {
-    const snap = await fileDoc(userId, profileId, sessionId, fileId).get();
+  async delete(profileId: string, fileId: string): Promise<void> {
+    const snap = await fileDoc(profileId, fileId).get();
     if (!snap.exists) return;
     const doc = snap.data() as FileDocument;
 
-    // Delete from GCS (ignore "not found" errors).
     try {
       await bucket.file(doc.storagePath).delete();
     } catch {
@@ -221,7 +189,7 @@ export const fileRepository = {
   },
 
   /**
-   * Aggregate total storage used by a user across all sessions.
+   * Aggregate total storage used by a user across all profiles.
    * Returns `usedBytes`, `fileCount`, and the per-user `limitBytes`.
    */
   async getStorageMetrics(userId: string): Promise<StorageMetricsDto> {
@@ -240,8 +208,6 @@ export const fileRepository = {
         limitBytes: USER_STORAGE_LIMIT_BYTES,
       };
     } catch (err) {
-      // Firestore collection-group index may not be deployed yet.
-      // Return zeroed metrics so the API returns 200 instead of 500.
       console.error("[fileRepository.getStorageMetrics] query failed:", err);
       return {
         usedBytes: 0,
@@ -251,26 +217,22 @@ export const fileRepository = {
     }
   },
 
-  /** Patch arbitrary fields on an existing file document (e.g. extractedData). */
+  /** Patch arbitrary fields on an existing file document (e.g. extractedData, label). */
   async patch(
-    userId: string,
     profileId: string,
-    sessionId: string,
     fileId: string,
-    data: Partial<Pick<FileDocument, "extractedData">>,
+    data: Partial<
+      Pick<FileDocument, "extractedData" | "label" | "labelConfidence">
+    >,
   ): Promise<void> {
-    await fileDoc(userId, profileId, sessionId, fileId).update(
-      data as Record<string, unknown>,
-    );
+    await fileDoc(profileId, fileId).update(data as Record<string, unknown>);
   },
 
-  /** Delete all files for a session (used when deleting the session). */
-  async deleteAll(
-    userId: string,
-    profileId: string,
-    sessionId: string,
-  ): Promise<void> {
-    const snap = await filesCol(userId, profileId, sessionId).get();
+  /** Delete all files tagged with a given sessionId (used when deleting a chat session). */
+  async deleteAll(profileId: string, sessionId: string): Promise<void> {
+    const snap = await filesCol(profileId)
+      .where("sessionId", "==", sessionId)
+      .get();
     const batch = db.batch();
 
     await Promise.all(

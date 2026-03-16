@@ -19,6 +19,14 @@ const AddMessageUseCaseSchema = z.object({
   }),
   /** UIMessage parts serialised to JSON string, or a plain text string */
   content: z.string().min(1, { message: "content must not be empty" }),
+  /** Token usage from AI SDK (assistant messages only) */
+  usage: z
+    .object({
+      promptTokens: z.number().int().nonnegative(),
+      completionTokens: z.number().int().nonnegative(),
+      totalTokens: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export type AddMessageUseCaseInput = z.infer<typeof AddMessageUseCaseSchema>;
@@ -43,23 +51,19 @@ export class AddMessageUseCase extends UseCase<
     // ── 1. Resolve session ────────────────────────────────────────────────────
     let sessionId: string;
     if (input.sessionId) {
-      const session = await this.findOrCreateSession.execute(
-        FindOrCreateSessionUseCase.validate({
-          userId: input.userId,
-          profileId: input.profileId,
-          sessionId: input.sessionId,
-          title: input.title,
-        }),
-      );
+      const session = await this.findOrCreateSession.execute({
+        userId: input.userId,
+        profileId: input.profileId,
+        sessionId: input.sessionId,
+        title: input.title,
+      });
       sessionId = session.id;
     } else {
-      const session = await this.createSession.execute(
-        CreateSessionUseCase.validate({
-          userId: input.userId,
-          profileId: input.profileId,
-          title: input.title,
-        }),
-      );
+      const session = await this.createSession.execute({
+        userId: input.userId,
+        profileId: input.profileId,
+        title: input.title,
+      });
       sessionId = session.id;
     }
 
@@ -70,6 +74,7 @@ export class AddMessageUseCase extends UseCase<
       sessionId,
       role: input.role,
       content: input.content,
+      ...(input.usage && { usage: input.usage }),
     });
   }
 }

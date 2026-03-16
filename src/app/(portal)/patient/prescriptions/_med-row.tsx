@@ -2,11 +2,12 @@ import { useState } from "react";
 import { ActionIcon, Badge, Box, Group, Paper, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconPlus } from "@tabler/icons-react";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { useAddMedicationMutation, type ExtractedMedication } from "@/app/(portal)/patient/_query";
+import { useAddMedicationMutation, type PrescriptionMedicationRecord } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 
-export function MedRow({ med }: Readonly<{ med: ExtractedMedication }>) {
+export function MedRow({ med }: Readonly<{ med: PrescriptionMedicationRecord }>) {
     const addMed = useAddMedicationMutation();
     const [added, setAdded] = useState(false);
 
@@ -18,7 +19,7 @@ export function MedRow({ med }: Readonly<{ med: ExtractedMedication }>) {
             frequency: med.frequency,
             duration: med.duration,
             instructions: med.instructions,
-            condition: med.condition,
+            condition: med.indication,
             status: "active",
         });
         setAdded(true);
@@ -43,8 +44,8 @@ export function MedRow({ med }: Readonly<{ med: ExtractedMedication }>) {
                     {med.instructions && (
                         <Text size="xs" c="dimmed" mt={4}>{med.instructions}</Text>
                     )}
-                    {med.condition && (
-                        <Text size="xs" c="dimmed" mt={2}>For: {med.condition}</Text>
+                    {med.indication && (
+                        <Text size="xs" c="dimmed" mt={2}>For: {med.indication}</Text>
                     )}
                 </Box>
                 <Tooltip label={added ? "Already added" : "Add to My Medications"} withArrow>
@@ -57,7 +58,31 @@ export function MedRow({ med }: Readonly<{ med: ExtractedMedication }>) {
                         disabled={added}
                         aria-label="Add to My Medications"
                     >
-                        {added ? <IconCheck size={14} /> : <IconPlus size={14} />}
+                        <AnimatePresence mode="wait" initial={false}>
+                            {added ? (
+                                <motion.div
+                                    key="check"
+                                    initial={{ scale: 0.5, opacity: 0, rotate: -90 }}
+                                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                    exit={{ scale: 0.5, opacity: 0, rotate: 90 }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                    <IconCheck size={14} />
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="plus"
+                                    initial={{ scale: 0.5, opacity: 0, rotate: 90 }}
+                                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                    exit={{ scale: 0.5, opacity: 0, rotate: -90 }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                    <IconPlus size={14} />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </ActionIcon>
                 </Tooltip>
             </Group>

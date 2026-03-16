@@ -8,6 +8,7 @@ import {
     Container,
     Divider,
     Group,
+    Loader,
     Paper,
     ScrollArea,
     Skeleton,
@@ -29,8 +30,8 @@ import {
     IconMessageQuestion,
     IconTrash,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 
 import {
     useAssessmentsQuery,
@@ -106,6 +107,12 @@ function QaItem({ pair, index }: Readonly<{ pair: QaPair; index: number }>) {
 
 // ── Assessment card ───────────────────────────────────────────────────────────
 
+function OpenSessionIcon() {
+    const { pending } = useLinkStatus();
+    if (pending) return <Loader size={12} />;
+    return <IconMessage size={14} />;
+}
+
 function AssessmentCard({
     assessment,
     isPendingDelete,
@@ -116,8 +123,6 @@ function AssessmentCard({
     onDelete: () => void;
 }>) {
     const [expanded, { toggle }] = useDisclosure(false);
-    const router = useRouter();
-    const [, startTransition] = useTransition();
 
     return (
         <Paper
@@ -182,14 +187,11 @@ function AssessmentCard({
                             size={28}
                             variant="subtle"
                             color="gray"
-                            onClick={() =>
-                                startTransition(() =>
-                                    router.push(`/patient/assistant?id=${assessment.sessionId}`)
-                                )
-                            }
+                            component={Link}
+                            href={`/patient/assistant?id=${assessment.sessionId}`}
                             aria-label="Open source session"
                         >
-                            <IconMessage size={14} />
+                            <OpenSessionIcon />
                         </ActionIcon>
                     </Tooltip>
                     <ActionIcon

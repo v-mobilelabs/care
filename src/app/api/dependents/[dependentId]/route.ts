@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
-import { WithContext, ApiError } from "@/lib/api/with-context";
-import { dependentRepository } from "@/data/dependents";
-import { UpdateDependentSchema } from "@/data/dependents";
+import { WithContext } from "@/lib/api/with-context";
+import {
+  UpdateDependentUseCase,
+  DeleteDependentUseCase,
+} from "@/data/dependents";
 
 // PUT /api/dependents/[dependentId] — update a dependent profile
 export const PUT = WithContext<{ dependentId: string }>(
   async ({ user, req }, { dependentId }) => {
     const body = (await req.json()) as unknown;
-    const input = UpdateDependentSchema.parse({
+    const input = UpdateDependentUseCase.validate({
       ...(body as object),
       ownerId: user.uid,
       dependentId,
     });
-    const dependent = await dependentRepository.update(input);
+    const dependent = await new UpdateDependentUseCase().execute(input);
     return NextResponse.json(dependent);
   },
 );
@@ -20,9 +22,11 @@ export const PUT = WithContext<{ dependentId: string }>(
 // DELETE /api/dependents/[dependentId] — delete a dependent profile
 export const DELETE = WithContext<{ dependentId: string }>(
   async ({ user }, { dependentId }) => {
-    const existing = await dependentRepository.findById(user.uid, dependentId);
-    if (!existing) throw ApiError.notFound("Dependent not found.");
-    await dependentRepository.delete(user.uid, dependentId);
+    const input = DeleteDependentUseCase.validate({
+      ownerId: user.uid,
+      dependentId,
+    });
+    await new DeleteDependentUseCase().execute(input);
     return NextResponse.json({ ok: true });
   },
 );

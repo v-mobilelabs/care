@@ -9,7 +9,8 @@ export const GET = WithContext({ kind: "doctor" }, async ({ req }) => {
   if (!q || q.trim().length === 0) {
     throw ApiError.badRequest("Query parameter `q` is required.");
   }
-  const input = SearchPatientsUseCase.validate({ query: q.trim() });
-  const results = await new SearchPatientsUseCase().execute(input);
+  const results = await new SearchPatientsUseCase().execute({
+    query: q.trim(),
+  });
   return NextResponse.json(results);
 });

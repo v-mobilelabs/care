@@ -5,8 +5,7 @@ import { DeleteDoctorUseCase } from "@/data/doctors";
 // DELETE /api/doctors/[doctorId]
 export const DELETE = WithContext<{ doctorId: string }>(
   async ({ user }, { doctorId }) => {
-    const input = DeleteDoctorUseCase.validate({ userId: user.uid, doctorId });
-    await new DeleteDoctorUseCase().execute(input);
+    await new DeleteDoctorUseCase().execute({ userId: user.uid, doctorId });
     return NextResponse.json({ ok: true });
   },
 );

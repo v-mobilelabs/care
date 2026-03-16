@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { meetRepository } from "@/data/meet/repositories/meet.repository";
+import { GetMeetRequestUseCase } from "@/data/meet";
 
 // GET /api/meet/[requestId] — fetch call request (must be a participant)
 export const GET = WithContext(
   async ({ user }, { requestId }: { requestId: string }) => {
-    const request = await meetRepository.get(requestId);
+    const input = GetMeetRequestUseCase.validate({ requestId });
+    const request = await new GetMeetRequestUseCase().execute(input);
     if (!request) throw ApiError.notFound("Call request not found.");
 
     if (request.doctorId !== user.uid && request.patientId !== user.uid) {

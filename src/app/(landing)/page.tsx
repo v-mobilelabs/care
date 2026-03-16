@@ -39,8 +39,20 @@ import {
   IconWaveSine,
   IconYoga,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { useState } from "react";
+import { Loader } from "@mantine/core";
+
+function PendingButtonLabel({ children }: Readonly<{ children: React.ReactNode }>) {
+  const { pending } = useLinkStatus();
+  return (
+    <Group gap="xs" wrap="nowrap">
+      {children}
+      {pending && <Loader size={14} color="inherit" />}
+    </Group>
+  );
+}
 
 const INPUT_MODES = [
   { icon: IconMessageChatbot, label: "Text Chat", description: "Describe symptoms naturally in plain language" },
@@ -256,8 +268,6 @@ function OutputCard({
 }
 
 export default function HomePage() {
-  const router = useRouter();
-
   return (
     <>
 
@@ -283,11 +293,11 @@ export default function HomePage() {
               referrals, and more — all from one conversation.
             </Text>
             <Group gap="md" justify="center" wrap="wrap">
-              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient/assistant")}>
-                Check My Symptoms
+              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/patient/assistant">
+                <PendingButtonLabel>Check My Symptoms</PendingButtonLabel>
               </Button>
-              <Button variant="subtle" color="primary" radius="xl" leftSection={<IconStethoscope size={20} />} onClick={() => router.push("/auth/login?kind=doctor")}>
-                Doctor Sign In
+              <Button variant="subtle" color="primary" radius="xl" leftSection={<IconStethoscope size={20} />} component={Link} href="/auth/login?kind=doctor">
+                <PendingButtonLabel>Doctor Sign In</PendingButtonLabel>
               </Button>
             </Group>
             <Group gap="xl" wrap="wrap" justify="center">
@@ -379,8 +389,8 @@ export default function HomePage() {
               a full clinical report — conditions, medications, labs, referrals, SOAP notes,
               and a clear action plan.
             </Text>
-            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} onClick={() => router.push("/patient/assistant")}>
-              Start Free Assessment
+            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/patient/assistant">
+              <PendingButtonLabel>Start Free Assessment</PendingButtonLabel>
             </Button>
           </Stack>
         </Container>

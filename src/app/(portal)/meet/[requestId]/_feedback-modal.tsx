@@ -8,6 +8,7 @@
 import { ActionIcon, Button, Group, Modal, Stack, Text, Textarea } from "@mantine/core";
 import { IconStar, IconStarFilled } from "@tabler/icons-react";
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface FeedbackModalProps {
     opened: boolean;
@@ -90,13 +91,34 @@ export function FeedbackModal({ opened, requestId, onDismiss }: Readonly<Feedbac
                                     color: star <= displayRating
                                         ? "var(--mantine-color-yellow-5)"
                                         : "light-dark(rgba(0,0,0,0.15), rgba(255,255,255,0.2))",
-                                    transition: "color 0.15s ease, transform 0.15s ease",
-                                    transform: star <= displayRating ? "scale(1.1)" : "scale(1)",
+                                    transition: "color 0.15s ease",
                                 }}
                             >
-                                {star <= displayRating
-                                    ? <IconStarFilled size={28} />
-                                    : <IconStar size={28} />}
+                                <AnimatePresence mode="wait" initial={false}>
+                                    {star <= displayRating ? (
+                                        <motion.div
+                                            key="filled"
+                                            initial={{ scale: 0.5, opacity: 0, rotate: -30 }}
+                                            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                            exit={{ scale: 0.5, opacity: 0, rotate: 30 }}
+                                            transition={{ duration: 0.18, ease: "easeInOut" }}
+                                            style={{ display: "flex" }}
+                                        >
+                                            <IconStarFilled size={28} />
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div
+                                            key="empty"
+                                            initial={{ scale: 0.5, opacity: 0, rotate: 30 }}
+                                            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                            exit={{ scale: 0.5, opacity: 0, rotate: -30 }}
+                                            transition={{ duration: 0.18, ease: "easeInOut" }}
+                                            style={{ display: "flex" }}
+                                        >
+                                            <IconStar size={28} />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </ActionIcon>
                         ))}
                     </Group>

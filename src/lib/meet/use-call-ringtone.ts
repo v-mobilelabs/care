@@ -2,8 +2,7 @@
 /**
  * useCallRingtone — plays a looping ringtone when pendingCallCount > 0.
  * Stops when pendingCallCount drops to 0 or component unmounts.
- * Uses HTML5 Audio with a ringtone file from /sounds/ringtone.mp3
- * (fallback: generates a simple beep tone if file not found).
+ * Uses Web Audio API to generate a simple beep tone.
  */
 import { useEffect, useRef } from "react";
 
@@ -14,17 +13,8 @@ export function useCallRingtone(pendingCallCount: number) {
   useEffect(() => {
     // Create audio element on first mount
     if (!audioRef.current) {
-      const audio = new Audio("/sounds/ringtone.mp3");
-      audio.loop = true;
-      audio.volume = 0.7;
-      audioRef.current = audio;
-
-      // Handle load errors (file not found) — use Web Audio API beep fallback
-      audio.addEventListener("error", () => {
-        console.log("[useCallRingtone] /sounds/ringtone.mp3 not found, using beep fallback");
-        // Replace with beep generator
-        audioRef.current = createBeepAudio();
-      });
+      // Use generated beep tone (no external file needed)
+      audioRef.current = createBeepAudio();
     }
 
     const audio = audioRef.current;
@@ -63,7 +53,10 @@ export function useCallRingtone(pendingCallCount: number) {
 function createBeepAudio(): HTMLAudioElement {
   // Fallback: use Web Audio API to generate a simple beep
   // Convert to HTMLAudioElement-compatible interface
-  const AudioContextClass = globalThis.AudioContext || (globalThis as any).webkitAudioContext;
+  const AudioContextClass =
+    globalThis.AudioContext ||
+    (globalThis as unknown as { webkitAudioContext: typeof AudioContext })
+      .webkitAudioContext;
   const audioContext = new AudioContextClass();
   let oscillator: OscillatorNode | null = null;
   let gainNode: GainNode | null = null;
@@ -97,7 +90,10 @@ function createBeepAudio(): HTMLAudioElement {
 
       beepPattern(gainNode);
       const currentGainNode = gainNode;
-      intervalId = globalThis.setInterval(() => beepPattern(currentGainNode), 2000);
+      intervalId = globalThis.setInterval(
+        () => beepPattern(currentGainNode),
+        2000,
+      );
     },
     pause: () => {
       if (intervalId !== null) {
@@ -109,7 +105,7 @@ function createBeepAudio(): HTMLAudioElement {
         oscillator = null;
       }
     },
-  } as any;
+  } as unknown as HTMLAudioElement;
 
   return fakeAudio;
 }

@@ -4,7 +4,8 @@ import { ListSoapNotesUseCase } from "@/data/soap-notes";
 
 // GET /api/soap-notes — list all SOAP notes for the authenticated user
 export const GET = WithContext(async ({ user, dependentId }) => {
-  const input = ListSoapNotesUseCase.validate({ userId: user.uid });
-  const notes = await new ListSoapNotesUseCase(dependentId).execute(input);
+  const notes = await new ListSoapNotesUseCase(dependentId).execute({
+    userId: user.uid,
+  });
   return NextResponse.json(notes);
 });

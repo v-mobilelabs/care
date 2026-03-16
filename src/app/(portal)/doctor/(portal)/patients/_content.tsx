@@ -31,8 +31,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import type { DoctorPatientDto } from "@/data/doctor-patients";
 import type { PatientSearchResultDto } from "@/data/doctor-patients";
 import { colors } from "@/ui/tokens";
@@ -175,22 +176,19 @@ function PatientSearchModal({ onInvite }: Readonly<{ onInvite: (patientId: strin
 
 // ── Patient row card ──────────────────────────────────────────────────────────
 
-function PatientCard({
-    patient,
-    onRevoke,
-    onReinvite,
-}: Readonly<{
+function PatientCardContent({ patient, onRevoke, onReinvite }: Readonly<{
     patient: DoctorPatientDto;
     onRevoke: (p: DoctorPatientDto) => void;
     onReinvite: (p: DoctorPatientDto) => void;
 }>) {
-    const router = useRouter();
+    const { pending } = useLinkStatus();
     const { user } = useAuth();
     const { openConversation } = useMessaging();
     const isAccepted = patient.status === "accepted";
     const isPending = patient.status === "pending";
 
     async function handleMessage(e: React.MouseEvent) {
+        e.preventDefault();
         e.stopPropagation();
         if (!user) return;
         const convId = await startConversation({
@@ -209,8 +207,8 @@ function PatientCard({
                 padding: "14px 16px",
                 cursor: isAccepted ? "pointer" : undefined,
                 transition: ios.transition.fast,
+                opacity: pending ? 0.7 : 1,
             }}
-            onClick={isAccepted ? () => router.push(`/doctor/patients/${patient.patientId}`) : undefined}
         >
             <Group justify="space-between" wrap="nowrap">
                 <Group gap="md" wrap="nowrap">
@@ -270,14 +268,13 @@ function PatientCard({
                     {isAccepted && (
                         <Tooltip label="View health records">
                             <ActionIcon
+                                component={Link}
+                                href={`/doctor/patients/${patient.patientId}`}
                                 variant="light"
                                 color="primary"
                                 radius="xl"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/doctor/patients/${patient.patientId}`);
-                                }}
                                 aria-label="View health records"
+                                onClick={(e: React.MouseEvent) => e.stopPropagation()}
                             >
                                 <IconHeartbeat size={16} />
                             </ActionIcon>
@@ -333,6 +330,22 @@ function PatientCard({
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
+function PatientCard(props: Readonly<{
+    patient: DoctorPatientDto;
+    onRevoke: (p: DoctorPatientDto) => void;
+    onReinvite: (p: DoctorPatientDto) => void;
+}>) {
+    const isAccepted = props.patient.status === "accepted";
+    if (isAccepted) {
+        return (
+            <Link href={`/doctor/patients/${props.patient.patientId}`} style={{ textDecoration: "none", display: "block", color: "inherit" }}>
+                <PatientCardContent {...props} />
+            </Link>
+        );
+    }
+    return <PatientCardContent {...props} />;
+}
+
 function EmptyState({ message }: Readonly<{ message: string }>) {
     return (
         <Box p="xl" ta="center">
@@ -379,25 +392,40 @@ export function DoctorPatientsContent() {
             }
             return res.json();
         },
-        onSuccess: (_data, variables) => {
+        onMutate: async ({ patientId, source }) => {
+            await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+            const snapshot = queryClient.getQueryData<DoctorPatientDto[]>(QUERY_KEY);
+            const optimistic: DoctorPatientDto = {
+                doctorId: "",
+                patientId,
+                status: "pending",
+                source,
+                invitedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            queryClient.setQueryData<DoctorPatientDto[]>(QUERY_KEY, (old = []) => [...old, optimistic]);
+            return { snapshot };
+        },
+        onSuccess: (_data, _variables) => {
             notifications.show({
                 title: "Invite sent",
                 message: "The patient will receive an invite to connect.",
                 color: colors.success,
                 icon: <IconCheck size={18} />,
             });
-            void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
             modals.closeAll();
-            // If invited from call, variables is available
-            void variables;
         },
-        onError: (err: Error) => {
+        onError: (err: Error, _vars, ctx) => {
+            if (ctx?.snapshot) queryClient.setQueryData(QUERY_KEY, ctx.snapshot);
             notifications.show({
                 title: "Invite failed",
                 message: err.message,
                 color: colors.danger,
                 icon: <IconAlertCircle size={18} />,
             });
+        },
+        onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
         },
     });
 
@@ -409,6 +437,14 @@ export function DoctorPatientsContent() {
                 throw new Error(data.error?.message ?? "Failed to revoke");
             }
         },
+        onMutate: async (patientId) => {
+            await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+            const snapshot = queryClient.getQueryData<DoctorPatientDto[]>(QUERY_KEY);
+            queryClient.setQueryData<DoctorPatientDto[]>(QUERY_KEY, (old = []) =>
+                old.filter((p) => p.patientId !== patientId),
+            );
+            return { snapshot };
+        },
         onSuccess: () => {
             notifications.show({
                 title: "Access revoked",
@@ -416,15 +452,18 @@ export function DoctorPatientsContent() {
                 color: colors.success,
                 icon: <IconCheck size={18} />,
             });
-            void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
         },
-        onError: (err: Error) => {
+        onError: (err: Error, _id, ctx) => {
+            if (ctx?.snapshot) queryClient.setQueryData(QUERY_KEY, ctx.snapshot);
             notifications.show({
                 title: "Failed",
                 message: err.message,
                 color: colors.danger,
                 icon: <IconAlertCircle size={18} />,
             });
+        },
+        onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
         },
     });
 

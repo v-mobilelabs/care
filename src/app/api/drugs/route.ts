@@ -16,8 +16,10 @@ export const GET = WithContext(async ({ req }) => {
   const q = searchParams.get("q") ?? "";
   const limit = searchParams.get("limit") ?? undefined;
 
-  const input = SearchDrugsUseCase.validate({ q, ...(limit ? { limit } : {}) });
-  const drugs = await new SearchDrugsUseCase().execute(input);
+  const drugs = await new SearchDrugsUseCase().execute({
+    q,
+    ...(limit ? { limit } : {}),
+  });
 
   return NextResponse.json(drugs);
 });

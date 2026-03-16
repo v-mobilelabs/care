@@ -306,7 +306,7 @@ export function PatientSummaryContent() {
                             <IconWand size={15} />
                         </ThemeIcon>
                         <Text size="sm">
-                            Ask the AI to <strong>"Generate patient summary"</strong> or <strong>"Give me a health overview"</strong> during a chat session to create a new summary.
+                            Ask the AI to <strong>&quot;Generate patient summary&quot;</strong> or <strong>&quot;Give me a health overview&quot;</strong> during a chat session to create a new summary.
                         </Text>
                     </Group>
                 </Paper>

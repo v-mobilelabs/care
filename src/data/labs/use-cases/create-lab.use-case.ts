@@ -1,4 +1,4 @@
-import { labService, type LabService } from "../service/lab.service";
+import { labRepository } from "../repositories/lab.repository";
 import {
   CreateLabSchema,
   type CreateLabInput,
@@ -7,10 +7,7 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class CreateLabUseCase extends UseCase<CreateLabInput, LabDto> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: LabService = labService,
-  ) {
+  constructor(private readonly dependentId?: string) {
     super();
   }
 
@@ -19,6 +16,6 @@ export class CreateLabUseCase extends UseCase<CreateLabInput, LabDto> {
   }
 
   protected async run(input: CreateLabInput): Promise<LabDto> {
-    return this.service.create(input, this.dependentId);
+    return labRepository.create(input.userId, input, this.dependentId);
   }
 }

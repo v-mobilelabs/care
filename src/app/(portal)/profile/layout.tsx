@@ -1,5 +1,5 @@
 "use client";
-import { ActiveProfileProvider } from "@/app/(portal)/patient/_context/active-profile-context";
+import { ActiveProfileProvider } from "@/ui/chat/context/active-profile-context";
 import type { ReactNode } from "react";
 
 /**

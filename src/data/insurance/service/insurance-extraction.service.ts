@@ -1,29 +1,24 @@
 // server-only — never import in client components.
 import { aiService, type AIService } from "@/data/shared/service/ai.service";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import {
-  promptService,
-  type PromptService,
-} from "@/data/prompts/service/prompt.service";
+import { bucket } from "@/lib/firebase/admin";
 import {
   InsuranceExtractionSchema,
   type ExtractInsuranceInput,
   type InsuranceExtractResult,
 } from "../models/extract.model";
 
+const EXTRACTION_PROMPT = `You are an insurance document extraction assistant.
+Extract all visible details from this health insurance card or document.
+Fields to extract: provider/company name, plan name, policy number, group number, member ID, subscriber name, type of insurance (health/dental/vision/life/disability/other), effective date, expiration date, copay amount, deductible amount, out-of-pocket maximum.
+Return ISO date format (YYYY-MM-DD) for dates when possible.
+Return only information that is clearly visible — do not guess or infer missing fields.`;
+
 export class InsuranceExtractionService {
-  constructor(
-    private readonly ai: AIService = aiService,
-    private readonly firebase: FirebaseService = FirebaseService.getInstance(),
-    private readonly prompts: PromptService = promptService,
-  ) {}
+  constructor(private readonly ai: AIService = aiService) {}
 
   async extract(input: ExtractInsuranceInput): Promise<InsuranceExtractResult> {
     // 1. Download bytes from Cloud Storage
-    const [bytes] = await this.firebase
-      .getBucket()
-      .file(input.storagePath)
-      .download();
+    const [bytes] = await bucket.file(input.storagePath).download();
     const base64 = bytes.toString("base64");
     const dataUri = `data:${input.mimeType};base64,${base64}`;
 
@@ -36,17 +31,16 @@ export class InsuranceExtractionService {
           mediaType: input.mimeType as `${string}/${string}`,
         };
 
-    // 3. Build prompt
-    const prompt =
-      this.prompts.get({ id: "insurance-extraction" })?.content ?? "";
-
-    // 4. Extract structured data via AI
+    // 3. Extract structured data via AI
     return this.ai.extractObject(
       InsuranceExtractionSchema,
       [
         {
           role: "user",
-          content: [mediaPart, { type: "text" as const, text: prompt }],
+          content: [
+            mediaPart,
+            { type: "text" as const, text: EXTRACTION_PROMPT },
+          ],
         },
       ],
       { userId: input.userId },

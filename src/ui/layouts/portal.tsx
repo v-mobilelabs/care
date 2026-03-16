@@ -6,9 +6,11 @@ import {
   Group,
   Menu,
   NavLink,
+  Paper,
   ScrollArea,
   Skeleton,
   Text,
+  ThemeIcon,
 } from "@mantine/core";
 import { PortalFooter } from "../footers/portal.footer";
 import { useDisclosure } from "@mantine/hooks";
@@ -28,6 +30,8 @@ import { NotificationsButton } from "../notifications/notifications-button";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
 import { useMessaging } from "../providers/messaging-provider";
 import Link from "next/link";
+import { useLinkStatus } from "next/link";
+import { Loader } from "@mantine/core";
 
 const ColorSchemeToggle = dynamic(
   () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
@@ -49,6 +53,18 @@ type MenuGroup = {
   header: MenuItem[];
   profile: MenuItem[];
 };
+
+/* ── NavLink label with pending indicator ────────────────────────────────── */
+
+function NavLinkLabel({ label }: Readonly<{ label: string }>) {
+  const { pending } = useLinkStatus();
+  return (
+    <Group gap="xs" wrap="nowrap">
+      {label}
+      {pending && <Loader size={12} color="primary" />}
+    </Group>
+  );
+}
 
 /* ── Main PortalLayout ─────────────────────────────────────────────────────── */
 
@@ -106,7 +122,6 @@ export function PortalLayout({
               leftSection={menu.icon}
             />
           ))}
-          <Credits />
           <NotificationsButton />
           <MessagesButton />
           <ColorSchemeToggle />
@@ -165,9 +180,30 @@ export function PortalLayout({
       }}
     >
       {Header}
+      <Paper
+        radius={0}
+        pos="fixed"
+        style={{
+          top: "var(--app-shell-header-offset, 0px)",
+          left: "var(--app-shell-navbar-offset, 0px)",
+          width: "calc(100% - var(--app-shell-navbar-offset, 0px))",
+          zIndex: 99,
+          background: "light-dark(rgba(255,255,255,0.55), rgba(30,32,40,0.55))",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+        px={{ base: "sm" }}
+        py="sm"
+        withBorder={false}
+      >
+        <Group justify="space-between">
+          <BreadcrumbsBar application={undefined} menus={menus.navigation} />
+          <Credits />
+        </Group>
+      </Paper>
       <AppShell.Navbar
         style={{
-          background: "light-dark(rgba(248,249,250,0.6), rgba(26,27,30,0.6))",
+          background: "light-dark(rgba(248,249,250,0.9), rgba(26,27,30,0.6))",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           borderRight: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
@@ -177,19 +213,25 @@ export function PortalLayout({
           grow
           component={ScrollArea}
         >
-          <Box
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            {menus.navigation.map((menu) => {
-              // Exact match only - don't activate parent paths when on child routes
-              const isActive = pathName === menu.href;
-              return <NavLink component={Link} variant="filled" color="primary" key={menu.label} label={menu.label} href={menu.href} leftSection={menu.icon} active={isActive} />
-            })}
-          </Box>
+          {menus.navigation.map((menu) => {
+            // Exact match only - don't activate parent paths when on child routes
+            const isActive = pathName === menu.href;
+            return <NavLink
+              component={Link}
+              variant={isActive ? "filled" : "subtle"}
+              color="primary"
+              key={menu.label}
+              label={<NavLinkLabel label={menu.label} />}
+              href={menu.href}
+              onClick={close}
+              leftSection={
+                <ThemeIcon radius="xl" size={"sm"} variant={isActive ? "filled" : "light"} color="primary">
+                  {menu.icon}
+                </ThemeIcon>
+              }
+              active={isActive}
+            />
+          })}
         </AppShell.Section>
         <AppShell.Section>
           <PortalFooter />
@@ -198,18 +240,11 @@ export function PortalLayout({
       <MessagingSidebar />
       <AppShell.Main
         style={{
-          background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-7))",
+          background: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-9))",
         }}
+        pt="6.5rem"
       >
-        <Box
-          pt={{ base: "sm", md: "md" }}
-          pb={{ base: 0, md: "md" }}
-        >
-          <BreadcrumbsBar menus={menus.navigation} />
-        </Box>
-        <Box>
-          {children}
-        </Box>
+        {children}
       </AppShell.Main>
     </AppShell>
   );

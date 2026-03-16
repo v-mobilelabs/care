@@ -4,7 +4,8 @@ import { GetStorageMetricsUseCase } from "@/data/sessions";
 
 // GET /api/files/storage — returns the authenticated user's storage usage metrics
 export const GET = WithContext(async ({ user }) => {
-  const input = GetStorageMetricsUseCase.validate({ userId: user.uid });
-  const metrics = await new GetStorageMetricsUseCase().execute(input);
+  const metrics = await new GetStorageMetricsUseCase().execute({
+    userId: user.uid,
+  });
   return NextResponse.json(metrics);
 });

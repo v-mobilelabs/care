@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged, signInWithCustomToken, type User } from "f
 import { firebaseApp } from "@/lib/firebase/client";
 import { trackEvent } from "@/lib/analytics";
 import { PresenceSync } from "@/ui/providers/presence-sync";
+import { NotificationPermissionSync } from "@/ui/providers/notification-permission-sync";
 import type { UserKind } from "@/lib/auth/jwt";
 
 interface AuthContextValue {
@@ -91,6 +92,8 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
         <AuthContext.Provider value={{ user, loading, kind, refreshUser }}>
             {/* Keeps /presence/{uid} in RTDB in sync for the session lifetime. */}
             <PresenceSync />
+            {/* Requests browser notification permission after sign-in. */}
+            <NotificationPermissionSync />
             {children}
         </AuthContext.Provider>
     );

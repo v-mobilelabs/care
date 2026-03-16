@@ -2,11 +2,13 @@
 import { ActionIcon, Badge, Box, Collapse, Group, List, Paper, ScrollArea, SimpleGrid, Stack, Tabs, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { IconBookmark, IconBookmarkFilled, IconCheck, IconChevronDown, IconClock, IconFlame, IconSalad, IconScale } from "@tabler/icons-react";
+import { IconBookmark, IconBookmarkFilled, IconCheck, IconChevronDown, IconClock, IconFlame, IconSalad, IconScale, IconShoppingCart } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useAddDietPlanMutation, useDietPlansQuery } from "@/app/(portal)/patient/_query";
-import { useChatContext } from "@/app/(portal)/patient/_context/chat-context";
+import { useChatContext } from "@/ui/chat/context/chat-context";
 import type { DietPlanInput } from "@/app/(portal)/patient/_types";
+import { colors } from "@/ui/tokens";
 
 export interface DietPlanCardProps {
     data: DietPlanInput;
@@ -17,6 +19,7 @@ export function DietPlanCard({ data }: Readonly<DietPlanCardProps>) {
     const { sessionId } = useChatContext();
     const { data: allPlans = [] } = useDietPlansQuery();
     const [guideOpen, { toggle: toggleGuide }] = useDisclosure(false);
+    const [groceryOpen, { toggle: toggleGrocery }] = useDisclosure(false);
     const autoSavedRef = useRef(false);
 
     // Determine if a plan already exists for this session (e.g. page reload)
@@ -126,7 +129,31 @@ export function DietPlanCard({ data }: Readonly<DietPlanCardProps>) {
                         title={saved ? "Saved" : "Save plan"}
                         style={{ flexShrink: 0 }}
                     >
-                        {saved ? <IconBookmarkFilled size={16} /> : <IconBookmark size={16} />}
+                        <AnimatePresence mode="wait" initial={false}>
+                            {saved ? (
+                                <motion.div
+                                    key="saved"
+                                    initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                    exit={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                    <IconBookmarkFilled size={16} />
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="unsaved"
+                                    initial={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                    exit={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                                >
+                                    <IconBookmark size={16} />
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </ActionIcon>
                 </Group>
             </Box>
@@ -270,6 +297,72 @@ export function DietPlanCard({ data }: Readonly<DietPlanCardProps>) {
                                     </List>
                                 </>
                             )}
+                        </Box>
+                    </Collapse>
+                </Box>
+            )}
+
+            {/* ── Grocery List ── */}
+            {data.groceryList && data.groceryList.categories.length > 0 && (
+                <Box style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
+                    <UnstyledButton
+                        onClick={toggleGrocery}
+                        px="md" py="sm"
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                    >
+                        <Group gap="xs">
+                            <ThemeIcon size={20} radius="sm" color={colors.brand} variant="light">
+                                <IconShoppingCart size={12} />
+                            </ThemeIcon>
+                            <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.5px" }}>
+                                Grocery List ({data.groceryList.totalItems} items)
+                            </Text>
+                        </Group>
+                        <IconChevronDown size={14} style={{ transform: groceryOpen ? "rotate(180deg)" : undefined, transition: "transform 150ms" }} />
+                    </UnstyledButton>
+                    <Collapse in={groceryOpen}>
+                        <Box px="md" pb="md">
+                            <Text size="xs" c="dimmed" mb="sm">
+                                Week of {data.groceryList.weekOf}
+                            </Text>
+                            <Stack gap="md">
+                                {data.groceryList.categories.map((cat) => (
+                                    <Box key={cat.category}>
+                                        <Group gap={6} mb={6}>
+                                            <Badge size="sm" color={colors.brand} variant="light">
+                                                {cat.items.length}
+                                            </Badge>
+                                            <Text size="xs" fw={700} tt="uppercase" style={{ letterSpacing: "0.5px" }}>
+                                                {cat.category}
+                                            </Text>
+                                        </Group>
+                                        <Stack gap={4}>
+                                            {cat.items.map((item) => (
+                                                <Group key={item.name} justify="space-between" wrap="nowrap" gap="xs">
+                                                    <Box style={{ flex: 1, minWidth: 0 }}>
+                                                        <Text size="sm" fw={500} lh={1.3}>
+                                                            {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
+                                                            {item.isStaple && (
+                                                                <Badge size="xs" color="gray" variant="dot" ml={4}>
+                                                                    Staple
+                                                                </Badge>
+                                                            )}
+                                                        </Text>
+                                                        {item.alternatives.length > 0 && (
+                                                            <Text size="xs" c="dimmed">
+                                                                Alt: {item.alternatives.slice(0, 2).join(", ")}
+                                                            </Text>
+                                                        )}
+                                                    </Box>
+                                                    <Badge size="sm" color="gray" variant="outline" style={{ flexShrink: 0 }}>
+                                                        {item.quantity}
+                                                    </Badge>
+                                                </Group>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                ))}
+                            </Stack>
                         </Box>
                     </Collapse>
                 </Box>

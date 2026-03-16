@@ -1,6 +1,5 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import { patientRepository } from "@/data/patients";
+import { db } from "@/lib/firebase/admin";
 import {
   toProfileDto,
   type ProfileDocument,
@@ -8,24 +7,19 @@ import {
   type UpsertProfileInput,
 } from "../models/profile.model";
 
-const db = FirebaseService.getInstance().getDb();
-
 /** Base identity document lives at profiles/{userId} (top-level) */
 const baseProfileDoc = (userId: string) =>
   db.collection("profiles").doc(userId);
 
 export const profileRepository = {
   /**
-   * Returns the combined profile DTO: base identity from `profiles/{userId}`
-   * merged with patient health data from `patients/{userId}`.
+   * Returns the base identity profile DTO from `profiles/{userId}`.
+   * Patient health fields (sex, height, weight, etc.) live in `patients/{userId}`.
    */
   async get(userId: string): Promise<ProfileDto | null> {
-    const [baseSnap, patientDoc] = await Promise.all([
-      baseProfileDoc(userId).get(),
-      patientRepository.get(userId).catch(() => null),
-    ]);
+    const baseSnap = await baseProfileDoc(userId).get();
     if (!baseSnap.exists) return null;
-    return toProfileDto(baseSnap.data() as ProfileDocument, patientDoc);
+    return toProfileDto(baseSnap.data() as ProfileDocument);
   },
 
   /**
@@ -51,13 +45,12 @@ export const profileRepository = {
     if (input.gender !== undefined) baseData.gender = input.gender;
     if (input.city !== undefined) baseData.city = input.city;
     if (input.country !== undefined) baseData.country = input.country;
+    if (input.dateOfBirth !== undefined)
+      baseData.dateOfBirth = input.dateOfBirth;
 
     await baseProfileDoc(input.userId).set(baseData, { merge: true });
 
-    const [baseSnap, patientDoc] = await Promise.all([
-      baseProfileDoc(input.userId).get(),
-      patientRepository.get(input.userId).catch(() => null),
-    ]);
-    return toProfileDto(baseSnap.data() as ProfileDocument, patientDoc);
+    const baseSnap = await baseProfileDoc(input.userId).get();
+    return toProfileDto(baseSnap.data() as ProfileDocument);
   },
 };

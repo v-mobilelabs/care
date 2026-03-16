@@ -14,7 +14,7 @@ export default async function MedicationsPage() {
             queryKey: [...chatKeys.medications(), undefined],
             queryFn: () =>
                 new ListMedicationsUseCase().execute(
-                    ListMedicationsUseCase.validate({ userId: user.uid }),
+                    { userId: user.uid },
                 ),
         });
     }

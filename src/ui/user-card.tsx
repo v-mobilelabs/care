@@ -18,7 +18,7 @@ export const UserCard = forwardRef<HTMLDivElement, UserCardProps>(
 
         return (
             <Avatar
-                ref={ref as any}
+                ref={ref}
                 src={image ?? undefined}
                 alt={name ?? 'User'}
                 name={name ?? undefined}

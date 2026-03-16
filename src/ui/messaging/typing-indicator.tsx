@@ -9,11 +9,11 @@ export function TypingIndicator() {
     return (
         <Box style={{ display: "flex", justifyContent: "flex-start" }}>
             <Box
-                px="sm"
+                px="md"
                 py="xs"
                 style={{
                     display: "inline-flex",
-                    gap: 4,
+                    gap: "var(--mantine-spacing-2xs)",
                     alignItems: "center",
                     borderRadius: "var(--mantine-radius-lg)",
                     background:

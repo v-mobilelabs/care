@@ -65,6 +65,8 @@ export function toMedicationDto(
 
 export const CreateMedicationSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
+  /** Required for RAG indexing — the user's own profile ID */
+  profileId: z.string().optional(),
   sessionId: z.string().optional(),
   name: z.string().min(1),
   dosage: z.string().optional(),

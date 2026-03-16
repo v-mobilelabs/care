@@ -11,6 +11,7 @@ const PUBLIC_PREFIXES = [
   "/favicon",
   "/privacy",
   "/terms",
+  "/manifest.webmanifest", // Allow PWA manifest without auth
 ];
 const PUBLIC_EXACT = new Set(["/", "/design-system"]);
 

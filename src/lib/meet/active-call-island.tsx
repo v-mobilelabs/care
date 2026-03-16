@@ -56,7 +56,8 @@ export function ActiveCallIsland() {
         const currentRequestId = meetState.sessionData?.requestId ?? null;
         // Transition from having a session → not having one means endMeet() was called
         if (prevSessionRef.current && !currentRequestId) {
-            setEndedRequestId(prevSessionRef.current);
+            const prev = prevSessionRef.current;
+            queueMicrotask(() => setEndedRequestId(prev));
         }
         prevSessionRef.current = currentRequestId;
     }, [meetState.sessionData?.requestId]);
@@ -64,7 +65,7 @@ export function ActiveCallIsland() {
     // Clear the endedRequestId once RTDB catches up and removes the entry
     useEffect(() => {
         if (endedRequestId && !queue.some((c) => c.requestId === endedRequestId)) {
-            setEndedRequestId(null);
+            queueMicrotask(() => setEndedRequestId(null));
         }
     }, [endedRequestId, queue]);
 
@@ -78,18 +79,21 @@ export function ActiveCallIsland() {
 
     useEffect(() => {
         if (!activeCall) {
-            setElapsed(0);
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return;
+            const t = setTimeout(() => {
+                setElapsed(0);
+                if (intervalRef.current) clearInterval(intervalRef.current);
+            }, 0);
+            return () => clearTimeout(t);
         }
 
         const startedAt = activeCall.createdAt;
         const calcElapsed = () =>
             Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-        setElapsed(calcElapsed());
 
+        const t = setTimeout(() => setElapsed(calcElapsed()), 0);
         intervalRef.current = setInterval(() => setElapsed(calcElapsed()), 1000);
         return () => {
+            clearTimeout(t);
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
     }, [activeCall]);
@@ -120,10 +124,20 @@ export function ActiveCallIsland() {
                 const res = await fetch(
                     `/api/meet/${activeCall.requestId}/session`,
                 );
-                if (!res.ok) throw new Error("Failed to prefetch session");
+                if (!res.ok) {
+                    // Meeting has ended - silently skip prefetch
+                    if (res.status === 400 || res.status === 404) {
+                        console.log("[ActiveCallIsland] Meeting has ended, skipping prefetch");
+                        throw new Error("Meeting ended");
+                    }
+                    throw new Error("Failed to prefetch session");
+                }
                 return res.json() as Promise<MeetSessionData>;
             },
             staleTime: Infinity,
+        }).catch((err) => {
+            // Don't throw prefetch errors - just log them
+            console.warn("[ActiveCallIsland] Prefetch failed:", err);
         });
     }, [activeCall, router, queryClient]);
 
@@ -134,7 +148,7 @@ export function ActiveCallIsland() {
     // Reset joining state when the active call changes (e.g. call ended)
     // or when the overlay mode changes (e.g. call successfully joined/expanded).
     useEffect(() => {
-        setJoining(false);
+        queueMicrotask(() => setJoining(false));
     }, [activeCall?.requestId, meetState.mode]);
 
     // Don't render when there's no active call, or when the overlay is

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { bucket } from "@/lib/firebase/admin";
 import { insuranceExtractionService } from "@/data/insurance";
 
 const ALLOWED_MIME_TYPES = [
@@ -55,7 +55,7 @@ export const POST = WithContext(async ({ user, req }) => {
   const storagePath = `users/${user.uid}/insurance/drafts/${draftId}/${file.name}`;
 
   // 1. Upload to Cloud Storage
-  const bucket = FirebaseService.getInstance().getBucket();
+
   const gcsFile = bucket.file(storagePath);
   await gcsFile.save(buffer, {
     contentType: file.type,

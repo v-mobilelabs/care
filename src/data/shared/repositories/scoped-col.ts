@@ -1,7 +1,5 @@
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db } from "@/lib/firebase/admin";
 import type { CollectionReference } from "firebase-admin/firestore";
-
-const db = FirebaseService.getInstance().getDb();
 
 /**
  * Returns the Firestore collection reference scoped to the correct profile.

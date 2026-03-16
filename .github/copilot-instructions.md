@@ -95,6 +95,17 @@ modals.openConfirmModal({ title, children, labels, confirmProps: { color: "prima
 
 - Always use usecase in api, server actions, and SSR Page. For example, in `src/app/api/conditions/[conditionId]/route.ts`:
 
+Always use the `useCase` pattern for all business logic in API routes, server actions, and SSR pages. For example, in `src/app/api/conditions/[conditionId]/route.ts`:
+
+- Always use useOptimistic Updates for all mutations that update server state. For example, in `src/app/*`
+- useTransition`for non-urgent UI updates (e.g. form state after submission) and`optimisticUpdate`for immediate cache updates that reflect server changes (e.g. after a successful mutation). For example, in`src/app/register-driver/page.tsx`:
+- use useLinkStatus for all links that navigate between pages or trigger server actions, to provide instant feedback on pending navigation.
+- always use ssr + cache and invalidate patterns for all data fetching in server components. For example, in `src/app/dashboard/page.tsx` use cache and CacheLife with cacheTag for all data fetching, and invalidate the cache after mutations that change the data.:
+- always have loading page for all pages that fetch data in server components, using the `loading.tsx` convention. For example, in `src/app/dashboard/loading.tsx` use Skeleton:
+- always have loading state for all client components that fetch data, using Mantine's `Skeleton` component. For example, in `src/app/dashboard/driver-list.tsx`:
+- always create manageable chunks of code by breaking down large components into smaller ones, and by extracting complex logic into custom hooks or utility functions.
+-
+
 ```ts
 
 ```

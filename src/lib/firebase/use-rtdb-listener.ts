@@ -55,7 +55,7 @@ export interface RTDBListenerState<T> {
   /** True while loading more data. */
   loadingMore: boolean;
   /** Error object if the subscription failed (e.g., permission denied). */
-  error: any | null;
+  error: Error | null;
   /** Load the next page of data. Only available when pageSize is set. */
   loadMore: (() => void) | null;
   /** Whether there's more data to load. */
@@ -78,6 +78,11 @@ export function useRTDBListener<T = unknown>(
   });
 
   const [currentLimit, setCurrentLimit] = useState(pageSize);
+
+  const handleLoadMore = useCallback(() => {
+    setState((prev) => ({ ...prev, loadingMore: true }));
+    setCurrentLimit((prev) => prev + pageSize);
+  }, [pageSize]);
 
   useEffect(() => {
     if (!path) {
@@ -147,7 +152,7 @@ export function useRTDBListener<T = unknown>(
 
         if (!isPrimitive) {
           // Convert to array if it's an object (for pagination tracking)
-          let items: any[] = [];
+          let items: unknown[] = [];
           if (typeof data === "object" && !Array.isArray(data)) {
             items = Object.entries(data).map(([key, value]) => ({
               key,
@@ -192,11 +197,6 @@ export function useRTDBListener<T = unknown>(
     orderDirection,
     currentLimit,
   ]);
-
-  const handleLoadMore = useCallback(() => {
-    setState((prev) => ({ ...prev, loadingMore: true }));
-    setCurrentLimit((prev) => prev + pageSize);
-  }, [pageSize]);
 
   return state;
 }

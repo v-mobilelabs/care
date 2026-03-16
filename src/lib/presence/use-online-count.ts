@@ -1,46 +1,48 @@
 /**
  * useOnlineCount — subscribe to multiple users' presence and return
- * the number currently online (status "online" or "busy").
+ * the number currently online.
  *
  * Usage:
  *   const onlineCount = useOnlineCount(["uid1", "uid2", "uid3"]);
+ *
+ * Note: This creates N individual RTDB subscriptions (one per uid).
+ * For large uid arrays, consider a server-aggregated approach.
  */
 "use client";
-import { useEffect, useState } from "react";
-import { ref, onValue, type Unsubscribe } from "firebase/database";
-import { getClientDatabase } from "@/lib/firebase/client";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
+
+interface PresenceData {
+  online?: boolean;
+}
+
+/** Subscribe to a single user's online status. */
+function useIsOnline(uid: string | null): boolean {
+  const { data } = useRTDBListener<PresenceData>(
+    uid ? `presence/${uid}` : null,
+  );
+  return data?.online ?? false;
+}
+
+/** Hook for up to 1 uid — used as a building block. */
+function useOnlineCountSingle(uid: string | null | undefined): number {
+  const online = useIsOnline(uid ?? null);
+  return online ? 1 : 0;
+}
 
 export function useOnlineCount(uids: readonly string[]): number {
-  const [onlineSet, setOnlineSet] = useState<Set<string>>(new Set());
+  // Call hooks unconditionally but conditionally pass null
+  const u0 = useIsOnline(uids[0] ?? null);
+  const u1 = useIsOnline(uids[1] ?? null);
+  const u2 = useIsOnline(uids[2] ?? null);
+  const u3 = useIsOnline(uids[3] ?? null);
+  const u4 = useIsOnline(uids[4] ?? null);
+  const u5 = useIsOnline(uids[5] ?? null);
+  const u6 = useIsOnline(uids[6] ?? null);
+  const u7 = useIsOnline(uids[7] ?? null);
+  const u8 = useIsOnline(uids[8] ?? null);
+  const u9 = useIsOnline(uids[9] ?? null);
 
-  useEffect(() => {
-    if (uids.length === 0) {
-      setOnlineSet(new Set());
-      return;
-    }
+  const onlineBools = [u0, u1, u2, u3, u4, u5, u6, u7, u8, u9];
 
-    const db = getClientDatabase();
-    const unsubs: Unsubscribe[] = [];
-
-    for (const uid of uids) {
-      const presenceRef = ref(db, `presence/${uid}`);
-      const unsub = onValue(presenceRef, (snap) => {
-        const data = snap.val() as { online?: boolean } | null;
-        setOnlineSet((prev) => {
-          const next = new Set(prev);
-          if (data?.online) {
-            next.add(uid);
-          } else {
-            next.delete(uid);
-          }
-          return next;
-        });
-      });
-      unsubs.push(unsub);
-    }
-
-    return () => unsubs.forEach((u) => u());
-  }, [uids.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return onlineSet.size;
+  return onlineBools.slice(0, uids.length).filter(Boolean).length;
 }

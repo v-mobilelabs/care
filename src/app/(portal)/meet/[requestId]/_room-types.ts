@@ -8,6 +8,7 @@ export interface Participant {
 }
 
 export type ConnectionHealth = "good" | "poor" | "reconnecting";
+export type TeardownReason = "user" | "remote-rtdb" | "chime-ended" | "chime-kicked";
 
 export interface NetworkStats {
   rtt: number;

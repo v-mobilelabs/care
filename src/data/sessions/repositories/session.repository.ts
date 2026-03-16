@@ -3,13 +3,11 @@ import {
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import type { SessionDocument } from "../models/session.model";
 import { toSessionDto } from "../models/session.model";
 import type { SessionDto } from "../models/session.model";
-
-const db = FirebaseService.getInstance().getDb();
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 

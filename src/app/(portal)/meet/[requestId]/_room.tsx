@@ -30,19 +30,16 @@ import {
 } from "amazon-chime-sdk-js";
 import { Alert, Box, Button, Group, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertCircle, IconHome, IconRecordMail, IconScreenShare, IconShieldCheck, IconWifi, IconWifiOff, IconX } from "@tabler/icons-react";
-import { ref as dbRef, onValue, set as dbSet, update as dbUpdate } from "firebase/database";
-import { getDownloadURL, getStorage, ref as storageRef, uploadBytes } from "firebase/storage";
+import { IconAlertCircle, IconHome, IconScreenShare, IconShieldCheck, IconWifi, IconWifiOff, IconX } from "@tabler/icons-react";
+import { ref as dbRef, set as dbSet, update as dbUpdate } from "firebase/database";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttendeeJoinInfo } from "@/data/meet";
-import { firebaseApp, getClientDatabase } from "@/lib/firebase/client";
+import { getClientDatabase } from "@/lib/firebase/client";
+import { useRTDBListener } from "@/lib/firebase/use-rtdb-listener";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
-import { useMessages } from "@/lib/messaging/use-messages";
-import { useTyping } from "@/lib/messaging/use-typing";
-import { sendMessage as sendDmMessage, markAsRead } from "@/lib/messaging/actions";
+import { markAsRead } from "@/lib/messaging/actions";
 import { useInbox } from "@/lib/messaging/use-inbox";
-import { ChatSidebar } from "./_chat-sidebar";
 import { ConsentBanner } from "./_consent-banner";
 import { ControlBar } from "./_control-bar";
 import { FeedbackModal } from "./_feedback-modal";
@@ -110,6 +107,9 @@ class ChimeLogger extends ConsoleLogger {
         // Chime fires this when the same user joins from a second device —
         // we handle it in audioVideoDidStop with a user-facing modal.
         if (msg.includes("AudioJoinedFromAnotherDevice")) return;
+        // OverconstrainedError occurs when a previously-selected device becomes
+        // unavailable (unplugged, changed ID). We handle this with fallback logic.
+        if (msg.includes("OverconstrainedError")) return;
         super.error(msg);
     }
 }
@@ -157,12 +157,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     const reconnectAttemptsRef = useRef(0);
     // True while we are auto-reconnecting (not user-initiated retry)
     const isReconnectingRef = useRef(false);
-
-    // Recording
-    const recorderRef = useRef<MediaRecorder | null>(null);
-    const recordingChunksRef = useRef<Blob[]>([]);
-    const [isRecording, setIsRecording] = useState(false);
-    const [isUploadingRecording, setIsUploadingRecording] = useState(false);
 
     const [status, setStatus] = useState<"initialising" | "ready" | "error">("initialising");
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -213,7 +207,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
 
     // ── In-call chat (RTDB DM) ──────────────────────────────────────────
     const [chatOpen, setChatOpen] = useState(false);
-    const [chatDraft, setChatDraft] = useState("");
 
     // Derive unread count from the persisted RTDB inbox entry so it
     // survives page reloads and stays in sync with the messaging drawer.
@@ -226,20 +219,9 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     // When the chat panel is opened, persist the read status to RTDB.
     useEffect(() => {
         if (chatOpen && conversationId && localUserId) {
-            void markAsRead(localUserId, conversationId);
+            markAsRead(localUserId, conversationId);
         }
     }, [chatOpen, conversationId, localUserId]);
-
-    // DM hooks — subscribe to real-time messages and typing indicators.
-    // Pass localUserId so markAsRead fires automatically when the chat
-    // panel is open and new messages arrive.
-    const recipientId = userKind === "doctor" ? patientId : doctorId;
-    const { messages: chatMessages } = useMessages(
-        conversationId,
-        200,
-        chatOpen ? localUserId : null,
-    );
-    const { otherTyping, startTyping, clearTyping } = useTyping(conversationId, localUserId, recipientId);
 
     // ── Network stats ────────────────────────────────────────────────────────
     const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
@@ -270,55 +252,48 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     // Patient: shows a banner when status is "pending".
     // Doctor: shows a notification when status flips to "accepted".
 
+    const consentPath = userKind === "patient"
+        ? `in-call-consent/${localUserId}/${requestId}`
+        : null;
+
+    const { data: consentData } = useRTDBListener<{ doctorId: string; status: string }>(
+        consentPath
+    );
+
     useEffect(() => {
-        // Path is patient-scoped so RTDB rules allow the patient to read/write:
-        // /in-call-consent/{patientId}/{requestId}
-        // For doctor: patientId = remoteUser's UID → but doctor can't read it directly.
-        // Doctor only receives the "accepted" signal when patient writes it back.
-        // We skip the listener on doctor side — we listen instead on the doctor's
-        // OWN notification node written by the patient.
-        // Actually both sides listen to the SAME node; only the patient (who owns
-        // the patientId path) passes localUserId, so the path resolves correctly.
-        const consentPath = userKind === "patient"
-            ? `in-call-consent/${localUserId}/${requestId}`
-            : null;
-
-        if (!consentPath) return;
-
-        const consentRef = dbRef(getClientDatabase(), consentPath);
-        const unsub = onValue(consentRef, (snap) => {
-            if (!snap.exists()) {
-                setConsentPending(false);
-                return;
-            }
-            const data = snap.val() as { doctorId: string; status: string };
-            setConsentPending(data.status === "pending");
-        });
-        return () => unsub();
-    }, [requestId, userKind, localUserId]);
+        if (!consentData) {
+            setConsentPending(false);
+            return;
+        }
+        setConsentPending(consentData.status === "pending");
+    }, [consentData]);
 
     // Doctor listens on a separate notification node the patient writes to:
     // /in-call-consent-ack/{doctorId}/{requestId}
+    const ackPath = userKind === "doctor"
+        ? `in-call-consent-ack/${localUserId}/${requestId}`
+        : null;
+
+    const { data: ackData } = useRTDBListener<{ status: string; patientName?: string }>(
+        ackPath
+    );
+
     useEffect(() => {
         if (userKind !== "doctor") return;
-        const ackRef = dbRef(getClientDatabase(), `in-call-consent-ack/${localUserId}/${requestId}`);
-        const unsub = onValue(ackRef, (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.val() as { status: string; patientName?: string };
-            if (data.status === "accepted") {
-                notifications.show({
-                    title: "Access granted",
-                    message: `${remoteUser.name} accepted your health records request.`,
-                    color: "teal",
-                    icon: <IconShieldCheck size={18} />,
-                    autoClose: 6000,
-                });
-                // Clear so it only fires once
-                void dbSet(ackRef, null);
-            }
-        });
-        return () => unsub();
-    }, [requestId, userKind, localUserId, remoteUser.name]);
+        if (!ackData) return;
+
+        if (ackData.status === "accepted") {
+            notifications.show({
+                title: "Access granted",
+                message: `${remoteUser.name} accepted your health records request.`,
+                color: "teal",
+                icon: <IconShieldCheck size={18} />,
+                autoClose: 6000,
+            });
+            // Clear so it only fires once
+            dbSet(dbRef(getClientDatabase(), `in-call-consent-ack/${localUserId}/${requestId}`), null);
+        }
+    }, [ackData, userKind, localUserId, requestId, remoteUser.name]);
 
     const handleAcceptConsent = async () => {
         if (!doctorId) return;
@@ -374,67 +349,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
             setConsentPending(false);
         }
     };
-
-    // ── Recording helpers ───────────────────────────────────────────────────
-
-    const startRecording = useCallback((stream: MediaStream) => {
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-            ? "video/webm;codecs=vp9"
-            : "video/webm";
-        try {
-            const recorder = new MediaRecorder(stream, { mimeType });
-            recordingChunksRef.current = [];
-            recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordingChunksRef.current.push(e.data);
-            };
-            recorder.start(2000); // collect chunks every 2 s
-            recorderRef.current = recorder;
-            setIsRecording(true);
-        } catch (err) {
-            console.warn("Recording unavailable:", err);
-        }
-    }, []);
-
-    const finaliseRecording = useCallback(async (durationSeconds: number) => {
-        const recorder = recorderRef.current;
-        if (!recorder || recorder.state === "inactive") return;
-        await new Promise<void>((resolve) => {
-            recorder.onstop = () => resolve();
-            recorder.stop();
-        });
-        const chunks = recordingChunksRef.current;
-        if (chunks.length === 0) return;
-        setIsUploadingRecording(true);
-        try {
-            const blob = new Blob(chunks, { type: "video/webm" });
-            const storage = getStorage(firebaseApp);
-            const path = `call-recordings/${requestId}/${Date.now()}.webm`;
-            const fileRef = storageRef(storage, path);
-            await uploadBytes(fileRef, blob);
-            const downloadUrl = await getDownloadURL(fileRef);
-            await fetch(`/api/meet/${requestId}/recording`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ recordingUrl: downloadUrl, durationSeconds }),
-            });
-            notifications.show({
-                title: "Recording saved",
-                message: "The call recording has been saved to your history.",
-                color: "teal",
-                icon: <IconRecordMail size={18} />,
-            });
-        } catch (uploadErr) {
-            console.error("Failed to save recording:", uploadErr);
-            notifications.show({
-                title: "Recording failed",
-                message: "Could not save the call recording.",
-                color: "red",
-            });
-        } finally {
-            setIsUploadingRecording(false);
-            setIsRecording(false);
-        }
-    }, [requestId]);
 
     // ── Consolidated teardown ────────────────────────────────────────────────
     // Idempotent: safe to call from handleEnd, RTDB listener, OR Chime observer.
@@ -506,17 +420,14 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
             }).catch((err: unknown) => console.error("[call-end] API call FAILED", err));
         }
 
-        // ③ Save recording
-        void finaliseRecording(durationSeconds);
-
-        // ④ Optimistic patient call-state update
+        // ③ Optimistic patient call-state update
         if (userKind === "patient") {
             void dbUpdate(
                 dbRef(getClientDatabase(), `call-state/${localUserId}`),
                 { status: "ended" },
             );
         }
-    }, [exitRoute, finaliseRecording, localUserId, onEnd, requestId, router, userKind]);
+    }, [exitRoute, localUserId, onEnd, requestId, router, userKind]);
 
     // ── RTDB listener for remote call-end ─────────────────────────────────
     // When either participant clicks End, their client writes
@@ -524,43 +435,55 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
     // API. This listener detects that write and tears down the local
     // session — it works even if Chime's MeetingEnded signal is slow
     // or the server API hasn't completed yet.
+    const { data: callEndedData } = useRTDBListener<Record<string, boolean>>(
+        `call-ended/${requestId}`
+    );
+
     useEffect(() => {
-        const endedRef = dbRef(
-            getClientDatabase(),
-            `call-ended/${requestId}`,
+        if (!callEndedData) return;
+
+        // Check if the OTHER participant wrote a child here.
+        const otherEnded = Object.keys(callEndedData).some(
+            (uid) => uid !== localUserId && callEndedData[uid] === true,
         );
+        if (!otherEnded) return;
 
-        const unsub = onValue(endedRef, (snap) => {
-            if (!snap.exists()) return;
-
-            // Check if the OTHER participant wrote a child here.
-            const data = snap.val() as Record<string, boolean>;
-            const otherEnded = Object.keys(data).some(
-                (uid) => uid !== localUserId && data[uid] === true,
-            );
-            if (!otherEnded) return;
-
-            // Idempotent — teardown no-ops if already called.
-            teardown("remote-rtdb");
-        });
-
-        return () => unsub();
-    }, [localUserId, requestId, teardown]);
+        // Idempotent — teardown no-ops if already called.
+        teardown("remote-rtdb");
+    }, [callEndedData, localUserId, teardown]);
 
     // ── Initialise Chime session ────────────────────────────────────────────
 
     useEffect(() => {
-        // Guard against React StrictMode double-invocation: if a session is
-        // already running (from the first mount) skip re-init.
-        if (sessionRef.current) return;
+        // Guard against React StrictMode double-invocation and page reloads
+        // where a previous session might still be active.
+        if (sessionRef.current && status === "ready") {
+            // Session is ready and active, nothing to do
+            console.log("[Chime] Session is ready, skipping init");
+            return;
+        }
 
-        // Reset so the second StrictMode mount doesn't inherit a stale "true"
-        // from the first mount's cleanup stop.
+        // Clear any stale session ref before starting new init
+        if (sessionRef.current) {
+            console.log("[Chime] Clearing stale session ref before init");
+            sessionRef.current = null;
+        }
+
+        console.log("[Chime] Starting new initialization, retryCount:", retryCount, "status:", status);
+
+        // Reset flags and counters so reloads/retries start fresh
         stoppedByUsRef.current = false;
+        teardownCalledRef.current = false;
+        reconnectAttemptsRef.current = 0;
+        isReconnectingRef.current = false;
         let cancelled = false;
+        let initSession: DefaultMeetingSession | null = null;
+        let initStarted = false;
 
         const init = async () => {
             try {
+                initStarted = true;
+                console.log("[Chime] Starting initialization...");
                 // ChimeLogger filters "session will not be reconnected" — an
                 // intentional-stop artefact, not a real error. WARN level so
                 // all other Chime warnings/errors remain visible.
@@ -669,11 +592,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                                 remoteVideoRef.current,
                             );
                             setRemoteTileId(tileState.tileId);
-                            // Auto-start recording once remote stream is bound
-                            const stream = remoteVideoRef.current.srcObject;
-                            if (stream instanceof MediaStream && recorderRef.current === null) {
-                                startRecording(stream);
-                            }
                         }
                     },
                     videoTileWasRemoved: (tileId: number) => {
@@ -765,6 +683,7 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 // before doing anything else. Mark as "us" so the observer
                 // doesn't trigger a navigation away from the room.
                 if (cancelled) {
+                    console.log("[Chime] Init cancelled during device enumeration, cleaning up");
                     stoppedByUsRef.current = true;
                     await stopSession(sess);
                     return;
@@ -814,12 +733,32 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                             if (vfResult === null) {
                                 console.warn("[VoiceFocus] Timed out after 10 s, falling back to raw mic");
                             }
-                            await sess.audioVideo.startAudioInput(preferredAudioId);
+                            try {
+                                await sess.audioVideo.startAudioInput(preferredAudioId);
+                            } catch (audioErr) {
+                                console.warn("[Audio] Preferred device unavailable, falling back to default:", audioErr);
+                                // Fall back to first available device if preferred one fails
+                                const fallbackDevice = audioDevices[0]?.deviceId;
+                                if (fallbackDevice) {
+                                    await sess.audioVideo.startAudioInput(fallbackDevice);
+                                    rawAudioDeviceIdRef.current = fallbackDevice;
+                                }
+                            }
                         }
                     } catch (vfErr) {
                         // Voice Focus failed — fall back to plain microphone
                         console.warn("[VoiceFocus] Init failed, falling back to raw mic:", vfErr);
-                        await sess.audioVideo.startAudioInput(preferredAudioId);
+                        try {
+                            await sess.audioVideo.startAudioInput(preferredAudioId);
+                        } catch (audioErr) {
+                            console.warn("[Audio] Preferred device unavailable, falling back to default:", audioErr);
+                            // Fall back to first available device if preferred one fails
+                            const fallbackDevice = audioDevices[0]?.deviceId;
+                            if (fallbackDevice) {
+                                await sess.audioVideo.startAudioInput(fallbackDevice);
+                                rawAudioDeviceIdRef.current = fallbackDevice;
+                            }
+                        }
                     }
                 }
 
@@ -848,28 +787,64 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                                     [blurProcessor],
                                 );
                                 blurTransformDeviceRef.current = transformDevice;
-                                await sess.audioVideo.startVideoInput(transformDevice);
-                                backgroundBlurActive = true;
+                                try {
+                                    await sess.audioVideo.startVideoInput(transformDevice);
+                                    backgroundBlurActive = true;
+                                } catch (videoErr) {
+                                    console.warn("[Video] Preferred device with blur unavailable, trying raw:", videoErr);
+                                    const fallbackVideo = videoDevices[0]?.deviceId;
+                                    if (fallbackVideo) {
+                                        await sess.audioVideo.startVideoInput(fallbackVideo);
+                                    }
+                                }
                             } else {
-                                await sess.audioVideo.startVideoInput(preferredVideoId);
+                                try {
+                                    await sess.audioVideo.startVideoInput(preferredVideoId);
+                                } catch (videoErr) {
+                                    console.warn("[Video] Preferred device unavailable, falling back to default:", videoErr);
+                                    const fallbackVideo = videoDevices[0]?.deviceId;
+                                    if (fallbackVideo) {
+                                        await sess.audioVideo.startVideoInput(fallbackVideo);
+                                    }
+                                }
                             }
                         } else {
                             // Blur not supported — use raw camera
-                            await sess.audioVideo.startVideoInput(preferredVideoId);
+                            try {
+                                await sess.audioVideo.startVideoInput(preferredVideoId);
+                            } catch (videoErr) {
+                                console.warn("[Video] Preferred device unavailable, falling back to default:", videoErr);
+                                const fallbackVideo = videoDevices[0]?.deviceId;
+                                if (fallbackVideo) {
+                                    await sess.audioVideo.startVideoInput(fallbackVideo);
+                                }
+                            }
                         }
                     } catch (blurErr) {
                         console.warn("[BackgroundBlur] Init failed, falling back to raw camera:", blurErr);
-                        await sess.audioVideo.startVideoInput(preferredVideoId);
+                        try {
+                            await sess.audioVideo.startVideoInput(preferredVideoId);
+                        } catch (videoErr) {
+                            console.warn("[Video] Preferred device unavailable, falling back to default:", videoErr);
+                            const fallbackVideo = videoDevices[0]?.deviceId;
+                            if (fallbackVideo) {
+                                await sess.audioVideo.startVideoInput(fallbackVideo);
+                            }
+                        }
                     }
                 }
 
                 if (cancelled) {
+                    console.log("[Chime] Init cancelled before session start, cleaning up");
                     stoppedByUsRef.current = true;
                     await stopSession(sess);
                     return;
                 }
 
+                // Store session reference and mark it as active
                 sessionRef.current = sess;
+                initSession = sess;
+                console.log("[Chime] Session initialized successfully");
                 // Restore persisted start time so the timer survives page
                 // reloads. Only write a new timestamp the first time.
                 const storageKey = `callStartedAt_${requestId}`;
@@ -947,31 +922,58 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
 
             } catch (err) {
                 if (!cancelled) {
-                    setErrorMessage((err as Error)?.message ?? "Failed to start video session.");
+                    console.error("[Chime] Init failed:", err);
+                    console.error("[Chime] Error stack:", (err as Error)?.stack);
+                    const errorMsg = (err as Error)?.message ?? "Failed to start video session.";
+                    setErrorMessage(errorMsg);
                     setStatus("error");
+                    // Clean up the failed session if it exists
+                    if (initSession) {
+                        stoppedByUsRef.current = true;
+                        sessionRef.current = null;
+                        await stopSession(initSession).catch((e) => console.error("[Chime] Cleanup failed:", e));
+                    }
                 }
             }
         };
 
         void init();
 
-        // Safety timeout: if still "initialising" after 30s, surface an error
-        // so the user can leave instead of staring at "Connecting…" forever.
+        // Safety timeout: if still "initialising" after 45s, surface an error.
+        // Increased from 30s to 45s to account for slow device enumeration,
+        // Voice Focus initialization (10s timeout), and background blur setup.
         const timeout = setTimeout(() => {
-            if (!cancelled && !sessionRef.current) {
+            if (!cancelled && status === "initialising" && initStarted) {
+                console.error("[Chime] Init timed out after 45s");
+                console.error("[Chime] Status:", status, "Session ref:", !!sessionRef.current);
                 setErrorMessage("Connection timed out. Please try again.");
                 setStatus("error");
+                // Clean up any partial session
+                if (sessionRef.current) {
+                    stoppedByUsRef.current = true;
+                    const sess = sessionRef.current;
+                    sessionRef.current = null;
+                    stopSession(sess).catch((err) =>
+                        console.error("[Chime] Timeout cleanup error:", err)
+                    );
+                }
             }
-        }, 30_000);
+        }, 45_000);
 
         return () => {
             cancelled = true;
             clearTimeout(timeout);
-            // Only stop if a session was fully initialised and stored.
-            if (sessionRef.current) {
+            console.log("[Chime] Cleanup triggered, cancelled =", cancelled);
+            // Ensure proper cleanup - stop the session if it exists
+            const sess = sessionRef.current;
+            if (sess) {
+                console.log("[Chime] Stopping existing session in cleanup");
                 stoppedByUsRef.current = true;
-                void stopSession(sessionRef.current);
                 sessionRef.current = null;
+                // Use a Promise to ensure cleanup completes
+                stopSession(sess).catch((err) =>
+                    console.error("[Chime] Cleanup error:", err)
+                );
             }
         };
         // joinInfo is stable (object created once before this component mounts)
@@ -1022,7 +1024,20 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                         await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
                     }
                 } else {
-                    await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
+                    try {
+                        await sess.audioVideo.startVideoInput(videoDevices[0].deviceId);
+                    } catch (videoErr) {
+                        console.warn("[Video] Failed to start camera:", videoErr);
+                        notifications.show({
+                            title: "Camera error",
+                            message: "Unable to start camera. Please check your device.",
+                            color: "red",
+                            icon: <IconX size={18} />,
+                        });
+                        // Keep camera state as off if it failed
+                        setCameraOn(false);
+                        return;
+                    }
                 }
             }
             sess.audioVideo.startLocalVideoTile();
@@ -1044,7 +1059,27 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
             // Turn OFF → optimistic UI then switch to raw mic
             setNoiseCancellationOn(false);
             if (rawId) {
-                await sess.audioVideo.startAudioInput(rawId);
+                try {
+                    await sess.audioVideo.startAudioInput(rawId);
+                } catch (audioErr) {
+                    console.warn("[Audio] Failed to switch to raw mic:", audioErr);
+                    // Try to fall back to any available audio device
+                    const audioDevices = await sess.audioVideo.listAudioInputDevices();
+                    const fallbackDevice = audioDevices[0]?.deviceId;
+                    if (fallbackDevice) {
+                        try {
+                            await sess.audioVideo.startAudioInput(fallbackDevice);
+                            rawAudioDeviceIdRef.current = fallbackDevice;
+                        } catch {
+                            notifications.show({
+                                title: "Microphone error",
+                                message: "Unable to access microphone. Please check your device.",
+                                color: "red",
+                                icon: <IconX size={18} />,
+                            });
+                        }
+                    }
+                }
             }
         } else {
             // Turn ON → reuse existing VF device or create a new one
@@ -1446,21 +1481,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
         return () => window.removeEventListener("keydown", handler);
     }, [status, toggleMic, toggleCamera, toggleScreenShare]);
 
-    // ── Send chat message ────────────────────────────────────────────────
-
-    const sendChatMessage = useCallback(() => {
-        const text = chatDraft.trim();
-        if (!text || !conversationId || !recipientId) return;
-        clearTyping();
-        void sendDmMessage({
-            conversationId,
-            senderId: localUserId,
-            recipientId,
-            text,
-        });
-        setChatDraft("");
-    }, [chatDraft, conversationId, localUserId, recipientId, clearTyping]);
-
     // ── Post-call feedback dismiss ──────────────────────────────────────────
 
     const handleFeedbackDismiss = useCallback(() => {
@@ -1501,6 +1521,10 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                         color="primary"
                         onClick={() => {
                             // Re-run the init effect without a full page reload
+                            // Clear session ref to ensure clean retry
+                            sessionRef.current = null;
+                            teardownCalledRef.current = false;
+                            console.log("[Chime] Retry button clicked, resetting state");
                             setStatus("initialising");
                             setErrorMessage(null);
                             setRetryCount((c) => c + 1);
@@ -1572,8 +1596,6 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                 remoteUser={remoteUser}
                 remoteMuted={remoteMuted}
                 status={status}
-                isRecording={isRecording}
-                isUploadingRecording={isUploadingRecording}
                 callDuration={callDuration}
                 connectionHealth={connectionHealth}
                 networkStats={networkStats}

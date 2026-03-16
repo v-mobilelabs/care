@@ -1,44 +1,46 @@
 "use client";
-import { Box, Skeleton } from "@mantine/core";
+import { Box, Container, ScrollArea, Stack } from "@mantine/core";
 import { useAuth } from "@/ui/providers/auth-provider";
-import { ProfileContent } from "@/app/(portal)/patient/profile/_content";
-import { DoctorProfileContent } from "./_doctor-content";
+import {
+    useProfileQuery,
+    chatKeys,
+} from "@/app/(portal)/patient/_query";
+import { useQueryClient } from "@tanstack/react-query";
+import { HeroCard } from "./_sections/hero-card";
+import { PersonalInfoSection } from "./_sections/personal-info";
+import { LocationInfoSection } from "./_sections/location-info";
+import { DangerSection } from "./_sections/settings";
 
-/**
- * Detects user.kind and renders the appropriate profile form.
- * Patient -> ProfileContent (chat profile sections)
- * Doctor  -> DoctorProfileContent (professional info + avatar)
- */
-export function ProfilePageContent() {
-    const { kind, loading } = useAuth();
+export function ProfileContent() {
+    const { user, refreshUser } = useAuth();
+    const qc = useQueryClient();
+    const email = user?.email ?? null;
+    const { data: profile } = useProfileQuery();
 
-    if (loading || kind === null) {
-        return (
-            <Box style={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
-                <Skeleton height={56} mb={0} radius={0} />
-                <Box px={{ base: "md", sm: "xl" }} py="lg" maw={600} mx="auto" style={{ width: "100%" }}>
-                    <Skeleton height={200} radius="lg" mb="md" />
-                    <Skeleton height={160} radius="lg" mb="md" />
-                    <Skeleton height={120} radius="lg" />
-                </Box>
-            </Box>
-        );
-    }
-
-    if (kind === "doctor") {
-        return (
-            <Box style={{ minHeight: "100dvh", overflowY: "auto" }}>
-                <Box maw={720} mx="auto" px={{ base: "md", sm: "xl" }} py="xl">
-                    <DoctorProfileContent />
-                </Box>
-            </Box>
-        );
-    }
-
-    // Patient / user — use the full ProfileContent from the chat module
     return (
-        <Box style={{ height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <ProfileContent />
-        </Box>
+        <Container pt="md">
+            <Box style={{ flex: 1, overflow: "hidden" }}>
+                <ScrollArea style={{ height: "100%" }}>
+                    <Box maw={600} mx="auto">
+                        <Stack gap="md">
+                            <HeroCard
+                                email={email}
+                                emailVerified={user?.emailVerified ?? false}
+                                profile={profile}
+                                onAvatarUpdated={() => {
+                                    refreshUser();
+                                    void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+                                }}
+                            />
+                            <PersonalInfoSection />
+                            <LocationInfoSection
+                                profile={profile}
+                            />
+                            <DangerSection />
+                        </Stack>
+                    </Box>
+                </ScrollArea>
+            </Box>
+        </Container>
     );
 }

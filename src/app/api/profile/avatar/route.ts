@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { auth } from "@/lib/firebase/admin";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import { profileRepository } from "@/data/profile";
+import { auth, bucket } from "@/lib/firebase/admin";
+import { UpsertProfileUseCase } from "@/data/profile";
 
 // POST /api/profile/avatar — upload a cropped avatar image
 // Body: multipart/form-data with a single "file" field (image/jpeg)
@@ -23,7 +22,7 @@ export const POST = WithContext(async ({ user, req }) => {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const bucket = FirebaseService.getInstance().getBucket();
+
   const fileRef = bucket.file(`avatars/${user.uid}/profile.jpg`);
 
   await fileRef.save(buffer, {
@@ -34,11 +33,14 @@ export const POST = WithContext(async ({ user, req }) => {
 
   const photoURL = `${fileRef.publicUrl()}?t=${Date.now()}`;
 
-  // Persist on Firebase Auth and Firestore profile in parallel
-  await Promise.all([
-    auth.updateUser(user.uid, { photoURL }),
-    profileRepository.upsert({ userId: user.uid, photoUrl: photoURL }),
-  ]);
+  // Persist Firestore profile — response depends on this succeeding.
+  await new UpsertProfileUseCase().execute(
+    UpsertProfileUseCase.validate({ userId: user.uid, photoUrl: photoURL }),
+  );
+
+  // Sync to Firebase Auth after the response — only affects future token mints,
+  // not the current session, so the caller doesn't need to wait.
+  after(() => auth.updateUser(user.uid, { photoURL }).catch(console.error));
 
   return NextResponse.json({ photoURL });
 });

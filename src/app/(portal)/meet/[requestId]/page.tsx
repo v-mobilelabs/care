@@ -22,12 +22,11 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { GetMeetingJoinInfoUseCase } from "@/data/meet";
-import { meetRepository } from "@/data/meet/repositories/meet.repository";
-import { buildConversationId } from "@/lib/messaging/conversation-id";
+import type { UserKind } from "@/lib/auth/jwt";
 import { getQueryClient } from "@/lib/query/client";
 import { Hydrate } from "@/ui/hydrate";
 import { MeetContent } from "./_content";
-import { meetSessionKey, type MeetSessionData } from "./_keys";
+import { meetSessionKey } from "./_keys";
 import MeetLoading from "./loading";
 
 /**
@@ -42,58 +41,21 @@ async function MeetData({
 }: Readonly<{
     requestId: string;
     userId: string;
-    userKind: "doctor" | "patient";
+    userKind: UserKind;
     fallback: string;
 }>) {
-    const isDoctor = userKind === "doctor";
+    // Fetch complete session data (includes join credentials + metadata).
+    // For doctors: requires active meeting (redirects on failure).
+    // For patients: can arrive before doctor accepts (joinInfo will be null).
+    const sessionData = await new GetMeetingJoinInfoUseCase()
+        .execute({ requestId, userId, userKind })
+        .catch(() => null);
 
-    // Fetch join credentials + call request metadata in parallel.
-    const [joinInfoResult, callRequest] = await Promise.all([
-        new GetMeetingJoinInfoUseCase()
-            .execute({ requestId, userId })
-            .catch(() => null),
-        meetRepository.get(requestId).catch(() => null),
-    ]);
+    // Redirect on failure (forbidden, not found, or meeting not active for doctors)
+    if (!sessionData) redirect(fallback);
 
-    // Doctors must have join info — redirect on failure.
-    // Patients can arrive while the call is still pending (joinInfo will be null).
-    if (!joinInfoResult && isDoctor) redirect(fallback);
-    if (!joinInfoResult && !callRequest) redirect(fallback);
-
-    // Derive display names — extract to avoid nested ternaries.
-    const localName = (() => {
-        if (!callRequest) return isDoctor ? "Doctor" : "You";
-        return isDoctor ? callRequest.doctorName : callRequest.patientName;
-    })();
-    const localPhoto = callRequest
-        ? (isDoctor ? (callRequest.doctorPhotoUrl ?? null) : (callRequest.patientPhotoUrl ?? null))
-        : null;
-    const remoteName = (() => {
-        if (!callRequest) return isDoctor ? "Patient" : "Doctor";
-        return isDoctor ? callRequest.patientName : callRequest.doctorName;
-    })();
-    const remotePhoto = callRequest
-        ? (isDoctor ? (callRequest.patientPhotoUrl ?? null) : (callRequest.doctorPhotoUrl ?? null))
-        : null;
-
-    // Build session data and seed the TanStack Query cache so the client
-    // has it instantly — no extra API call on mount or revisit.
-    const sessionData: MeetSessionData = {
-        requestId,
-        joinInfo: joinInfoResult,
-        localUser: { name: localName, photoUrl: localPhoto },
-        remoteUser: { name: remoteName, photoUrl: remotePhoto },
-        exitRoute: fallback,
-        userKind: isDoctor ? "doctor" : "patient",
-        localUserId: userId,
-        doctorId: callRequest?.doctorId ?? null,
-        conversationId:
-            callRequest?.doctorId && callRequest?.patientId
-                ? buildConversationId(callRequest.doctorId, callRequest.patientId)
-                : null,
-        patientId: callRequest?.patientId ?? null,
-    };
-
+    // Seed the TanStack Query cache so the client has data instantly —
+    // no extra API call on mount or revisit.
     const queryClient = getQueryClient();
     queryClient.setQueryData(meetSessionKey(requestId), sessionData);
 
@@ -124,7 +86,7 @@ export default async function MeetPage({
             <MeetData
                 requestId={requestId}
                 userId={user.uid}
-                userKind={isDoctor ? "doctor" : "patient"}
+                userKind={user.kind}
                 fallback={fallback}
             />
         </Suspense>

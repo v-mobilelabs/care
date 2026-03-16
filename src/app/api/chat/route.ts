@@ -1,253 +1,137 @@
-import { convertToModelMessages, stepCountIs } from "ai";
-import type { UIMessage } from "ai";
-import { NextResponse } from "next/server";
-import { createClinicalTools } from "@/lib/clinical-tools";
+import { createAgentUIStreamResponse } from "ai";
+import { after } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
-import { extractFirstText } from "@/lib/chat/helpers";
-import { AddMessageUseCase } from "@/data/sessions";
-import { GetSystemPromptUseCase } from "@/data/prompts";
-import {
-  GetUserSnapshotUseCase,
-  getMissingProfileFields,
-  getMissingDependentFields,
-  type UserSnapshotDto,
-} from "@/data/profile";
-import { aiService } from "@/lib/ai/ai.service";
+import { AddMessageUseCase, PrepareChatUseCase } from "@/data/sessions";
+import { CacheTags } from "@/data/cached";
 
-export const maxDuration = 60;
+// Increased from 60s to 180s to support complex tool executions like dietPlanTool
+// which generates 35+ detailed meal entries with nutrition data
+export const maxDuration = 180;
 
 export const POST = WithContext(
   async ({ user, dependentId, profileId, req }) => {
-    const body = (await req.json()) as {
-      messages: UIMessage[];
-      sessionId?: string;
-      // Signed download URLs for files the client just uploaded, keyed by
-      // mimeType. The client awaits each upload and sends the resulting URLs
-      // alongside the message so the server can embed proper { type:"file" }
-      // parts in Firestore instead of storing the raw binary blobs.
-      attachmentUrls?: Array<{ url: string; mediaType: string }>;
-    };
-    const { messages } = body;
+    console.log("[Chat API] Request started");
 
-    if (!messages?.length) {
-      return NextResponse.json(
-        { error: { code: "BAD_REQUEST", message: "messages is required." } },
-        { status: 400 },
-      );
-    }
+    const body = await req.json();
 
-    // ── 1. Persist user message & resolve/create the session ─────────────────
-    const firstText = extractFirstText(messages);
-    const title = firstText?.slice(0, 60) ?? "New Session";
-
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    const parts =
-      lastUserMsg?.parts.filter((p) => p.type !== "tool-result") ?? [];
-
-    // Strip inline binary data (base64 file/image blobs) from parts before
-    // writing to Firestore. Firestore documents are limited to 1 MB, so storing
-    // a large dental X-ray or photo as base64 would exceed that limit. The
-    // client awaits each upload and sends the resulting signed URLs in
-    // `body.attachmentUrls`, so we can embed a proper { type:"file" } part
-    // referencing the GCS URL instead of a lossy text placeholder.
-    type RawPart = (typeof parts)[number] & Record<string, unknown>;
-
-    // Client-supplied signed URLs, grouped by mediaType for ordered matching.
-    const attachmentUrlsByType = new Map<
-      string,
-      Array<{ url: string; mediaType: string }>
-    >();
-    for (const a of body.attachmentUrls ?? []) {
-      const bucket = attachmentUrlsByType.get(a.mediaType) ?? [];
-      bucket.push(a);
-      attachmentUrlsByType.set(a.mediaType, bucket);
-    }
-    const consumedByType = new Map<string, number>();
-
-    const storableParts: RawPart[] = parts.map((p) => {
-      const rp = p as RawPart;
-      const t = rp.type as string;
-      // Strip inline binary blobs (base64 `data` field OR data-URI in `url`).
-      // Firestore documents are limited to 1 MB; large images exceed this.
-      const hasInlineData =
-        "data" in rp ||
-        (typeof rp.url === "string" && rp.url.startsWith("data:"));
-      if ((t === "file" || t === "image") && hasInlineData) {
-        const mediaType =
-          (rp.mediaType as string | undefined) ??
-          (rp.mimeType as string | undefined) ??
-          "";
-        // Find the next unused attachment URL matching this mimeType.
-        const bucket = attachmentUrlsByType.get(mediaType) ?? [];
-        const idx = consumedByType.get(mediaType) ?? 0;
-        const match = bucket[idx];
-        if (match) {
-          consumedByType.set(mediaType, idx + 1);
-          return {
-            type: "file",
-            url: match.url,
-            mediaType: match.mediaType,
-          } as RawPart;
-        }
-        // Fallback — only if no URL was provided for this attachment.
-        return {
-          type: "text",
-          text: `[Attached: ${mediaType || "file"}]`,
-        } as RawPart;
-      }
-      return rp;
+    // ── Prepare: validate, route, sanitize ─────────────────────────────────
+    const {
+      agent,
+      sanitizedMessages,
+      messages,
+      options,
+      agentType,
+      loadingHint,
+      sessionId,
+      ctx,
+    } = await new PrepareChatUseCase().execute({
+      userId: user.uid,
+      profileId,
+      dependentId,
+      body,
     });
 
-    let sessionId: string;
+    // Capture response parts and usage for Firestore persistence.
+    let persistPayload: {
+      responseParts: unknown[];
+      userContent: string;
+    } | null = null;
 
-    const saved = await new AddMessageUseCase().execute(
-      AddMessageUseCase.validate({
-        userId: user.uid,
-        profileId,
-        sessionId: body.sessionId,
-        title,
-        role: "user",
-        content:
-          storableParts.length > 0
-            ? JSON.stringify(storableParts)
-            : (firstText ?? ""),
-      }),
-    );
-    sessionId = saved.sessionId;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
-    // ── 2. Stream the AI response (consumes one credit) ──────────────────────
-    // Dynamically inject attachment context so the model can never hallucinate
-    // a file analysis when no file is actually present.
-    const latestUserMsg = [...messages]
-      .reverse()
-      .find((m) => m.role === "user");
-    const hasAttachment =
-      latestUserMsg?.parts?.some((p) => {
-        const t = p.type as string;
-        return t === "file" || t === "image" || t.startsWith("data-");
-      }) ?? false;
-
-    const attachmentNote = hasAttachment
-      ? "\n\n## CURRENT MESSAGE CONTEXT\nThe user's current message DOES contain an attached file or image. You may analyse it and call the appropriate tools."
-      : "\n\n## CURRENT MESSAGE CONTEXT\n⚠️ The user's current message does NOT contain any attached file or image. There is nothing to analyse. Do NOT call `dentalChart`, `recordCondition` based on imaging, `soapNote`, or any image/file analysis tool. If the user's text mentions a file or X-ray, call `askQuestion` to ask them to upload it.";
-
-    const systemPrompt =
-      (await new GetSystemPromptUseCase().execute({ id: "clinical-system" }))
-        ?.content ?? "";
-
-    // ── 3. Inject patient medical context on every request ──────────────────────
-    // Pull the full patient snapshot (demographics, conditions, medications,
-    // last SOAP note) so the AI always has complete context.
-    const userSnapshot = await new GetUserSnapshotUseCase()
-      .execute(
-        GetUserSnapshotUseCase.validate({ userId: user.uid, dependentId }),
-      )
-      .catch(
-        () =>
-          ({ conditions: [], medications: [], context: "" }) as UserSnapshotDto,
-      );
-    const priorContextNote = userSnapshot.context;
-
-    // ── 4. Profile onboarding guard — injected FIRST so the model cannot ────────
-    //     skip it in favour of the clinical system prompt.
-    const missingFields = dependentId
-      ? getMissingDependentFields(userSnapshot)
-      : getMissingProfileFields(userSnapshot);
-    const onboardingPrePrompt =
-      missingFields.length > 0
-        ? [
-            "## ⚠️ MANDATORY PROFILE ONBOARDING — READ BEFORE ANYTHING ELSE",
-            "",
-            "The patient's profile is INCOMPLETE. The following required fields are missing:",
-            missingFields.map((f) => `  • ${f.label}`).join("\n"),
-            "",
-            "You MUST follow these steps BEFORE doing anything else, including starting any health assessment:",
-            "  1. Send a warm greeting and explain you need a few quick details to personalise care.",
-            "  2. Use the `askQuestion` tool to collect each missing field ONE AT A TIME in this order:",
-            ...missingFields.map((f) => `     - ${f.label}: ${f.askHint}`),
-            "  3. After ALL fields are collected, call `updateProfile` with all values in a single call.",
-            "  4. Only then proceed with the user's original request.",
-            "",
-            "🚫 DO NOT start a health assessment, condition record, or symptom analysis.",
-            "🚫 DO NOT call recordCondition, createPrescription, dietPlan, soapNote, completeAssessment, or any clinical tool.",
-            "🚫 DO NOT respond to the user's health question until `updateProfile` has succeeded.",
-            "",
-            "The clinical system instructions below are SUSPENDED until the profile is complete.",
-            "─────────────────────────────────────────────────────────────────────────────────────────",
-            "",
-          ].join("\n")
-        : "";
-
-    try {
-      const result = await aiService.stream({
-        userId: user.uid,
-        system:
-          onboardingPrePrompt +
-          systemPrompt +
-          attachmentNote +
-          priorContextNote,
-        messages: await convertToModelMessages(messages),
-        tools: createClinicalTools({
-          userId: user.uid,
-          sessionId,
-          dependentId,
-        }),
-        stopWhen: (state) =>
-          stepCountIs(20)(state) ||
-          state.steps.some((step) =>
-            (step.toolCalls ?? []).some(
-              (tc) =>
-                tc.toolName === "askQuestion" ||
-                tc.toolName === "suggestActions",
-            ),
-          ),
-      });
-
-      // Use toUIMessageStreamResponse so the SDK assembles the full UIMessage
-      // (with correctly typed parts including `input`) via its own onFinish.
-      return result.toUIMessageStreamResponse({
-        originalMessages: messages,
-        headers: { "X-Session-Id": sessionId },
-        // onFinish must be a proper async function — NOT a fire-and-forget
-        // void IIFE. The SDK's internal callOnFinish does `await onFinish(...)`,
-        // so returning undefined means the stream flushes and the Vercel
-        // serverless function can be terminated before the Firestore write
-        // completes. By awaiting here, the stream stays open until the message
-        // is persisted, guaranteeing it survives a page reload.
-        onFinish: async ({ responseMessage }) => {
-          if (!responseMessage.parts?.length) return;
-          await new AddMessageUseCase().execute(
-            AddMessageUseCase.validate({
-              userId: user.uid,
-              profileId,
-              sessionId,
-              role: "assistant",
-              content: JSON.stringify(responseMessage.parts),
-            }),
-          );
-        },
-      }) as unknown as NextResponse;
-    } catch (err) {
-      const code = (err as { code?: string }).code;
-      if (code === "CREDITS_EXHAUSTED") {
-        const reset = new Date(
-          Date.UTC(
-            new Date().getUTCFullYear(),
-            new Date().getUTCMonth(),
-            new Date().getUTCDate() + 1,
-          ),
+    // Schedule Firestore persistence via after() — the response is sent immediately
+    // without blocking on DB writes. Next.js after() keeps the serverless function
+    // alive until the task finishes, so writes are guaranteed to complete.
+    after(async () => {
+      if (!persistPayload) {
+        console.warn(
+          "[Chat API] after(): no response parts captured, skipping save",
         );
-        return NextResponse.json(
-          {
-            error: {
-              code: "CREDITS_EXHAUSTED",
-              message: `You've used all your credits for today. They reset at ${reset.toUTCString().replace(/ GMT$/, " UTC")}.`,
-            },
-          },
-          { status: 402 },
+        return;
+      }
+      const capturedUsage =
+        totalInputTokens > 0 || totalOutputTokens > 0
+          ? {
+              promptTokens: totalInputTokens,
+              completionTokens: totalOutputTokens,
+              totalTokens: totalInputTokens + totalOutputTokens,
+            }
+          : undefined;
+      if (capturedUsage) {
+        console.log(
+          `[Chat API] Agent usage — Input: ${capturedUsage.promptTokens}, Output: ${capturedUsage.completionTokens}`,
         );
       }
-      throw err;
-    }
+      try {
+        console.log("[Chat API] Saving messages to Firestore...");
+        await Promise.all([
+          new AddMessageUseCase().execute({
+            userId: user.uid,
+            profileId,
+            sessionId,
+            title: ctx.title,
+            role: "user",
+            content:
+              ctx.storableParts.length > 0
+                ? JSON.stringify(ctx.storableParts)
+                : ctx.userQuery,
+          }),
+          new AddMessageUseCase().execute({
+            userId: user.uid,
+            profileId,
+            sessionId,
+            role: "assistant",
+            content: JSON.stringify(persistPayload.responseParts),
+            ...(capturedUsage && { usage: capturedUsage }),
+          }),
+        ]);
+        console.log("[Chat API] Both messages saved successfully");
+      } catch (saveError) {
+        console.error("[Chat API] Failed to save messages:", saveError);
+      }
+
+      // Bust the server-side usage cache so the next SSR render shows updated credits.
+      revalidateTag(CacheTags.usage(user.uid), "seconds");
+    });
+
+    return createAgentUIStreamResponse({
+      agent,
+      uiMessages: sanitizedMessages,
+      options,
+      abortSignal: req.signal,
+      // Type-cast: originalMessages is only used for message ID generation,
+      // but the generic constraint expects InferUITools<ToolSet> vs UITools.
+      originalMessages: messages as Parameters<
+        typeof createAgentUIStreamResponse
+      >[0]["originalMessages"],
+      headers: {
+        "X-Session-Id": sessionId,
+        "X-Loading-Hint": loadingHint,
+        "X-Agent-Type": agentType,
+      },
+      onStepFinish: (stepResult) => {
+        if (stepResult.usage) {
+          totalInputTokens += stepResult.usage.inputTokens ?? 0;
+          totalOutputTokens += stepResult.usage.outputTokens ?? 0;
+        }
+      },
+      onFinish: ({ responseMessage, finishReason }) => {
+        console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
+        if (!responseMessage.parts?.length) return;
+        persistPayload = {
+          responseParts: responseMessage.parts,
+          userContent:
+            ctx.storableParts.length > 0
+              ? JSON.stringify(ctx.storableParts)
+              : ctx.userQuery,
+        };
+      },
+      onError: (error) => {
+        console.error(`[Chat API] Stream error:`, error);
+        return "An error occurred while generating the response.";
+      },
+    });
   },
 );

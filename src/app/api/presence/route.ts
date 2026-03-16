@@ -3,11 +3,11 @@
 // whether the Firebase client Auth session is fully established yet.
 //
 // Body: { online: boolean }
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, after } from "next/server";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, USER_KINDS, type UserKind } from "@/lib/auth/jwt";
 import { auth, rtdb } from "@/lib/firebase/admin";
-import { doctorProfileRepository } from "@/data/doctors";
+import { UpdateDoctorAvailabilityUseCase } from "@/data/doctors";
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();
@@ -38,12 +38,20 @@ export async function POST(req: NextRequest) {
 
     // For doctors, mirror presence into Firestore availability so the
     // "Connect to a Doctor" page can query available doctors from Firestore.
+    // Deferred — RTDB write already confirms presence; Firestore mirror is secondary.
     if (kind === "doctor") {
-      await doctorProfileRepository
-        .updateAvailability(decoded.uid, online ? "available" : "unavailable")
-        .catch(() => {
-          // Non-fatal — doctor profile may not exist yet during onboarding.
-        });
+      after(async () => {
+        await new UpdateDoctorAvailabilityUseCase()
+          .execute(
+            UpdateDoctorAvailabilityUseCase.validate({
+              uid: decoded.uid,
+              availability: online ? "available" : "unavailable",
+            }),
+          )
+          .catch(() => {
+            // Non-fatal — doctor profile may not exist yet during onboarding.
+          });
+      });
     }
 
     return NextResponse.json({ ok: true });

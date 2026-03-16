@@ -1,4 +1,4 @@
-import { drugService, type DrugService } from "../service/drug.service";
+import { drugRepository } from "../repositories/drug.repository";
 import {
   SearchDrugsSchema,
   type SearchDrugsInput,
@@ -7,15 +7,11 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class SearchDrugsUseCase extends UseCase<SearchDrugsInput, DrugDto[]> {
-  constructor(private readonly service: DrugService = drugService) {
-    super();
-  }
-
   static validate(input: unknown): SearchDrugsInput {
     return SearchDrugsSchema.parse(input);
   }
 
   protected async run(input: SearchDrugsInput): Promise<DrugDto[]> {
-    return this.service.search(input);
+    return drugRepository.search(input.q, input.limit);
   }
 }

@@ -6,7 +6,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/firebase/admin";
 import { detectKind } from "@/lib/auth/detect-kind";
 import { COOKIE_NAME, COOKIE_OPTS, type UserKind } from "@/lib/auth/jwt";
-import { profileRepository } from "@/data/profile";
+import { UpsertProfileUseCase } from "@/data/profile";
 import { mintSessionCookieWithKind } from "@/lib/auth/mint-session";
 
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -58,7 +58,9 @@ export async function GET(req: NextRequest) {
     // use it directly — no need to round-trip through detectKind().
     let kind: UserKind;
     if (kindParam === "doctor") {
-      await profileRepository.upsert({ userId: decoded.uid, kind: "doctor" });
+      await new UpsertProfileUseCase().execute(
+        UpsertProfileUseCase.validate({ userId: decoded.uid, kind: "doctor" }),
+      );
       kind = "doctor";
     } else {
       kind = await detectKind(decoded.uid);

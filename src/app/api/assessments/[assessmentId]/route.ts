@@ -8,13 +8,10 @@ import {
 // GET /api/assessments/[assessmentId]
 export const GET = WithContext<{ assessmentId: string }>(
   async ({ user, dependentId }, { assessmentId }) => {
-    const input = GetAssessmentUseCase.validate({
+    const assessment = await new GetAssessmentUseCase(dependentId).execute({
       userId: user.uid,
       assessmentId,
     });
-    const assessment = await new GetAssessmentUseCase(dependentId).execute(
-      input,
-    );
     if (!assessment) throw ApiError.notFound("Assessment not found.");
     return NextResponse.json(assessment);
   },
@@ -23,11 +20,10 @@ export const GET = WithContext<{ assessmentId: string }>(
 // DELETE /api/assessments/[assessmentId]
 export const DELETE = WithContext<{ assessmentId: string }>(
   async ({ user, dependentId }, { assessmentId }) => {
-    const input = DeleteAssessmentUseCase.validate({
+    await new DeleteAssessmentUseCase(dependentId).execute({
       userId: user.uid,
       assessmentId,
     });
-    await new DeleteAssessmentUseCase(dependentId).execute(input);
     return NextResponse.json({ ok: true });
   },
 );

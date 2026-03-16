@@ -2,8 +2,7 @@ import {
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
-import { auth } from "@/lib/firebase/admin";
+import { db, auth } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toDependentDto,
@@ -12,8 +11,6 @@ import {
   type CreateDependentInput,
   type UpdateDependentInput,
 } from "../models/dependent.model";
-
-const db = FirebaseService.getInstance().getDb();
 
 /** All profiles (self + dependents) live in the top-level `profiles` collection.
  *  Each document ID is the Firebase Auth UID for that profile.

@@ -1,32 +1,40 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { patientRepository, UpsertPatientSchema } from "@/data/patients";
+import {
+  GetPatientUseCase,
+  UpsertPatientUseCase,
+  UpsertPatientSchema,
+} from "@/data/patients";
 
 // GET /api/patients/me — fetch the authenticated user's patient health data
 export const GET = WithContext({}, async ({ user }) => {
-  const patient = await patientRepository.get(user.uid);
+  const input = GetPatientUseCase.validate({ userId: user.uid });
+  const patient = await new GetPatientUseCase().execute(input);
   return NextResponse.json(patient ?? { userId: user.uid });
 });
 
 // PUT /api/patients/me — upsert health fields for any authenticated user
 export const PUT = WithContext({}, async ({ user, req }) => {
   const body = (await req.json()) as unknown;
-  const input = UpsertPatientSchema.parse(body);
+  const parsedBody = UpsertPatientSchema.parse(body);
 
-  await patientRepository.upsert({
+  const input = UpsertPatientUseCase.validate({
     userId: user.uid,
-    dateOfBirth: input.dateOfBirth,
-    sex: input.sex,
-    height: input.height,
-    weight: input.weight,
-    waistCm: input.waistCm,
-    neckCm: input.neckCm,
-    hipCm: input.hipCm,
-    activityLevel: input.activityLevel,
-    foodPreferences: input.foodPreferences,
-    consentedAt: input.consentedAt,
+    dateOfBirth: parsedBody.dateOfBirth,
+    sex: parsedBody.sex,
+    height: parsedBody.height,
+    weight: parsedBody.weight,
+    bloodGroup: parsedBody.bloodGroup,
+    waistCm: parsedBody.waistCm,
+    neckCm: parsedBody.neckCm,
+    hipCm: parsedBody.hipCm,
+    activityLevel: parsedBody.activityLevel,
+    foodPreferences: parsedBody.foodPreferences,
+    consentedAt: parsedBody.consentedAt,
   });
+  await new UpsertPatientUseCase().execute(input);
 
-  const patient = await patientRepository.get(user.uid);
+  const getInput = GetPatientUseCase.validate({ userId: user.uid });
+  const patient = await new GetPatientUseCase().execute(getInput);
   return NextResponse.json(patient ?? { userId: user.uid });
 });

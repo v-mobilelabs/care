@@ -29,6 +29,12 @@ export interface CallRequestDocument {
   chimeMeetingId?: string;
   /** Stringified AWS Chime meeting response — stored for attendee creation */
   chimeMeetingData?: string;
+  /** AWS Chime Media Capture Pipeline ID — set when recording starts */
+  recordingPipelineId?: string;
+  /** S3 bucket name where recording is stored */
+  recordingS3Bucket?: string;
+  /** S3 key prefix for recording files */
+  recordingS3KeyPrefix?: string;
   /** Firebase Storage URL for the call recording (WebM video) */
   recordingUrl?: string;
   /** Call duration in seconds — set when the call ends */
@@ -54,6 +60,9 @@ export interface CallRequestDto {
   chimeMeetingId?: string;
   /** Internal — stored Chime meeting + attendee JSON. Not exposed in list views. */
   chimeMeetingData?: string;
+  recordingPipelineId?: string;
+  recordingS3Bucket?: string;
+  recordingS3KeyPrefix?: string;
   recordingUrl?: string;
   durationSeconds?: number;
   transcript?: string;
@@ -138,6 +147,9 @@ export function toCallRequestDto(
     status: doc.status,
     chimeMeetingId: doc.chimeMeetingId,
     chimeMeetingData: doc.chimeMeetingData,
+    recordingPipelineId: doc.recordingPipelineId,
+    recordingS3Bucket: doc.recordingS3Bucket,
+    recordingS3KeyPrefix: doc.recordingS3KeyPrefix,
     recordingUrl: doc.recordingUrl,
     durationSeconds: doc.durationSeconds,
     transcript: doc.transcript,

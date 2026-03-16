@@ -1,25 +1,25 @@
 "use client";
-import { Group, Text, Anchor, Box, Container, ThemeIcon, Stack } from "@mantine/core";
+
+import { Group, Text, Anchor, Box, Container, ThemeIcon } from "@mantine/core";
+import { Copyright } from "./copyright";
 import { IconHeartbeat } from "@tabler/icons-react";
 import Link from "next/link";
 
 export function LandingFooter() {
   return (
     <footer>
-      <Box py="md" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
-        <Container px="md">
+      <Box py="lg" style={{ borderTop: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))" }}>
+        <Container size="lg">
           <Group justify="space-between" wrap="wrap" gap="sm">
-            <Stack gap={2}>
+            <Group gap={8}>
               <Group>
-                <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                  <IconHeartbeat size={26} />
+                <ThemeIcon size={22} radius="md" color="primary" variant="light">
+                  <IconHeartbeat size={13} />
                 </ThemeIcon>
-                <Stack gap={1}>
-                  <Text size="sm" fw={700} c="primary">CareAI</Text>
-                  <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
-                </Stack>
+                <Text size="sm" fw={700} c="primary">CareAI</Text>
               </Group>
-            </Stack>
+              <Text size="xs" c="dimmed">© {new Date().getFullYear()} — Not a substitute for professional medical advice.</Text>
+            </Group>
             <Group gap="md">
               <Anchor href="/status" c="dimmed" size="xs" underline="hover">
                 System Status
@@ -29,6 +29,7 @@ export function LandingFooter() {
               <Anchor component={Link} href="/terms" size="xs" c="dimmed" >Terms &amp; Conditions</Anchor>
             </Group>
           </Group>
+          <Copyright />
         </Container>
       </Box>
     </footer>

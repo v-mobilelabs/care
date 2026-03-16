@@ -9,6 +9,40 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 /** 100 MB total storage allocation per user */
 export const USER_STORAGE_LIMIT_BYTES = 100 * 1024 * 1024;
 
+// ── File classification labels ───────────────────────────────────────────────
+
+export const FILE_LABELS = [
+  "xray",
+  "blood_test",
+  "prescription",
+  "scan",
+  "report",
+  "vaccination",
+  "other",
+] as const;
+
+export type FileLabel = (typeof FILE_LABELS)[number];
+
+export const FILE_LABEL_DISPLAY: Record<FileLabel, string> = {
+  xray: "X-Ray",
+  blood_test: "Blood Test",
+  prescription: "Prescription",
+  scan: "Scan",
+  report: "Report",
+  vaccination: "Vaccination",
+  other: "Other",
+};
+
+export const FILE_LABEL_COLOR: Record<FileLabel, string> = {
+  xray: "violet",
+  blood_test: "red",
+  prescription: "teal",
+  scan: "indigo",
+  report: "blue",
+  vaccination: "green",
+  other: "gray",
+};
+
 export const ALLOWED_MIME_TYPES = [
   // Images
   "image/jpeg",
@@ -45,12 +79,13 @@ export interface ExtractedPrescriptionData {
 // ── Firestore document shape ──────────────────────────────────────────────────
 
 export interface FileDocument {
-  sessionId: string;
+  /** Optional grouping tag — e.g. chat session UUID, "prescriptions", "blood-tests". */
+  sessionId?: string;
   userId: string;
   name: string;
   mimeType: string;
   size: number;
-  /** Full GCS object path, e.g. users/{uid}/sessions/{sid}/files/{fileId}/{name} */
+  /** Full GCS object path, e.g. profiles/{pid}/files/{fileId}/{name} */
   storagePath: string;
   /** Signed download URL (refreshed on retrieval) */
   downloadUrl: string | null;
@@ -59,13 +94,17 @@ export interface FileDocument {
   createdAt: Timestamp;
   /** AI-extracted prescription data, populated after the user triggers extraction. */
   extractedData?: ExtractedPrescriptionData;
+  /** AI-assigned classification label (background, post-upload). */
+  label?: FileLabel;
+  /** Confidence score 0–1 for the assigned label. */
+  labelConfidence?: number;
 }
 
 // ── DTO — outbound (API responses) ───────────────────────────────────────────
 
 export interface FileDto {
   id: string;
-  sessionId: string;
+  sessionId?: string;
   userId: string;
   name: string;
   mimeType: string;
@@ -74,14 +113,17 @@ export interface FileDto {
   downloadUrl: string | null;
   createdAt: string; // ISO-8601
   extractedData?: ExtractedPrescriptionData;
+  label?: FileLabel;
+  labelConfidence?: number;
 }
 
 // ── DTO — inbound (upload) ────────────────────────────────────────────────────
 
 export const UploadFileSchema = z.object({
-  sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
   profileId: z.string().min(1, { message: "profileId is required" }),
+  /** Optional grouping tag — chat session UUID, "prescriptions", etc. */
+  sessionId: z.string().optional(),
   name: z
     .string()
     .min(1, { message: "file name is required" })
@@ -104,7 +146,6 @@ export type UploadFileInput = z.infer<typeof UploadFileSchema>;
 
 export const FileRefSchema = z.object({
   fileId: z.string().min(1, { message: "fileId is required" }),
-  sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
   profileId: z.string().min(1, { message: "profileId is required" }),
 });
@@ -112,9 +153,10 @@ export const FileRefSchema = z.object({
 export type FileRefInput = z.infer<typeof FileRefSchema>;
 
 export const ListFilesSchema = z.object({
-  sessionId: z.string().min(1, { message: "sessionId is required" }),
   userId: z.string().min(1, { message: "userId is required" }),
   profileId: z.string().min(1, { message: "profileId is required" }),
+  /** Filter by session group — omit to list all files for the profile. */
+  sessionId: z.string().optional(),
 });
 
 export type ListFilesInput = z.infer<typeof ListFilesSchema>;
@@ -144,5 +186,7 @@ export function toFileDto(id: string, doc: FileDocument): FileDto {
     downloadUrl: doc.downloadUrl,
     createdAt: doc.createdAt.toDate().toISOString(),
     extractedData: doc.extractedData,
+    label: doc.label,
+    labelConfidence: doc.labelConfidence,
   };
 }

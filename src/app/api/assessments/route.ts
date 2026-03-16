@@ -7,19 +7,18 @@ import {
 
 // GET /api/assessments — list all assessments for the authenticated user
 export const GET = WithContext(async ({ user, dependentId }) => {
-  const input = ListAssessmentsUseCase.validate({ userId: user.uid });
-  const assessments = await new ListAssessmentsUseCase(dependentId).execute(
-    input,
-  );
+  const assessments = await new ListAssessmentsUseCase(dependentId).execute({
+    userId: user.uid,
+  });
   return NextResponse.json(assessments);
 });
 
 // POST /api/assessments — create a new assessment
 export const POST = WithContext(async ({ user, req, dependentId }) => {
   const body = (await req.json()) as Record<string, unknown>;
-  const input = CreateAssessmentUseCase.validate({ ...body, userId: user.uid });
-  const assessment = await new CreateAssessmentUseCase(dependentId).execute(
-    input,
-  );
+  const assessment = await new CreateAssessmentUseCase(dependentId).execute({
+    ...body,
+    userId: user.uid,
+  });
   return NextResponse.json(assessment, { status: 201 });
 });
