@@ -88,7 +88,7 @@ async function seedFoods() {
         food.category,
         food.dietaryType,
         ...food.regions,
-        ("brand" in food && typeof food.brand === "string") ? food.brand : "",
+        "brand" in food && typeof food.brand === "string" ? food.brand : "",
         ...food.nutrients.map((n) => `${n.name} ${n.amount}${n.unit}`),
       ].join(" ");
 
