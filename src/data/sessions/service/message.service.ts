@@ -1,6 +1,6 @@
 import { sessionRepository } from "../repositories/session.repository";
 import { messageRepository } from "../repositories/message.repository";
-import type { MessageDto } from "../models/message.model";
+import type { MessageDto, PaginatedMessages } from "../models/message.model";
 import type {
   AddMessageInput,
   ListMessagesInput,
@@ -20,6 +20,7 @@ export class MessageService {
       messageRepository.add(userId, profileId, sessionId, {
         role: input.role,
         content: input.content,
+        usage: input.usage,
       }),
       sessionRepository.incrementMessageCount(userId, profileId, sessionId),
     ]);
@@ -27,12 +28,13 @@ export class MessageService {
     return message;
   }
 
-  async list(input: ListMessagesInput): Promise<MessageDto[]> {
+  async list(input: ListMessagesInput): Promise<PaginatedMessages> {
     return messageRepository.list(
       input.userId,
       input.profileId,
       input.sessionId,
       input.limit,
+      input.cursor,
     );
   }
 }

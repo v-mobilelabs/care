@@ -5,13 +5,13 @@ import {
 import {
   ListMessagesSchema,
   type ListMessagesInput,
-  type MessageDto,
+  type PaginatedMessages,
 } from "../models/message.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class ListMessagesUseCase extends UseCase<
   ListMessagesInput,
-  MessageDto[]
+  PaginatedMessages
 > {
   constructor(private readonly service: MessageService = messageService) {
     super();
@@ -21,7 +21,7 @@ export class ListMessagesUseCase extends UseCase<
     return ListMessagesSchema.parse(input);
   }
 
-  protected async run(input: ListMessagesInput): Promise<MessageDto[]> {
+  protected async run(input: ListMessagesInput): Promise<PaginatedMessages> {
     return this.service.list(input);
   }
 }

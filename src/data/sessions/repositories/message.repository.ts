@@ -2,12 +2,10 @@ import {
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
-import { FirebaseService } from "@/data/shared/service/firesbase.service";
+import { db } from "@/lib/firebase/admin";
 import type { MessageDocument } from "../models/message.model";
 import { toMessageDto } from "../models/message.model";
-import type { MessageDto } from "../models/message.model";
-
-const db = FirebaseService.getInstance().getDb();
+import type { MessageDto, PaginatedMessages } from "../models/message.model";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -28,7 +26,7 @@ export const messageRepository = {
     userId: string,
     profileId: string,
     sessionId: string,
-    data: Pick<MessageDocument, "role" | "content">,
+    data: Pick<MessageDocument, "role" | "content" | "usage">,
   ): Promise<MessageDto> {
     const doc: MessageDocument = {
       sessionId,
@@ -36,6 +34,7 @@ export const messageRepository = {
       role: data.role,
       content: data.content,
       createdAt: Timestamp.now(),
+      ...(data.usage && { usage: data.usage }),
     };
     const ref = await messagesCol(userId, profileId, sessionId).add(doc);
     return toMessageDto(ref.id, doc);
@@ -46,14 +45,33 @@ export const messageRepository = {
     profileId: string,
     sessionId: string,
     limit: number,
-  ): Promise<MessageDto[]> {
-    const snap = await messagesCol(userId, profileId, sessionId)
-      .orderBy("createdAt", "asc")
-      .limit(limit)
-      .get();
-    return snap.docs.map((d: QueryDocumentSnapshot) =>
-      toMessageDto(d.id, d.data() as MessageDocument),
+    cursor?: string,
+  ): Promise<PaginatedMessages> {
+    let query = messagesCol(userId, profileId, sessionId).orderBy(
+      "createdAt",
+      "desc",
     );
+
+    if (cursor) {
+      query = query.startAfter(Timestamp.fromDate(new Date(cursor)));
+    }
+
+    // Fetch one extra to determine if there's a next page.
+    const snap = await query.limit(limit + 1).get();
+    const docs = snap.docs as QueryDocumentSnapshot[];
+    const hasMore = docs.length > limit;
+    const page = hasMore ? docs.slice(0, limit) : docs;
+
+    // Reverse so results are oldest-first (ascending) for the client.
+    const messages = page
+      .map((d) => toMessageDto(d.id, d.data() as MessageDocument))
+      .reverse();
+
+    const nextCursor = hasMore
+      ? messages[0].createdAt // oldest message on this page
+      : null;
+
+    return { messages, nextCursor };
   },
 
   async findById(
