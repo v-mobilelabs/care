@@ -1,7 +1,6 @@
 import { Container } from "@mantine/core";
 import { LandingHeader } from "../headers/landing.header";
 import { LandingFooter } from "../footers/landing.footer";
-import { LandingChatOverlay } from "@/ui/landing-chat-overlay";
 
 export function LandingLayout({
   children,
@@ -13,7 +12,6 @@ export function LandingLayout({
       <LandingHeader />
       <main>{children}</main>
       <LandingFooter />
-      <LandingChatOverlay />
     </Container>
   );
 }
