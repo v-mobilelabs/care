@@ -73,6 +73,8 @@
     "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "sonarqube-scanner": "^4.3.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
