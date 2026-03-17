@@ -13,3 +13,5 @@ export { CreateInsuranceUseCase } from "./use-cases/create-insurance.use-case";
 export { ListInsuranceUseCase } from "./use-cases/list-insurance.use-case";
 export { UpdateInsuranceUseCase } from "./use-cases/update-insurance.use-case";
 export { DeleteInsuranceUseCase } from "./use-cases/delete-insurance.use-case";
+export { UploadInsuranceDocumentUseCase } from "./use-cases/upload-insurance-document.use-case";
+export { ExtractInsuranceUseCase } from "./use-cases/extract-insurance.use-case";

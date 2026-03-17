@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { insuranceService } from "@/data/insurance";
+import { UploadInsuranceDocumentUseCase } from "@/data/insurance";
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -39,12 +39,15 @@ export const POST = WithContext<{ insuranceId: string }>(
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const record = await insuranceService.uploadDocument(
-      user.uid,
-      insuranceId,
-      { name: file.name, mimeType: file.type, buffer },
+    const record = await new UploadInsuranceDocumentUseCase(
       dependentId,
-    );
+    ).execute({
+      userId: user.uid,
+      insuranceId,
+      fileName: file.name,
+      mimeType: file.type,
+      buffer,
+    });
 
     return NextResponse.json(record);
   },

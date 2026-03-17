@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { bucket } from "@/lib/firebase/admin";
-import { insuranceExtractionService } from "@/data/insurance";
+import { ExtractInsuranceUseCase } from "@/data/insurance";
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -70,7 +70,7 @@ export const POST = WithContext(async ({ user, req }) => {
 
   // 3. AI extraction
   try {
-    const extracted = await insuranceExtractionService.extract({
+    const extracted = await new ExtractInsuranceUseCase().execute({
       userId: user.uid,
       storagePath,
       mimeType: file.type,

@@ -21,3 +21,4 @@ export { CreatePrescriptionUseCase } from "./use-cases/create-prescription.use-c
 export { ListPrescriptionsUseCase } from "./use-cases/list-prescriptions.use-case";
 export { GetPrescriptionUseCase } from "./use-cases/get-prescription.use-case";
 export { DeletePrescriptionUseCase } from "./use-cases/delete-prescription.use-case";
+export { DeletePrescriptionByFileUseCase } from "./use-cases/delete-prescription-by-file.use-case";
