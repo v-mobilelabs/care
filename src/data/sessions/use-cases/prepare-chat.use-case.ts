@@ -5,12 +5,12 @@ import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { ApiError } from "@/lib/api/with-context";
 import { extractMessageContext } from "@/lib/chat/helpers";
 import type { MessageContext } from "@/lib/chat/helpers";
-import { getLoadingHint } from "@/lib/chat/loading-hints";
 import {
   clinicalAgent,
   dietPlannerChatAgent,
   prescriptionChatAgent,
   bloodTestChatAgent,
+  patientAgent,
   gatewayAgent,
 } from "@/data/shared/service/agents";
 import type { AgentCallOptions } from "@/data/shared/service/agents/base/agent";
@@ -42,7 +42,7 @@ export interface PrepareChatResult {
   messages: UIMessage[];
   options: AgentCallOptions;
   agentType: AgentType;
-  loadingHint: string;
+  loadingHints: string[];
   sessionId: string;
   ctx: MessageContext;
 }
@@ -54,6 +54,7 @@ const AGENTS = {
   dietPlanner: dietPlannerChatAgent,
   prescription: prescriptionChatAgent,
   bloodTest: bloodTestChatAgent,
+  patient: patientAgent,
 } as const;
 
 export class PrepareChatUseCase extends UseCase<
@@ -112,7 +113,7 @@ export class PrepareChatUseCase extends UseCase<
     }
 
     console.log(
-      `[PrepareChatUseCase] Gateway + embed: ${agentType} (confidence: ${gatewayDecision.confidence}, thinking: ${gatewayDecision.thinkingLevel}, rag: ${gatewayDecision.needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
+      `[PrepareChatUseCase] Gateway + embed: ${agentType} (thinking: ${gatewayDecision.thinkingLevel}, rag: ${gatewayDecision.needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
     );
     console.log(
       `[PrepareChatUseCase] Gateway reasoning: ${gatewayDecision.reasoning}`,
@@ -156,7 +157,7 @@ export class PrepareChatUseCase extends UseCase<
       needsRag: gatewayDecision.needsRag,
     };
 
-    const loadingHint = getLoadingHint(ctx.userQuery);
+    const loadingHints = gatewayDecision.loadingHints;
 
     return {
       agent,
@@ -164,7 +165,7 @@ export class PrepareChatUseCase extends UseCase<
       messages,
       options,
       agentType,
-      loadingHint,
+      loadingHints,
       sessionId,
       ctx,
     };

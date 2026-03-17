@@ -4,6 +4,11 @@ import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import { AddMessageUseCase, PrepareChatUseCase } from "@/data/sessions";
 import { CacheTags } from "@/data/cached";
+import {
+  extractAndSaveMemories,
+  extractTextFromParts,
+} from "@/data/memory/service/extract-memories";
+import { CreditsExhaustedError } from "@/lib/errors";
 
 // Increased from 60s to 180s to support complex tool executions like dietPlanTool
 // which generates 35+ detailed meal entries with nutrition data
@@ -22,7 +27,7 @@ export const POST = WithContext(
       messages,
       options,
       agentType,
-      loadingHint,
+      loadingHints,
       sessionId,
       ctx,
     } = await new PrepareChatUseCase().execute({
@@ -94,6 +99,19 @@ export const POST = WithContext(
 
       // Bust the server-side usage cache so the next SSR render shows updated credits.
       revalidateTag(CacheTags.usage(user.uid), "seconds");
+
+      // Auto-extract memorable facts from the conversation (like Mem0's addMemories).
+      try {
+        await extractAndSaveMemories({
+          userId: user.uid,
+          profileId,
+          sessionId,
+          userMessage: ctx.userQuery,
+          assistantMessage: extractTextFromParts(persistPayload.responseParts),
+        });
+      } catch (memErr) {
+        console.error("[Chat API] Memory extraction failed:", memErr);
+      }
     });
 
     return createAgentUIStreamResponse({
@@ -108,7 +126,7 @@ export const POST = WithContext(
       >[0]["originalMessages"],
       headers: {
         "X-Session-Id": sessionId,
-        "X-Loading-Hint": loadingHint,
+        "X-Loading-Hints": JSON.stringify(loadingHints),
         "X-Agent-Type": agentType,
       },
       onStepFinish: (stepResult) => {
@@ -130,6 +148,14 @@ export const POST = WithContext(
       },
       onError: (error) => {
         console.error(`[Chat API] Stream error:`, error);
+        if (error instanceof CreditsExhaustedError) {
+          return JSON.stringify({
+            error: {
+              code: error.code,
+              message: error.toResponseMessage(),
+            },
+          });
+        }
         return "An error occurred while generating the response.";
       },
     });
