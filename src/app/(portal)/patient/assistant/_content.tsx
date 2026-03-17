@@ -47,9 +47,9 @@ export function ChatContent() {
 
     // ── Messages hook ─────────────────────────────────────────────────────────
     const {
-        messages, messageUsage, sendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
+        messages, messageTimestamps, messageUsage, sendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
         answeredIds,
-        phraseIdx, phraseFading,
+        phraseIdx, phraseFading, loadingHints,
         editingId, editingText, setEditingText,
         handleEditStart, handleEditCancel, handleEditSubmit, handleEditKeyDown,
         handleAnswer,
@@ -184,6 +184,7 @@ export function ChatContent() {
                     <Box mb={inputBarHeight - 64} style={{ flex: 1, overflow: "auto" }}>
                         <Messages
                             messages={messages}
+                            messageTimestamps={messageTimestamps}
                             messageUsage={messageUsage}
                             isLoading={isLoading}
                             preparingLabel={(() => {
@@ -199,6 +200,7 @@ export function ChatContent() {
                             editingText={editingText}
                             phraseIdx={phraseIdx}
                             phraseFading={phraseFading}
+                            loadingHints={loadingHints}
                             error={error}
                             onRetry={regenerate}
                             onAnswer={handleAnswer}

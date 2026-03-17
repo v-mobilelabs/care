@@ -75,7 +75,6 @@ function SummaryCard({
             p={0}
             style={{
                 overflow: "hidden",
-                borderLeft: "4px solid var(--mantine-color-primary-5)",
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
             }}

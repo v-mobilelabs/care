@@ -56,6 +56,7 @@ function ReportModalContent({ onSubmit }: Readonly<{ onSubmit: (text: string) =>
                 value={text}
                 onChange={(e) => setText(e.currentTarget.value)}
                 autoFocus
+                size="sm"
             />
             <Button
                 fullWidth
@@ -410,6 +411,7 @@ export function TextMessage({
                 {isEditing ? (
                     <Box maw={600} w="100%">
                         <Textarea
+                            size="sm"
                             autosize
                             minRows={1}
                             maxRows={8}
@@ -442,7 +444,7 @@ export function TextMessage({
                     >
                         {/* Action row: edit (user) or feedback + token (assistant) */}
                         <Group gap={2} mt={4} justify={isUser ? "flex-end" : "flex-start"} style={{ minHeight: 28 }}>
-                            {isUser ? (
+                            {isUser && (
                                 <ActionIcon
                                     size={28}
                                     variant="subtle"
@@ -455,11 +457,6 @@ export function TextMessage({
                                 >
                                     <IconPencil size={15} />
                                 </ActionIcon>
-                            ) : (
-                                <>
-                                    <FeedbackBar msgId={msgId} />
-                                    {usage && <TokenUsageBadge usage={usage} />}
-                                </>
                             )}
                             {isUser ? (
                                 <Box
@@ -514,6 +511,10 @@ export function TextMessage({
                                 </Box>
                             )}
                         </Group>
+                        {!isUser && (<Group gap="sm">
+                            <FeedbackBar msgId={msgId} />
+                            {usage && <TokenUsageBadge usage={usage} />}
+                        </Group>)}
                     </Box>
                 )}
             </Box>
@@ -523,30 +524,23 @@ export function TextMessage({
 
 // ── Typing / thinking status indicator ───────────────────────────────────────
 
-const THINKING_PHRASES = [
-    "Let me think about that…",
-    "One moment…",
-    "Processing what you've shared…",
-];
-const ANALYSING_PHRASES = [
-    "Analysing your symptoms…",
-    "Checking clinical guidelines…",
-    "Putting this together…",
-    "Looking into this for you…",
-    "Reviewing the details…",
-    "Almost there…",
+const FALLBACK_PHRASES = [
+    "Processing your request...",
+    "One moment...",
 ];
 
 interface StatusIndicatorProps {
     chatStatus: ChatStatus;
     phraseIdx: number;
     phraseFading: boolean;
+    /** Dynamic hints from the gateway, used as cycling phrases. */
+    loadingHints?: string[];
     /** Fixed label to display instead of the cycling phrases (e.g. during upload). */
     overrideLabel?: string;
 }
 
-export function StatusIndicator({ chatStatus, phraseIdx, phraseFading, overrideLabel }: Readonly<StatusIndicatorProps>) {
-    const phrases = chatStatus === "ready" ? THINKING_PHRASES : ANALYSING_PHRASES;
+export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, overrideLabel }: Readonly<StatusIndicatorProps>) {
+    const phrases = loadingHints && loadingHints.length > 0 ? loadingHints : FALLBACK_PHRASES;
     const label = overrideLabel ?? phrases[phraseIdx % phrases.length];
     return (
         <Stack gap={4} align="flex-start" style={{ animation: "msg-enter 0.2s ease both" }}>

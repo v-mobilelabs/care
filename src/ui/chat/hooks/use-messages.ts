@@ -44,6 +44,9 @@ export function useMessages(sessionId: string) {
   >([]);
   const { activeDependentId } = useActiveProfile();
   const { data: profile } = useCurrentProfile();
+  // Dynamic loading hints received from the gateway via response header.
+  const loadingHintsRef = useRef<string[]>([]);
+  const [loadingHints, setLoadingHints] = useState<string[]>([]);
   // ── DB message hydration ──────────────────────────────────────────────────
   const {
     data: dbData,
@@ -96,6 +99,22 @@ export function useMessages(sessionId: string) {
       api: "/api/chat",
       body: { sessionId },
       headers: activeDependentId ? { "x-dependent-id": activeDependentId } : {},
+      fetch: async (input, init) => {
+        const response = await fetch(input, init);
+        const hintsHeader = response.headers.get("X-Loading-Hints");
+        if (hintsHeader) {
+          try {
+            const parsed = JSON.parse(hintsHeader) as string[];
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              loadingHintsRef.current = parsed;
+              setLoadingHints(parsed);
+            }
+          } catch {
+            /* ignore malformed header */
+          }
+        }
+        return response;
+      },
     }),
     messages: getWelcomeMessage(profile?.name?.split(" ")[0]),
     sendAutomaticallyWhen: (args: { messages: UIMessage[] }) =>
@@ -111,8 +130,12 @@ export function useMessages(sessionId: string) {
       hasHydrated.current = true;
       setIsHydratedState(true);
       if (dbMessages.length > 0) {
-        setMessages(dbMessages.map(dbToUIMessage));
+        const uiMsgs = dbMessages.map(dbToUIMessage);
+        setMessages(uiMsgs);
         hydratedCountRef.current = dbMessages.length;
+        // Restore answered tool calls so question cards show as answered.
+        const restored = extractAnsweredIds(uiMsgs);
+        if (restored.size > 0) setAnsweredIds(restored);
       } else {
         // New / empty session — reset to the welcome message.
         setMessages(getWelcomeMessage(profile?.name?.split(" ")[0]));
@@ -137,10 +160,14 @@ export function useMessages(sessionId: string) {
 
   // ── Optimistic cache sync + sidebar/credits invalidation ────────────────────
   useEffect(() => {
-    // Build a lookup so we preserve original createdAt from DB records
-    // instead of overwriting every message with "now" (which kills date separators).
+    // Build lookups so we preserve original createdAt and usage from DB records
+    // instead of overwriting every message with "now" (which kills date separators)
+    // or dropping usage data (which hides token counts).
     const dbTimestamps = new Map(
       (dbMessages ?? []).map((r) => [r.id, r.createdAt]),
+    );
+    const dbUsage = new Map(
+      (dbMessages ?? []).filter((r) => r.usage).map((r) => [r.id, r.usage!]),
     );
 
     if (status === "ready" && hasHydrated.current) {
@@ -149,7 +176,14 @@ export function useMessages(sessionId: string) {
       setMessagesCache(
         messages
           .filter((m) => m.id !== "welcome")
-          .map((m) => uiToMessageRecord(m, sessionId, dbTimestamps.get(m.id))),
+          .map((m) =>
+            uiToMessageRecord(
+              m,
+              sessionId,
+              dbTimestamps.get(m.id),
+              dbUsage.get(m.id),
+            ),
+          ),
       );
       invalidateSessions();
       invalidateCredits();
@@ -161,7 +195,14 @@ export function useMessages(sessionId: string) {
       setMessagesCache(
         messages
           .filter((m) => m.id !== "welcome")
-          .map((m) => uiToMessageRecord(m, sessionId, dbTimestamps.get(m.id))),
+          .map((m) =>
+            uiToMessageRecord(
+              m,
+              sessionId,
+              dbTimestamps.get(m.id),
+              dbUsage.get(m.id),
+            ),
+          ),
       );
       optimisticDeductCredit();
       invalidateSessions();
@@ -176,6 +217,8 @@ export function useMessages(sessionId: string) {
   useEffect(() => {
     if (!isLoading) {
       setPhraseIdx(0);
+      loadingHintsRef.current = [];
+      setLoadingHints([]);
       return;
     }
     const interval = setInterval(() => {
@@ -317,6 +360,7 @@ export function useMessages(sessionId: string) {
     // Loading phrase animation
     phraseIdx,
     phraseFading,
+    loadingHints,
     // Inline edit
     editingId,
     editingText,
@@ -377,6 +421,32 @@ export function useMessages(sessionId: string) {
 }
 
 // ── DB → UIMessage converter ──────────────────────────────────────────────────
+
+/** Extract answered askQuestion tool calls from hydrated messages. */
+function extractAnsweredIds(msgs: UIMessage[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const msg of msgs) {
+    if (msg.role !== "assistant") continue;
+    for (const part of msg.parts) {
+      const p = part as unknown as {
+        type?: string;
+        state?: string;
+        toolCallId?: string;
+        output?: unknown;
+      };
+      if (
+        p.type === "tool-askQuestion" &&
+        p.state === "result" &&
+        p.toolCallId &&
+        typeof p.output === "string"
+      ) {
+        map.set(p.toolCallId, p.output);
+      }
+    }
+  }
+  return map;
+}
+
 /** Walk backwards through messages and return the input of the most recent `recordCondition` call. */
 function findMostRecentCondition(msgs: UIMessage[]): ConditionInput | null {
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -432,6 +502,7 @@ function uiToMessageRecord(
   msg: UIMessage,
   sessionId: string,
   createdAt?: string,
+  usage?: MessageRecord["usage"],
 ): MessageRecord {
   return {
     id: msg.id,
@@ -439,5 +510,6 @@ function uiToMessageRecord(
     role: msg.role as "user" | "assistant",
     content: JSON.stringify(msg.parts),
     createdAt: createdAt ?? new Date().toISOString(),
+    ...(usage && { usage }),
   };
 }

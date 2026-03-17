@@ -13,7 +13,7 @@ export function NextStepsCard({ data }: Readonly<NextStepsCardProps>) {
     const hasMore = data.shortTerm.length > 0 || data.longTerm.length > 0;
 
     return (
-        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-primary-5)" }}>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
             {/* ── Red flags — always first, impossible to miss ── */}
             {data.redFlags.length > 0 && (
                 <Alert

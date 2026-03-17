@@ -1,10 +1,11 @@
 "use client";
-import { ActionIcon, Alert, Avatar, Box, Button, Divider, Group, Loader, ScrollArea, Stack, Text, Transition } from "@mantine/core";
+import { ActionIcon, Alert, Avatar, Box, Button, Group, Loader, ScrollArea, Stack, Text, Transition } from "@mantine/core";
 import { IconAlertCircle, IconArrowDown, IconChevronUp, IconCoins, IconHeartbeat, IconRefresh } from "@tabler/icons-react";
 import type { ChatStatus, UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolPartRenderer } from "./tool-cards";
 import { FileMessage, StatusIndicator, TextMessage } from "./message";
+import { DateSeparator } from "./date-separator";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -13,6 +14,8 @@ export type { ChatStatus };
 
 export interface MessagesProps {
     messages: UIMessage[];
+    /** Map of message ID → ISO timestamp for date separator rendering. */
+    messageTimestamps?: ReadonlyMap<string, string>;
     /** Map of message ID → token usage, for assistant messages with tracked usage. */
     messageUsage?: ReadonlyMap<string, { promptTokens: number; completionTokens: number; totalTokens: number }>;
     isLoading: boolean;
@@ -27,6 +30,8 @@ export interface MessagesProps {
     editingText: string;
     phraseIdx: number;
     phraseFading: boolean;
+    /** Dynamic loading hints from gateway for contextual loading messages. */
+    loadingHints?: string[];
     onAnswer: (toolCallId: string, answer: string) => void;
     onApproval: (opts: { id: string; approved: boolean; reason?: string }) => void;
     onEditStart: (msgId: string, text: string) => void;
@@ -135,6 +140,7 @@ function RetryBlock({ error, onRetry }: Readonly<{ error?: Error | null; onRetry
  */
 export function Messages({
     messages,
+    messageTimestamps,
     messageUsage,
     isLoading,
     chatStatus,
@@ -145,6 +151,7 @@ export function Messages({
     editingText,
     phraseIdx,
     phraseFading,
+    loadingHints,
     onAnswer,
     onApproval,
     onEditStart,
@@ -248,15 +255,19 @@ export function Messages({
                     )}
 
                     {/* Message thread */}
-                    {messages.map((msg: UIMessage) => {
+                    {messages.map((msg: UIMessage, idx: number) => {
                         const isUser = msg.role === "user";
                         const isNew = !initialIdsRef.current!.has(msg.id);
+                        const currTs = messageTimestamps?.get(msg.id);
+                        const prevTs = idx > 0 ? messageTimestamps?.get(messages[idx - 1].id) : undefined;
+                        const showDate = currTs != null && (prevTs == null || new Date(currTs).toDateString() !== new Date(prevTs).toDateString());
                         return (
                             <Stack
                                 key={msg.id}
                                 gap="xs"
                                 style={isNew ? { animation: "msg-enter 0.3s ease-out both" } : undefined}
                             >
+                                {showDate && <DateSeparator date={currTs} />}
                                 {msg.parts.map((part, i) => {
                                     if (part.type === "file") {
                                         return (
@@ -305,10 +316,6 @@ export function Messages({
                                         );
                                     }
 
-                                    if (!isUser && part.type === "step-start" && i > 0) {
-                                        return <Divider key={i} variant="dashed" color="gray.3" my="xs" ml={36} />;
-                                    }
-
                                     return null;
                                 })}
                             </Stack>
@@ -329,6 +336,7 @@ export function Messages({
                             chatStatus={chatStatus}
                             phraseIdx={phraseIdx}
                             phraseFading={phraseFading}
+                            loadingHints={loadingHints}
                             overrideLabel={preparingLabel && !isLoading ? preparingLabel : undefined}
                         />
                     )}

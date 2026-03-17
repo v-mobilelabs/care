@@ -20,7 +20,7 @@ export function PatientSummaryCard({ data }: Readonly<PatientSummaryCardProps>) 
     const hasComplaints = data.chiefComplaints.length > 0;
 
     return (
-        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-primary-5)" }}>
+        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
             {/* Header */}
             <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }}>
                 <Group justify="space-between" px="md" py="sm">

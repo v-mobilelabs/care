@@ -1,5 +1,5 @@
 "use client";
-import { Badge, Button, Chip, Group, Paper, Slider, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Badge, Button, Card, Chip, Group, Paper, Slider, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconCheck, IconQuestionMark, IconX, IconAlertTriangle, IconThermometer, IconFlame, IconScale, IconMoodSmile, IconMoodSad, IconHeartbeat, IconDroplet, IconClock } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 import type { AskQuestionInput } from "@/app/(portal)/patient/_types";
@@ -58,8 +58,10 @@ export function QuestionCard({ data, toolCallId, isAnswered, isLoading, onAnswer
     ];
 
     return (
-        <Paper withBorder radius="lg" p="md" style={{ borderLeft: "4px solid var(--mantine-color-primary-5)" }}>
-            <Stack gap="md">
+        <Card withBorder radius="lg" p="md">
+            <Card.Section withBorder px="md" py="sm" style={{
+                background: "light-dark(var(--mantine-color-gray-1),var(--mantine-color-dark-9)",
+            }}>
                 <Group gap="xs" justify="space-between" wrap="nowrap">
                     <Group gap="xs">
                         <ThemeIcon size={28} radius="md" color="primary" variant="light"><IconQuestionMark size={15} /></ThemeIcon>
@@ -67,43 +69,19 @@ export function QuestionCard({ data, toolCallId, isAnswered, isLoading, onAnswer
                     </Group>
                     {isAnswered && <Badge color="teal" size="sm" variant="light" leftSection={<IconCheck size={10} />}>Answered</Badge>}
                 </Group>
+            </Card.Section>
+            <Card.Section>
+                <Stack gap="md">
 
-                {data.type === "yes_no" && (
-                    <Group gap="sm" grow>
-                        <Button size="sm" color="teal" variant={disabled ? "outline" : "filled"} disabled={disabled} leftSection={<IconCheck size={14} />} onClick={() => onAnswer(toolCallId, "Yes")}>Yes</Button>
-                        <Button size="sm" color="red" variant={disabled ? "outline" : "light"} disabled={disabled} leftSection={<IconX size={14} />} onClick={() => onAnswer(toolCallId, "No")}>No</Button>
-                    </Group>
-                )}
-
-                {data.type === "single_choice" && data.options && (
-                    <Chip.Group>
-                        <Group gap="xs" wrap="wrap">
-                            {data.options.map((opt) => {
-                                const icon = getOptionIcon(opt);
-                                return (
-                                    <Chip
-                                        key={opt}
-                                        value={opt}
-                                        color="primary"
-                                        variant="outline"
-                                        size="md"
-                                        radius="xl"
-                                        disabled={disabled}
-                                        checked={false}
-                                        onChange={() => { if (!disabled) onAnswer(toolCallId, opt); }}
-                                        styles={{ label: { cursor: disabled ? "default" : "pointer", fontWeight: 500 } }}
-                                    >
-                                        {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
-                                    </Chip>
-                                );
-                            })}
+                    {data.type === "yes_no" && (
+                        <Group gap="sm" grow>
+                            <Button size="sm" color="teal" variant={disabled ? "outline" : "filled"} disabled={disabled} leftSection={<IconCheck size={14} />} onClick={() => onAnswer(toolCallId, "Yes")}>Yes</Button>
+                            <Button size="sm" color="red" variant={disabled ? "outline" : "light"} disabled={disabled} leftSection={<IconX size={14} />} onClick={() => onAnswer(toolCallId, "No")}>No</Button>
                         </Group>
-                    </Chip.Group>
-                )}
+                    )}
 
-                {data.type === "multi_choice" && data.options && (
-                    <Stack gap="sm">
-                        <Chip.Group multiple value={multiSelected} onChange={disabled ? undefined : setMultiSelected}>
+                    {data.type === "single_choice" && data.options && (
+                        <Chip.Group>
                             <Group gap="xs" wrap="wrap">
                                 {data.options.map((opt) => {
                                     const icon = getOptionIcon(opt);
@@ -113,48 +91,76 @@ export function QuestionCard({ data, toolCallId, isAnswered, isLoading, onAnswer
                                             value={opt}
                                             color="primary"
                                             variant="outline"
-                                            size="md"
-                                            radius="xl"
+                                            size="xs"
                                             disabled={disabled}
-                                            styles={{ label: { cursor: disabled ? "default" : "pointer", fontWeight: 500 } }}
+                                            checked={false}
+                                            onChange={() => { if (!disabled) onAnswer(toolCallId, opt); }}
+                                            styles={{ label: { cursor: disabled ? "default" : "pointer" } }}
                                         >
-                                            {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
+                                            {icon ? <Group gap={5} wrap="nowrap">
+                                                <ThemeIcon size={16} color="primary" variant="light">{icon}</ThemeIcon>
+                                                {opt}</Group> : opt}
                                         </Chip>
                                     );
                                 })}
                             </Group>
                         </Chip.Group>
-                        {!disabled && (
-                            <Group justify="flex-end">
-                                <Button size="sm" color="primary" disabled={multiSelected.length === 0} onClick={() => onAnswer(toolCallId, multiSelected.join(", "))}>
-                                    Confirm selection
-                                </Button>
-                            </Group>
-                        )}
-                    </Stack>
-                )}
+                    )}
 
-                {data.type === "scale" && (
-                    <Stack gap="md">
-                        <Stack gap={4}>
-                            <Slider min={data.scaleMin ?? 0} max={data.scaleMax ?? 10} step={1} value={scaleValue} onChange={setScaleValue} disabled={disabled} marks={scaleMarks} color="primary" />
-                            <Group justify="space-between" mt="xs">
-                                <Text size="xs" c="dimmed">{data.scaleMinLabel ?? String(data.scaleMin ?? 0)}</Text>
-                                <Text size="xs" c="dimmed">{data.scaleMaxLabel ?? String(data.scaleMax ?? 10)}</Text>
-                            </Group>
+                    {data.type === "multi_choice" && data.options && (
+                        <Stack gap="sm">
+                            <Chip.Group multiple value={multiSelected} onChange={disabled ? undefined : setMultiSelected}>
+                                <Group gap="xs" wrap="wrap">
+                                    {data.options.map((opt) => {
+                                        const icon = getOptionIcon(opt);
+                                        return (
+                                            <Chip
+                                                key={opt}
+                                                value={opt}
+                                                color="primary"
+                                                variant="outline"
+                                                size="xs"
+                                                disabled={disabled}
+                                                styles={{ label: { cursor: disabled ? "default" : "pointer" } }}
+                                            >
+                                                {icon ? <Group gap={5} wrap="nowrap"><ThemeIcon size={16} color="primary" variant="light">{icon}</ThemeIcon>{opt}</Group> : opt}
+                                            </Chip>
+                                        );
+                                    })}
+                                </Group>
+                            </Chip.Group>
+                            {!disabled && (
+                                <Group justify="flex-end">
+                                    <Button size="sm" color="primary" disabled={multiSelected.length === 0} onClick={() => onAnswer(toolCallId, multiSelected.join(", "))}>
+                                        Confirm selection
+                                    </Button>
+                                </Group>
+                            )}
                         </Stack>
-                        {!disabled && (
-                            <Group justify="flex-end">
-                                <Button size="sm" color="primary" onClick={() => onAnswer(toolCallId, String(scaleValue))}>Submit: {scaleValue}</Button>
-                            </Group>
-                        )}
-                    </Stack>
-                )}
+                    )}
 
-                {data.type === "free_text" && !isAnswered && (
-                    <Text size="xs" c="dimmed" fs="italic">↓ Type your answer in the chat bar below</Text>
-                )}
-            </Stack>
-        </Paper>
+                    {data.type === "scale" && (
+                        <Stack gap="md">
+                            <Stack gap={4}>
+                                <Slider min={data.scaleMin ?? 0} max={data.scaleMax ?? 10} step={1} value={scaleValue} onChange={setScaleValue} disabled={disabled} marks={scaleMarks} color="primary" />
+                                <Group justify="space-between" mt="xs">
+                                    <Text size="xs" c="dimmed">{data.scaleMinLabel ?? String(data.scaleMin ?? 0)}</Text>
+                                    <Text size="xs" c="dimmed">{data.scaleMaxLabel ?? String(data.scaleMax ?? 10)}</Text>
+                                </Group>
+                            </Stack>
+                            {!disabled && (
+                                <Group justify="flex-end">
+                                    <Button size="sm" color="primary" onClick={() => onAnswer(toolCallId, String(scaleValue))}>Submit: {scaleValue}</Button>
+                                </Group>
+                            )}
+                        </Stack>
+                    )}
+
+                    {data.type === "free_text" && !isAnswered && (
+                        <Text size="xs" c="dimmed" fs="italic">↓ Type your answer in the chat bar below</Text>
+                    )}
+                </Stack>
+            </Card.Section>
+        </Card>
     );
 }

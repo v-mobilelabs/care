@@ -2,6 +2,7 @@
 import {
     Badge,
     Button,
+    Card,
     Chip,
     Group,
     Loader,
@@ -107,68 +108,40 @@ export function QuestionCard({ data, toolCallId, isAnswered, answeredValue, isLo
     ];
 
     return (
-        <Paper
-            withBorder={false}
-            radius="xl"
+        <Card withBorder radius="lg"
             shadow="xs"
-            p={{ base: "sm", xs: "md" }}
-            my={{ base: "md", xs: "xl" }}
-            style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))" }}
         >
-            <Stack gap="sm">
+            <Card.Section withBorder p="sm" style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" }}>
                 {/* Header — type icon + question + optional answered badge */}
-                <Stack gap={4}>
+                <Stack gap={2}>
                     <Group gap="xs" wrap="nowrap" align="flex-start">
                         <ThemeIcon size={32} radius="md" color="primary" variant="light" style={{ flexShrink: 0 }}>{getTypeIcon(data.type)}</ThemeIcon>
-                        <Text fw={500} size="sm">{data.question}</Text>
+                        <Stack gap={"2"}>
+                            <Text fw={500} size="sm">{data.question}</Text>
+                            {isAnswered && <Badge color="teal" size="xs" variant="light" leftSection={<IconCheck size={10} />}>Answered</Badge>}
+                        </Stack>
                     </Group>
-                    {isAnswered && <Badge color="teal" size="sm" variant="light" leftSection={<IconCheck size={10} />} ml={40}>Answered</Badge>}
                 </Stack>
+            </Card.Section>
+            <Card.Section px="sm" py="sm">
+                <Stack gap="md">
+                    {/* Show the user's answer when answered */}
+                    {isAnswered && answeredValue && (
+                        <Text size="sm" c="dimmed">Your answer: <Text span fw={600} c="primary">{answeredValue}</Text></Text>
+                    )}
 
-                {/* Show the user's answer when answered */}
-                {isAnswered && answeredValue && (
-                    <Text size="sm" c="dimmed">Your answer: <Text span fw={600} c="primary">{answeredValue}</Text></Text>
-                )}
-
-                {/* ── Yes / No ────────────────────────────────────────────── */}
-                {data.type === "yes_no" && !isAnswered && (
-                    <Group gap="xs">
-                        <Button size="md" color="primary" variant="outline" disabled={isLoading} leftSection={<IconCheck size={16} />} onClick={() => onAnswer(toolCallId, "Yes")}>Yes</Button>
-                        <Button size="md" color="primary" variant="outline" disabled={isLoading} leftSection={<IconX size={16} />} onClick={() => onAnswer(toolCallId, "No")}>No</Button>
-                    </Group>
-                )}
-
-                {/* ── Single choice ───────────────────────────────────────── */}
-                {data.type === "single_choice" && data.options && !isAnswered && (
-                    <Chip.Group>
-                        <Group gap="xs" wrap="wrap">
-                            {data.options.map((opt) => {
-                                const icon = getOptionIcon(opt);
-                                return (
-                                    <Chip
-                                        key={opt}
-                                        value={opt}
-                                        color="primary"
-                                        variant="outline"
-                                        size="md"
-                                        radius="xl"
-                                        disabled={isLoading}
-                                        checked={false}
-                                        onChange={() => { if (!isLoading) onAnswer(toolCallId, opt); }}
-                                    >
-                                        {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
-                                    </Chip>
-                                );
-                            })}
+                    {/* ── Yes / No ────────────────────────────────────────────── */}
+                    {data.type === "yes_no" && !isAnswered && (
+                        <Group gap="xs">
+                            <Button size="md" color="primary" variant="outline" disabled={isLoading} leftSection={<IconCheck size={16} />} onClick={() => onAnswer(toolCallId, "Yes")}>Yes</Button>
+                            <Button size="md" color="primary" variant="outline" disabled={isLoading} leftSection={<IconX size={16} />} onClick={() => onAnswer(toolCallId, "No")}>No</Button>
                         </Group>
-                    </Chip.Group>
-                )}
+                    )}
 
-                {/* ── Multi choice ────────────────────────────────────────── */}
-                {data.type === "multi_choice" && data.options && !isAnswered && (
-                    <Stack gap="sm">
-                        <Chip.Group multiple value={multiSelected} onChange={isLoading ? undefined : setMultiSelected}>
-                            <Group gap="xs" wrap="wrap">
+                    {/* ── Single choice ───────────────────────────────────────── */}
+                    {data.type === "single_choice" && data.options && !isAnswered && (
+                        <Chip.Group>
+                            <Group gap="sm" wrap="wrap">
                                 {data.options.map((opt) => {
                                     const icon = getOptionIcon(opt);
                                     return (
@@ -176,10 +149,12 @@ export function QuestionCard({ data, toolCallId, isAnswered, answeredValue, isLo
                                             key={opt}
                                             value={opt}
                                             color="primary"
-                                            variant="light"
-                                            size="md"
+                                            variant="outline"
+                                            size="sm"
                                             radius="xl"
                                             disabled={isLoading}
+                                            checked={false}
+                                            onChange={() => { if (!isLoading) onAnswer(toolCallId, opt); }}
                                         >
                                             {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
                                         </Chip>
@@ -187,37 +162,63 @@ export function QuestionCard({ data, toolCallId, isAnswered, answeredValue, isLo
                                 })}
                             </Group>
                         </Chip.Group>
-                        <Button
-                            size="md"
-                            color="primary"
-                            disabled={multiSelected.length === 0}
-                            onClick={() => onAnswer(toolCallId, multiSelected.join(", "))}
-                        >
-                            Confirm {multiSelected.length} selected
-                        </Button>
-                    </Stack>
-                )}
+                    )}
 
-                {/* ── Scale ───────────────────────────────────────────────── */}
-                {data.type === "scale" && !isAnswered && (
-                    <Stack gap="md">
-                        <Text ta="center" fw={700} size="xl" c="primary">{scaleValue}</Text>
-                        <Stack gap={4}>
-                            <Slider min={data.scaleMin ?? 0} max={data.scaleMax ?? 10} step={1} value={scaleValue} onChange={setScaleValue} disabled={isLoading} marks={scaleMarks} color="primary" size="lg" />
-                            <Group justify="space-between" mt="xs">
-                                <Text size="sm" c="dimmed">{data.scaleMinLabel ?? String(data.scaleMin ?? 0)}</Text>
-                                <Text size="sm" c="dimmed">{data.scaleMaxLabel ?? String(data.scaleMax ?? 10)}</Text>
-                            </Group>
+                    {/* ── Multi choice ────────────────────────────────────────── */}
+                    {data.type === "multi_choice" && data.options && !isAnswered && (
+                        <Stack gap="sm">
+                            <Chip.Group multiple value={multiSelected} onChange={isLoading ? undefined : setMultiSelected}>
+                                <Group gap="xs" wrap="wrap">
+                                    {data.options.map((opt) => {
+                                        const icon = getOptionIcon(opt);
+                                        return (
+                                            <Chip
+                                                key={opt}
+                                                value={opt}
+                                                color="primary"
+                                                variant="light"
+                                                size="md"
+                                                radius="xl"
+                                                disabled={isLoading}
+                                            >
+                                                {icon ? <Group gap={5} wrap="nowrap">{icon}{opt}</Group> : opt}
+                                            </Chip>
+                                        );
+                                    })}
+                                </Group>
+                            </Chip.Group>
+                            <Button
+                                size="md"
+                                color="primary"
+                                disabled={multiSelected.length === 0}
+                                onClick={() => onAnswer(toolCallId, multiSelected.join(", "))}
+                            >
+                                Confirm {multiSelected.length} selected
+                            </Button>
                         </Stack>
-                        <Button size="md" color="primary" onClick={() => onAnswer(toolCallId, String(scaleValue))}>
-                            Submit: {scaleValue}
-                        </Button>
-                    </Stack>
-                )}
+                    )}
+
+                    {/* ── Scale ───────────────────────────────────────────────── */}
+                    {data.type === "scale" && !isAnswered && (
+                        <Stack gap="md">
+                            <Text ta="center" fw={700} size="xl" c="primary">{scaleValue}</Text>
+                            <Stack gap={4}>
+                                <Slider min={data.scaleMin ?? 0} max={data.scaleMax ?? 10} step={1} value={scaleValue} onChange={setScaleValue} disabled={isLoading} marks={scaleMarks} color="primary" size="lg" />
+                                <Group justify="space-between" mt="xs">
+                                    <Text size="sm" c="dimmed">{data.scaleMinLabel ?? String(data.scaleMin ?? 0)}</Text>
+                                    <Text size="sm" c="dimmed">{data.scaleMaxLabel ?? String(data.scaleMax ?? 10)}</Text>
+                                </Group>
+                            </Stack>
+                            <Button size="md" color="primary" onClick={() => onAnswer(toolCallId, String(scaleValue))}>
+                                Submit: {scaleValue}
+                            </Button>
+                        </Stack>
+                    )}
+                </Stack>
 
                 {/* Free text uses the chat input bar — no inline textarea */}
-            </Stack>
-        </Paper>
+            </Card.Section>
+        </Card>
     );
 }
 
@@ -305,24 +306,6 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
                         </Button>
                     </Group>
                 </Stack>
-            </Paper>
-        );
-    }
-
-    if (toolName) {
-        const isExecuting = state === "input-available";
-        const label = isExecuting
-            ? (TOOL_LABELS[toolName] ?? `Running ${toolName}…`)
-            : `${toolName} completed`;
-        return (
-            <Paper withBorder radius="lg" p="md">
-                <Group gap="xs">
-                    {isExecuting
-                        ? <Loader size={16} color="primary" />
-                        : <ThemeIcon size={28} radius="md" color="teal" variant="light"><IconCheck size={15} /></ThemeIcon>
-                    }
-                    <Text size="sm" c="dimmed">{label}</Text>
-                </Group>
             </Paper>
         );
     }

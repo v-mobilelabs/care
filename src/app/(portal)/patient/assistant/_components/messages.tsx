@@ -5,6 +5,7 @@ import type { ChatStatus, UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolPartRenderer } from "@/ui/chat/components/tool-cards";
 import { FileMessage, StatusIndicator, TextMessage } from "./message";
+import { DateSeparator } from "@/ui/chat/components/date-separator";
 
 export type { ChatStatus };
 
@@ -81,6 +82,8 @@ function RetryBlock({ error, onRetry }: Readonly<{ error?: Error | null; onRetry
 
 export interface MessagesProps {
     messages: UIMessage[];
+    /** Map of message ID → ISO timestamp for date separator rendering. */
+    messageTimestamps?: ReadonlyMap<string, string>;
     isLoading: boolean;
     chatStatus: ChatStatus;
     userPhotoURL?: string | null;
@@ -90,6 +93,8 @@ export interface MessagesProps {
     editingText: string;
     phraseIdx: number;
     phraseFading: boolean;
+    /** Dynamic loading hints from gateway for contextual loading messages. */
+    loadingHints?: string[];
     onAnswer: (toolCallId: string, answer: string) => void;
     onApproval?: (opts: { id: string; approved: boolean; reason?: string }) => void;
     onEditStart: (msgId: string, text: string) => void;
@@ -108,6 +113,7 @@ export interface MessagesProps {
 // Full implementation copied from original file
 export function Messages({
     messages,
+    messageTimestamps,
     isLoading,
     chatStatus,
     userPhotoURL,
@@ -117,6 +123,7 @@ export function Messages({
     editingText,
     phraseIdx,
     phraseFading,
+    loadingHints,
     onAnswer,
     onApproval,
     onEditStart,
@@ -183,15 +190,19 @@ export function Messages({
                 <Stack gap="lg" maw={760} mx="auto" px="lg" pt="lg" pb={80}>
 
                     {/* Message thread */}
-                    {messages.map((msg: UIMessage) => {
+                    {messages.map((msg: UIMessage, idx: number) => {
                         const isUser = msg.role === "user";
                         const isNew = !initialIdsRef.current!.has(msg.id);
+                        const currTs = messageTimestamps?.get(msg.id);
+                        const prevTs = idx > 0 ? messageTimestamps?.get(messages[idx - 1].id) : undefined;
+                        const showDate = currTs != null && (prevTs == null || new Date(currTs).toDateString() !== new Date(prevTs).toDateString());
                         return (
                             <Stack
                                 key={msg.id}
                                 gap="xs"
                                 style={isNew ? { animation: "msg-enter 0.3s ease-out both" } : undefined}
                             >
+                                {showDate && <DateSeparator date={currTs} />}
                                 {msg.parts.map((part, i) => {
                                     if (part.type === "file") {
                                         return (
@@ -259,6 +270,7 @@ export function Messages({
                             chatStatus={chatStatus}
                             phraseIdx={phraseIdx}
                             phraseFading={phraseFading}
+                            loadingHints={loadingHints}
                             overrideLabel={preparingLabel && !isLoading ? preparingLabel : undefined}
                         />
                     )}

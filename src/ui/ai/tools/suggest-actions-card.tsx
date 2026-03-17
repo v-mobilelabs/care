@@ -12,7 +12,7 @@ export interface SuggestActionsCardProps {
 
 export function SuggestActionsCard({ data, toolCallId, isAnswered, onAnswer }: Readonly<SuggestActionsCardProps>) {
     return (
-        <Paper withBorder radius="lg" p="md" style={{ borderLeft: "4px solid var(--mantine-color-primary-5)" }}>
+        <Paper withBorder radius="lg" p="md">
             <Stack gap="sm">
                 <Group gap="xs">
                     <ThemeIcon size={28} radius="md" color="primary" variant="light">
