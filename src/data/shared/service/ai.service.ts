@@ -350,6 +350,53 @@ export class AIService {
     }
     return object;
   }
+
+  /**
+   * Classify a prompt into one of a fixed set of string options.
+   * Uses `Output.choice()` — simpler and faster than `extractObject()` for
+   * routing / classification tasks.
+   *
+   * @param options  - Array of allowed string values.
+   * @param messages - Model messages for classification.
+   * @param opts     - userId, model tier, and credit options.
+   */
+  async extractChoice<T extends string>(
+    options: readonly T[],
+    messages: ModelMessage[],
+    opts: {
+      userId: string;
+      useFast?: boolean;
+      useLite?: boolean;
+      skipCredit?: boolean;
+    },
+  ): Promise<T> {
+    if (!opts.skipCredit) {
+      const usage = await this.usageService.getUsage(opts.userId);
+      if (usage.credits <= 0) throw new CreditsExhaustedError(0);
+      await this.usageService.updateUsage(opts.userId, {
+        credits: usage.credits - 1,
+      });
+    }
+
+    let model;
+    if (opts.useLite) model = this._lite;
+    else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
+    else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
+
+    const result = await generateText({
+      model,
+      output: Output.choice({ options: options as unknown as string[] }),
+      messages,
+    });
+
+    const choice = (result as unknown as { output?: T }).output;
+    if (choice === undefined || choice === null) {
+      throw new Error(
+        "Model returned no choice — the response may have been empty or malformed.",
+      );
+    }
+    return choice;
+  }
 }
 
 /** Singleton — import this throughout the server-side application. */

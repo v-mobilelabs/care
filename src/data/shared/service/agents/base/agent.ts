@@ -42,10 +42,12 @@ import type {
 } from "ai";
 import { creditMiddleware } from "@/data/shared/service/middleware/credit.middleware";
 import { ragMiddleware } from "@/data/shared/service/middleware/rag.middleware";
+import { memoryMiddleware } from "@/data/shared/service/middleware/memory.middleware";
 import {
   cachedContentMiddleware,
   getContextCache,
 } from "@/data/shared/service/middleware/cached-content.middleware";
+import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -85,11 +87,16 @@ export interface AgentConfig {
   buildTools: (options: AgentCallOptions) => ToolSet;
   /** Return additional per-request context (e.g. attachment note). */
   buildDynamicContext?: (options: AgentCallOptions) => string;
-  /** LLM model. Default: gemini-3.1-pro-preview. */
+  /** LLM model for medium/high thinking. Default: gemini-3.1-pro-preview. */
   model?: LanguageModel;
   /** Model ID string for context cache key. Default: "gemini-3.1-pro-preview". */
   modelId?: string;
+  /** Fast LLM model for low-thinking queries. Default: gemini-3-flash-preview. */
+  fastModel?: LanguageModel;
+  /** Fast model ID for context cache key. Default: "gemini-3-flash-preview". */
+  fastModelId?: string;
   /** Whether to enable thinking mode. Default: true. */
+
   useThinking?: boolean;
   /** Maximum tool-loop iterations. Default: 10. */
   maxSteps?: number;
@@ -119,6 +126,8 @@ export function createAgent(
     buildDynamicContext,
     model = google("gemini-3.1-pro-preview"),
     modelId = "gemini-3.1-pro-preview",
+    fastModel = google("gemini-3-flash-preview"),
+    fastModelId = "gemini-3-flash-preview",
     useThinking = true,
     maxSteps = 10,
   } = config;
@@ -130,12 +139,15 @@ export function createAgent(
     // (createAgentUIStreamResponse → validateUIMessages reads agent.tools).
     // These are only used for schema validation — execute closures are rebuilt
     // per-request inside stream() with the real AgentCallOptions context.
-    tools: buildTools({
-      userId: "",
-      profileId: "",
-      userQuery: "",
-      sessionId: "",
-    } as AgentCallOptions),
+    tools: {
+      ...buildTools({
+        userId: "",
+        profileId: "",
+        userQuery: "",
+        sessionId: "",
+      } as AgentCallOptions),
+      memory: createMemoryTool("", "", ""),
+    },
 
     async generate(
       _params: AgentCallParameters<AgentCallOptions, ToolSet>,
@@ -187,7 +199,14 @@ export function createAgent(
       );
 
       // ── 1. Build per-request tools ──────────────────────────────────
-      const tools = buildTools(options);
+      const tools: ToolSet = {
+        ...buildTools(options),
+        memory: createMemoryTool(
+          options.userId,
+          options.profileId,
+          options.sessionId,
+        ),
+      };
       const staticPrompt = buildSystemPrompt();
       const dynamicContext = buildDynamicContext?.(options) ?? "";
 
@@ -195,15 +214,27 @@ export function createAgent(
         `[${id}] Instructions: static ${staticPrompt.length} chars + dynamic ${dynamicContext.length} chars | Tools: ${Object.keys(tools).join(", ")}`,
       );
 
-      // ── 2. Context cache ────────────────────────────────────────────
-      const cacheName = await getContextCache(id, modelId, staticPrompt, tools);
-      if (cacheName) console.log(`[${id}] Using context cache: ${cacheName}`);
-
-      // ── 3. Thinking config ──────────────────────────────────────────
+      // ── 2. Select model based on thinking level ─────────────────────
       const thinkingLevel =
         options.thinkingLevel ?? (useThinking ? "high" : undefined);
+      const useFast = thinkingLevel === "low";
+      const activeModel = useFast ? fastModel : model;
+      const activeModelId = useFast ? fastModelId : modelId;
+
+      // ── 3. Context cache (keyed per model variant) ──────────────────
+      const cacheKey = useFast ? `${id}:fast` : id;
+      const cacheName = await getContextCache(
+        cacheKey,
+        activeModelId,
+        staticPrompt,
+        tools,
+      );
+      if (cacheName) console.log(`[${id}] Using context cache: ${cacheName}`);
+
       if (thinkingLevel)
-        console.log(`[${id}] Thinking level: ${thinkingLevel}`);
+        console.log(
+          `[${id}] Thinking level: ${thinkingLevel}${useFast ? ` (using ${activeModelId})` : ""}`,
+        );
 
       const googleOptions: GoogleLanguageModelOptions = {
         ...(thinkingLevel && {
@@ -215,6 +246,11 @@ export function createAgent(
       // ── 4. Middleware chain ─────────────────────────────────────────
       const middleware: LanguageModelMiddleware[] = [
         creditMiddleware(options.userId),
+        memoryMiddleware({
+          agentId: id,
+          profileId: options.profileId,
+          cacheActive: !!cacheName,
+        }),
         ragMiddleware({
           agentId: id,
           userId: options.userId,
@@ -231,7 +267,7 @@ export function createAgent(
       ];
 
       const wrappedModel = wrapLanguageModel({
-        model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+        model: activeModel as Parameters<typeof wrapLanguageModel>[0]["model"],
         middleware,
       });
 

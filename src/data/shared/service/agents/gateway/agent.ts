@@ -67,6 +67,35 @@ const BLOOD_TEST_KEYWORDS = [
   "analyze my blood",
 ];
 
+const PATIENT_KEYWORDS = [
+  "my name",
+  "my age",
+  "my profile",
+  "my weight",
+  "my height",
+  "my gender",
+  "my email",
+  "my phone",
+  "my detail",
+  "my info",
+  "my data",
+  "my blood group",
+  "my bmi",
+  "my body",
+  "my medication",
+  "my medicine",
+  "my med",
+  "my drug",
+  "my dose",
+  "my dosage",
+  "what am i taking",
+  "who am i",
+  "about me",
+  "tell me about myself",
+  "my food preference",
+  "my activity level",
+];
+
 function matchesAny(query: string, keywords: string[]): boolean {
   const lower = query.toLowerCase();
   return keywords.some((k) => lower.includes(k));
@@ -78,26 +107,29 @@ function matchesAny(query: string, keywords: string[]): boolean {
  */
 function tryKeywordRoute(
   query: string,
-): Omit<ClinicalRouting, "thinkingLevel" | "needsRag"> | null {
+): Omit<ClinicalRouting, "thinkingLevel" | "needsRag" | "loadingHints"> | null {
   if (matchesAny(query, DIET_KEYWORDS)) {
     return {
       agent: "dietPlanner",
       reasoning: "Keyword match: diet/meal plan intent detected",
-      confidence: 0.95,
     };
   }
   if (matchesAny(query, PRESCRIPTION_KEYWORDS)) {
     return {
       agent: "prescription",
       reasoning: "Keyword match: prescription intent detected",
-      confidence: 0.95,
     };
   }
   if (matchesAny(query, BLOOD_TEST_KEYWORDS)) {
     return {
       agent: "bloodTest",
       reasoning: "Keyword match: blood test / lab results intent detected",
-      confidence: 0.95,
+    };
+  }
+  if (matchesAny(query, PATIENT_KEYWORDS)) {
+    return {
+      agent: "patient",
+      reasoning: "Keyword match: personal / health data retrieval detected",
     };
   }
   return null;
@@ -165,6 +197,7 @@ function inferNeedsRag(query: string, hasAttachment?: boolean): boolean {
   // Explicit references to patient records
   const RECORD_HINTS = [
     "my medication",
+    "my medicine",
     "my med",
     "my prescription",
     "my condition",
@@ -180,6 +213,30 @@ function inferNeedsRag(query: string, hasAttachment?: boolean): boolean {
     "my allerg",
     "interaction",
     "my health",
+    "my drug",
+    "my dose",
+    "my dosage",
+    "my name",
+    "my age",
+    "my profile",
+    "my weight",
+    "my height",
+    "my gender",
+    "my detail",
+    "my info",
+    "my data",
+    "who am i",
+    "about me",
+    // Phrasing without "my" — queries like "what medicines have I been taking"
+    "medicines i",
+    "medications i",
+    "meds i",
+    "drugs i",
+    "been taking",
+    "i take",
+    "i'm taking",
+    "am taking",
+    "prescribed",
   ];
   if (RECORD_HINTS.some((k) => lower.includes(k))) return true;
 
@@ -223,13 +280,25 @@ const BT_HINT_WORDS = [
   "blood work",
   "blood panel",
 ];
+const PATIENT_HINT_WORDS = [
+  "my name",
+  "my age",
+  "my profile",
+  "my weight",
+  "my height",
+  "my medication",
+  "my medicine",
+  "who am i",
+  "about me",
+];
 
-function hintsDietOrRxOrBt(query: string): boolean {
+function hintsSpecialist(query: string): boolean {
   const lower = query.toLowerCase();
   return (
     DIET_HINT_WORDS.some((k) => lower.includes(k)) ||
     RX_HINT_WORDS.some((k) => lower.includes(k)) ||
-    BT_HINT_WORDS.some((k) => lower.includes(k))
+    BT_HINT_WORDS.some((k) => lower.includes(k)) ||
+    PATIENT_HINT_WORDS.some((k) => lower.includes(k))
   );
 }
 
@@ -244,29 +313,82 @@ export const AgentType = z.enum([
   "dietPlanner", // 7-day meal plan generation
   "prescription", // Prescription generation and medication management
   "bloodTest", // Blood test interpretation and analysis
+  "patient", // Patient data retrieval (profile, health metrics, medications)
 ]);
 export type AgentType = z.infer<typeof AgentType>;
 
-const ClinicalRoutingSchema = z.object({
-  agent: AgentType,
-  reasoning: z
-    .string()
-    .describe(
-      "Brief explanation of why this agent was chosen (for logging/debugging)",
-    ),
-  confidence: z
-    .number()
-    .min(0)
-    .max(1)
-    .describe("Confidence score (0-1) for this routing decision"),
-});
-
-export type ClinicalRouting = z.infer<typeof ClinicalRoutingSchema> & {
+export type ClinicalRouting = {
+  agent: AgentType;
+  reasoning: string;
   thinkingLevel: "low" | "medium" | "high";
   /** Whether the query likely needs patient medical records (RAG). false skips
    *  the expensive KNN + Bedrock reranking pipeline (~1.2-1.5s). */
   needsRag: boolean;
+  /** Contextual loading phrases for the client to cycle through while waiting. */
+  loadingHints: string[];
 };
+
+// ── Loading hints ─────────────────────────────────────────────────────────────
+
+/**
+ * Build contextual loading phrases based on the full routing decision.
+ * These are shown in the client as cycling status messages while the AI responds.
+ */
+function buildLoadingHints(
+  agent: AgentType,
+  thinkingLevel: "low" | "medium" | "high",
+  needsRag: boolean,
+): string[] {
+  const hints: string[] = [];
+
+  if (needsRag) hints.push("Searching your health records...");
+
+  switch (agent) {
+    case "dietPlanner":
+      hints.push(
+        "Creating your personalized meal plan...",
+        "Calculating nutritional requirements...",
+        "This may take 15-20 seconds",
+      );
+      break;
+    case "prescription":
+      hints.push(
+        "Reviewing medication options...",
+        "Checking drug interactions...",
+        "Preparing your prescription...",
+      );
+      break;
+    case "bloodTest":
+      hints.push(
+        "Analysing your test results...",
+        "Checking reference ranges...",
+        "Reviewing the details...",
+      );
+      break;
+    case "patient":
+      hints.push("Looking up your records...");
+      break;
+    case "clinical":
+      if (thinkingLevel === "high") {
+        hints.push(
+          "Taking a careful look at this...",
+          "Reviewing clinical guidelines...",
+          "Putting this together...",
+        );
+      } else if (thinkingLevel === "medium") {
+        hints.push(
+          "Analysing your symptoms...",
+          "Checking clinical guidelines...",
+          "Reviewing the details...",
+        );
+      } else {
+        hints.push("Let me think about that...", "One moment...");
+      }
+      break;
+  }
+
+  return hints.length > 0 ? hints : ["Processing your request..."];
+}
 
 // ── Gateway Agent ─────────────────────────────────────────────────────────────
 
@@ -304,14 +426,26 @@ export class GatewayAgent {
       if (input.sessionId)
         this.cacheAgent(input.sessionId, keywordResult.agent);
       const duration = performance.now() - startTime;
+      // Patient agent uses direct Firestore reads — skip RAG entirely
+      const effectiveRag = keywordResult.agent === "patient" ? false : needsRag;
       console.log(
-        `[GatewayAgent] → ${keywordResult.agent} (keyword, thinking: ${thinkingLevel}, rag: ${needsRag}, ${duration.toFixed(0)}ms)`,
+        `[GatewayAgent] → ${keywordResult.agent} (keyword, thinking: ${thinkingLevel}, rag: ${effectiveRag}, ${duration.toFixed(0)}ms)`,
       );
-      return { ...keywordResult, thinkingLevel, needsRag };
+      return {
+        ...keywordResult,
+        reasoning: keywordResult.reasoning,
+        thinkingLevel,
+        needsRag: effectiveRag,
+        loadingHints: buildLoadingHints(
+          keywordResult.agent,
+          thinkingLevel,
+          effectiveRag,
+        ),
+      };
     }
 
-    // ── 2. Session cache (skip if query hints at diet/prescription) ────────
-    if (input.sessionId && !hintsDietOrRxOrBt(input.userQuery)) {
+    // ── 2. Session cache (skip if query hints at specialist) ────────
+    if (input.sessionId && !hintsSpecialist(input.userQuery)) {
       const cached = this.sessionCache.get(input.sessionId);
       if (cached) {
         const duration = performance.now() - startTime;
@@ -321,18 +455,17 @@ export class GatewayAgent {
         return {
           agent: cached,
           reasoning: "Session cache hit",
-          confidence: 1,
           thinkingLevel,
           needsRag,
+          loadingHints: buildLoadingHints(cached, thinkingLevel, needsRag),
         };
       }
     }
 
     // ── 3. Default-to-clinical (0ms) when no specialist signals ─────────
     // Most queries route to clinical. Only invoke the LLM when the query
-    // contains diet/prescription/blood-test hints that keyword matching
-    // didn't resolve — this saves ~1-1.5s on the majority of requests.
-    if (!hintsDietOrRxOrBt(input.userQuery)) {
+    // contains specialist hints that keyword matching didn't resolve.
+    if (!hintsSpecialist(input.userQuery)) {
       if (input.sessionId) this.cacheAgent(input.sessionId, "clinical");
       const duration = performance.now() - startTime;
       console.log(
@@ -341,15 +474,15 @@ export class GatewayAgent {
       return {
         agent: "clinical",
         reasoning: "Default: no specialist signals detected",
-        confidence: 0.9,
         thinkingLevel,
         needsRag,
+        loadingHints: buildLoadingHints("clinical", thinkingLevel, needsRag),
       };
     }
 
     // ── 4. LLM routing (Flash Lite, no credit) — only for ambiguous specialist queries
-    const decision = await aiService.extractObject(
-      ClinicalRoutingSchema,
+    const agent = await aiService.extractChoice(
+      AgentType.options,
       [
         {
           role: "system",
@@ -367,15 +500,20 @@ export class GatewayAgent {
       },
     );
 
-    if (input.sessionId) this.cacheAgent(input.sessionId, decision.agent);
+    if (input.sessionId) this.cacheAgent(input.sessionId, agent);
 
     const duration = performance.now() - startTime;
     console.log(
-      `[GatewayAgent] → ${decision.agent} (LLM, confidence: ${Number(decision.confidence).toFixed(2)}, thinking: ${thinkingLevel}, rag: ${needsRag}, ${duration.toFixed(0)}ms)`,
+      `[GatewayAgent] → ${agent} (LLM choice, thinking: ${thinkingLevel}, rag: ${needsRag}, ${duration.toFixed(0)}ms)`,
     );
-    console.log(`[GatewayAgent] Reasoning: ${decision.reasoning}`);
 
-    return { ...decision, thinkingLevel, needsRag };
+    return {
+      agent,
+      reasoning: "LLM classification",
+      thinkingLevel,
+      needsRag,
+      loadingHints: buildLoadingHints(agent, thinkingLevel, needsRag),
+    };
   }
 
   private cacheAgent(sessionId: string, agent: AgentType): void {

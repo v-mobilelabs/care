@@ -32,6 +32,16 @@ export {
   bloodTestChatAgent,
   type BloodTestAgentUIMessage,
 } from "./blood-test/agent";
+export { patientAgent, type PatientAgentUIMessage } from "./patient/agent";
+
+// ── Union of all agent UI message types ───────────────────────────────────────
+// Pass this to useChat<ChatUIMessage>() for typed tool parts on the client.
+import type { ClinicalAgentUIMessage as _Clinical } from "./clinical/agent";
+import type { DietPlannerAgentUIMessage as _Diet } from "./diet-planner/agent";
+import type { PrescriptionAgentUIMessage as _Rx } from "./prescription/agent";
+import type { BloodTestAgentUIMessage as _Bt } from "./blood-test/agent";
+import type { PatientAgentUIMessage as _Pt } from "./patient/agent";
+export type ChatUIMessage = _Clinical | _Diet | _Rx | _Bt | _Pt;
 
 // ── Infrastructure ────────────────────────────────────────────────────────────
 export { gatewayAgent, GatewayAgent, AgentType } from "./gateway/agent";

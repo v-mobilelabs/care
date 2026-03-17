@@ -48,6 +48,31 @@ export const cachedContentMiddleware: LanguageModelMiddleware = {
 // ── Cache helpers ─────────────────────────────────────────────────────────────
 
 /**
+ * Recursively strip fields unsupported by the Google function declarations API
+ * (`$schema`, `additionalProperties`) from a JSON Schema object at all levels.
+ */
+function stripUnsupportedFields(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === "$schema" || key === "additionalProperties") continue;
+    if (Array.isArray(value)) {
+      out[key] = value.map((item) =>
+        typeof item === "object" && item !== null && !Array.isArray(item)
+          ? stripUnsupportedFields(item as Record<string, unknown>)
+          : item,
+      );
+    } else if (typeof value === "object" && value !== null) {
+      out[key] = stripUnsupportedFields(value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
  * Convert AI SDK tools (Zod schemas) to Google functionDeclarations format
  * for inclusion in a cachedContent resource.
  */
@@ -72,11 +97,10 @@ export function toolsToGoogleDeclarations(
       raw = { type: "object", properties: {} };
     }
 
-    const { $schema: _, additionalProperties: __, ...parameters } = raw;
     return {
       name,
       description: toolAny.description ?? "",
-      parameters,
+      parameters: stripUnsupportedFields(raw),
     };
   });
 }

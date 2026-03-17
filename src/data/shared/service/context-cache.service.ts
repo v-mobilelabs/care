@@ -186,9 +186,13 @@ export class ContextCacheService {
 
     if (!res.ok) {
       const errorBody = await res.text().catch(() => "");
-      // 400 with "too few tokens" means the prompt is below the minimum
-      // threshold — this is expected for short prompts, not an error.
-      if (res.status === 400 && errorBody.includes("too few tokens")) {
+      // 400 with "too few tokens" or "too small" means the prompt is below
+      // the minimum threshold — this is expected for short prompts, not an error.
+      if (
+        res.status === 400 &&
+        (errorBody.includes("too few tokens") ||
+          errorBody.includes("too small"))
+      ) {
         console.log(
           `[ContextCache] Prompt for ${agentId} is below minimum token threshold, skipping cache`,
         );

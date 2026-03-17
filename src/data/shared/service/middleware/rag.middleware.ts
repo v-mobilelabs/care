@@ -169,12 +169,19 @@ export function ragMiddleware(
         };
       }
 
-      // Default: append as an additional system message
+      // Default: prepend as a system message (must stay before user/assistant turns)
+      const firstNonSystem = params.prompt.findIndex(
+        (m) => m.role !== "system",
+      );
+      const insertAt =
+        firstNonSystem === -1 ? params.prompt.length : firstNonSystem;
+
       return {
         ...params,
         prompt: [
-          ...params.prompt,
+          ...params.prompt.slice(0, insertAt),
           { role: "system" as const, content: resolvedContext },
+          ...params.prompt.slice(insertAt),
         ],
       };
     },
