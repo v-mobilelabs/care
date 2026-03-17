@@ -59,7 +59,7 @@ export type ApplicationInfo = {
  * ```
  */
 
-const ICON_SIZE = 18;
+const ICON_SIZE = "xs";
 export function getNavigationMenus(userKind: UserKind): NavigationMenus {
     if (userKind === "doctor") {
         return {
@@ -115,24 +115,24 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 href: "/patient/assistant",
             },
             {
-                label: "Doctors",
-                icon: <IconStethoscope size={ICON_SIZE} />,
-                href: "/patient/doctors",
+                label: "History",
+                icon: <IconHistory size={ICON_SIZE} />,
+                href: "/patient/history",
             },
-            {
-                label: "Consult",
-                icon: <IconVideo size={ICON_SIZE} />,
-                href: "/patient/connect",
-            },
+            // {
+            //     label: "Doctors",
+            //     icon: <IconStethoscope size={ICON_SIZE} />,
+            //     href: "/patient/doctors",
+            // },
+            // {
+            //     label: "Consult",
+            //     icon: <IconVideo size={ICON_SIZE} />,
+            //     href: "/patient/connect",
+            // },
             {
                 label: "Prescriptions",
                 icon: <IconPill size={ICON_SIZE} />,
                 href: "/patient/prescriptions",
-            },
-            {
-                label: "History",
-                icon: <IconHistory size={ICON_SIZE} />,
-                href: "/patient/history",
             },
             {
                 label: "Files",

@@ -219,13 +219,13 @@ export function PortalLayout({
             return <NavLink
               component={Link}
               variant={isActive ? "filled" : "subtle"}
-              color="primary"
+              color="primary.7"
               key={menu.label}
               label={<NavLinkLabel label={menu.label} />}
               href={menu.href}
               onClick={close}
               leftSection={
-                <ThemeIcon radius="xl" size={"sm"} variant={isActive ? "filled" : "light"} color="primary">
+                <ThemeIcon radius="xl" size={"lg"} p="xs" variant={isActive ? "filled" : "light"} color="primary">
                   {menu.icon}
                 </ThemeIcon>
               }

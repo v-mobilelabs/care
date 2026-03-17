@@ -4,10 +4,7 @@ export function Copyright() {
   return (
     <Stack align="center" gap={0}>
       <Text c="dimmed" size="xs">
-        &copy; {new Date().getFullYear()} CareAI.
-      </Text>
-      <Text c="dimmed" size="xs">
-        All rights reserved.
+        &copy; {new Date().getFullYear()} CareAI All rights reserved.
       </Text>
     </Stack>
   );
