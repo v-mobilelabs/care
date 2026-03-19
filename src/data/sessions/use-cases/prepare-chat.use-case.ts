@@ -17,6 +17,7 @@ import type { AgentCallOptions } from "@/data/shared/service/agents/base/agent";
 import type { AgentType } from "@/data/shared/service/agents";
 import { ragService } from "@/data/shared/service/rag/rag.service";
 import { messageRepository } from "../repositories/message.repository";
+import { sessionRepository } from "../repositories/session.repository";
 import { toUIMessage } from "../models/message.model";
 
 // ── Input schema ──────────────────────────────────────────────────────────────
@@ -113,12 +114,24 @@ export class PrepareChatUseCase extends UseCase<
       .filter((p): p is { type: "text"; text: string } => p?.type === "text")
       .map((p) => p.text);
 
+    // Load persisted agent type for cross-worker session affinity
+    let lastAgentType: string | undefined;
+    if (body.sessionId) {
+      const session = await sessionRepository.findById(
+        userId,
+        profileId,
+        body.sessionId,
+      );
+      lastAgentType = session?.lastAgentType;
+    }
+
     const gatewayDecision = await gatewayAgent.decide({
       userQuery: ctx.userQuery,
       hasAttachment: ctx.hasAttachment,
       recentMessages: recentMessages.length > 1 ? recentMessages : undefined,
       userId,
       sessionId,
+      lastAgentType,
     });
 
     const agentType = gatewayDecision.agent;

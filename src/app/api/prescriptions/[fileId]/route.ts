@@ -42,8 +42,7 @@ export const DELETE = WithContext<{ fileId: string }>(
 export const PATCH = WithContext<{ fileId: string }>(
   async ({ user, dependentId, req }, { fileId }) => {
     const body = (await req.json().catch(() => ({}))) as { sessionId?: string };
-    if (!body.sessionId)
-      throw ApiError.badRequest("sessionId is required.");
+    if (!body.sessionId) throw ApiError.badRequest("sessionId is required.");
     const updated = await prescriptionRepository.patchSessionId(
       user.uid,
       fileId,

@@ -229,7 +229,7 @@ export function PortalLayout({
       <MessagingSidebar />
       <AppShell.Main
         style={{
-          background: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-9))",
+          background: "light-dark(var(--mantine-color-gray-2), darken(var(--mantine-color-dark-9), 1%))",
         }}
         pt="6.5rem"
       >

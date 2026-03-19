@@ -1,18 +1,17 @@
 import { ActionIcon, Badge, Box, Card, Group, Image, Stack, Text, ThemeIcon, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconCapsule, IconDownload, IconExternalLink, IconMessageCircle, IconPhoto, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { IconCapsule, IconDownload, IconExternalLink, IconPhoto, IconSparkles, IconTrash } from "@tabler/icons-react";
 
 import { type PrescriptionRecord } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { DateText } from "@/ui/DateText";
 
-export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onOpenDetail, onAskAI }: Readonly<{
+export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onOpenDetail }: Readonly<{
     file: PrescriptionRecord;
     isPendingDelete: boolean;
     isExtracting: boolean;
     onDelete: () => void;
     onExtract: () => void;
     onOpenDetail: () => void;
-    onAskAI: () => void;
 }>) {
     const medCount = file.medications.length;
     const hasMeds = medCount > 0;
@@ -107,18 +106,6 @@ export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete
                                 aria-label="Extract prescription"
                             >
                                 <IconSparkles size={13} />
-                            </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Ask AI about this prescription" withArrow>
-                            <ActionIcon
-                                size={24}
-                                variant="subtle"
-                                color="primary"
-                                onClick={onAskAI}
-                                disabled={isPendingDelete}
-                                aria-label="Ask AI"
-                            >
-                                <IconMessageCircle size={13} />
                             </ActionIcon>
                         </Tooltip>
                         {file.fileUrl && (

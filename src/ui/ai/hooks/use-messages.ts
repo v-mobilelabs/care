@@ -13,7 +13,6 @@ import { addToMap, extractToolInput } from "@/ui/ai/types";
 import type { AskQuestionInput, ConditionInput } from "@/ui/ai/types";
 import { progressPartSchema } from "@/ui/ai/types/progress";
 import { getWelcomeMessage } from "@/ui/ai/session";
-import { useMemo } from "react";
 import {
   useMessagesQuery,
   useInvalidateSessions,
@@ -57,7 +56,7 @@ export function useMessages(sessionId: string) {
     hasNextPage,
     isFetchingNextPage,
   } = useMessagesQuery(sessionId);
-  const dbMessages = useMemo(() => flattenMessagePages(dbData), [dbData]);
+  const dbMessages = flattenMessagePages(dbData);
   const invalidateSessions = useInvalidateSessions();
   const invalidateCredits = useInvalidateCredits();
   const optimisticDeductCredit = useOptimisticDeductCredit();
@@ -326,7 +325,7 @@ export function useMessages(sessionId: string) {
   // ── Message timestamps map ──────────────────────────────────────────────
   // Build a msgId→ISO timestamp map for date grouping in the UI.
   // DB records carry `createdAt`; live messages get "now" as fallback.
-  const messageTimestamps = useMemo(() => {
+  const messageTimestamps = (() => {
     const map = new Map<string, string>();
     if (dbMessages) {
       for (const r of dbMessages) map.set(r.id, r.createdAt);
@@ -336,11 +335,11 @@ export function useMessages(sessionId: string) {
       if (!map.has(m.id)) map.set(m.id, now);
     }
     return map;
-  }, [dbMessages, messages]);
+  })();
 
   // ── Message usage map ─────────────────────────────────────────────────
   // Build a msgId→TokenUsage map so the UI can show token counts.
-  const messageUsage = useMemo(() => {
+  const messageUsage = (() => {
     const map = new Map<string, NonNullable<MessageRecord["usage"]>>();
     if (dbMessages) {
       for (const r of dbMessages) {
@@ -348,7 +347,7 @@ export function useMessages(sessionId: string) {
       }
     }
     return map;
-  }, [dbMessages]);
+  })();
 
   return {
     // Chat core

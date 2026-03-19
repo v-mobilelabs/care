@@ -1,5 +1,11 @@
 import type { UIMessage } from "ai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 const SCROLL_THRESHOLD = 120; // px from bottom before button appears
 
@@ -18,12 +24,24 @@ export function useAutoScroll(
   );
 
   const messageCount = messages.length;
+  const lastMessageId = messages.at(-1)?.id;
 
-  const checkScrollPosition = useCallback(() => {
+  // Track whether the latest change was a prepend (older messages loaded).
+  const prevLastMessageIdRef = useRef(lastMessageId);
+  const wasPrependRef = useRef(false);
+
+  // ── Native scroll listener (reliable for programmatic + user scrolls) ────
+  useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollBtn(distanceFromBottom > SCROLL_THRESHOLD);
+    function handleScroll() {
+      if (!el) return;
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBtn(distanceFromBottom > SCROLL_THRESHOLD);
+    }
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
   const scrollToBottom = useCallback(() => {
@@ -31,7 +49,12 @@ export function useAutoScroll(
   }, []);
 
   // Auto-scroll to bottom only when already near the bottom
+  // and the change was NOT a prepend (older messages loaded at top).
   useEffect(() => {
+    if (wasPrependRef.current) {
+      wasPrependRef.current = false;
+      return;
+    }
     const el = viewportRef.current;
     if (!el) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -43,25 +66,33 @@ export function useAutoScroll(
     }
   }, [messageCount, isLoading, preparingLabel]);
 
-  // ── Preserve scroll position when older messages are prepended ──────────
+  // ── Detect prepend before auto-scroll (useLayoutEffect runs first) ─────
   const prevScrollHeightRef = useRef(0);
   const prevMessageCountRef = useRef(messageCount);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    if (
+
+    // Detect prepend: message count grew but the last message didn't change.
+    const isPrepend =
       messageCount > prevMessageCountRef.current &&
-      prevScrollHeightRef.current > 0
-    ) {
-      const added = el.scrollHeight - prevScrollHeightRef.current;
-      if (added > 0 && el.scrollTop < 50) {
-        el.scrollTop = added;
-      }
+      prevLastMessageIdRef.current != null &&
+      lastMessageId === prevLastMessageIdRef.current;
+
+    if (isPrepend && prevScrollHeightRef.current > 0) {
+      // Signal the auto-scroll useEffect to skip on this render.
+      wasPrependRef.current = true;
+      // Scroll up to show the newly loaded older messages.
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: 0, behavior: "smooth" });
+      });
     }
+
     prevScrollHeightRef.current = el.scrollHeight;
     prevMessageCountRef.current = messageCount;
-  }, [messageCount]);
+    prevLastMessageIdRef.current = lastMessageId;
+  }, [messageCount, lastMessageId]);
 
   const isNewMessage = useCallback(
     (id: string) => !initialIdsRef.current.has(id),
@@ -72,7 +103,6 @@ export function useAutoScroll(
     bottomRef,
     viewportRef,
     showScrollBtn,
-    checkScrollPosition,
     scrollToBottom,
     isNewMessage,
   };

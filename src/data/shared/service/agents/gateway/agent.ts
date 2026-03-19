@@ -408,6 +408,8 @@ export class GatewayAgent {
     recentMessages?: string[];
     userId: string;
     sessionId?: string;
+    /** Persisted agent type from Firestore (survives serverless cold starts). */
+    lastAgentType?: string;
   }): Promise<ClinicalRouting> {
     const startTime = performance.now();
     const thinkingLevel = inferThinkingLevel(
@@ -446,8 +448,13 @@ export class GatewayAgent {
 
     // ── 2. Session cache (skip if query hints at specialist) ────────
     if (input.sessionId && !hintsSpecialist(input.userQuery)) {
-      const cached = this.sessionCache.get(input.sessionId);
-      if (cached) {
+      const cached =
+        this.sessionCache.get(input.sessionId) ??
+        (input.lastAgentType as AgentType | undefined);
+      if (cached && AgentType.safeParse(cached).success) {
+        if (!this.sessionCache.has(input.sessionId)) {
+          this.cacheAgent(input.sessionId, cached);
+        }
         const duration = performance.now() - startTime;
         console.log(
           `[GatewayAgent] → ${cached} (cached, thinking: ${thinkingLevel}, rag: ${needsRag}, ${duration.toFixed(0)}ms)`,

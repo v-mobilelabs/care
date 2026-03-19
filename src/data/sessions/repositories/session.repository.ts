@@ -128,6 +128,19 @@ export const sessionRepository = {
     });
   },
 
+  /** Persist the agent type that last handled this session. */
+  async setLastAgentType(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+    agentType: string,
+  ): Promise<void> {
+    await sessionDoc(userId, profileId, sessionId).update({
+      lastAgentType: agentType,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  },
+
   async delete(
     userId: string,
     profileId: string,

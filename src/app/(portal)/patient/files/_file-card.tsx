@@ -196,7 +196,7 @@ export function FileCard({ file, isPendingDelete, onDelete }: Readonly<{
                     overflow: "hidden",
                 }}
             >
-                {isImage && (file.thumbnailUrl ?? file.downloadUrl) && !imgError ? (
+                {(file.thumbnailUrl ?? file.downloadUrl) && !imgError ? (
                     <Image
                         src={file.thumbnailUrl ?? file.downloadUrl!}
                         alt={file.name}

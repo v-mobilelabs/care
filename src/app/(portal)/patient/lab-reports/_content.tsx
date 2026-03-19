@@ -34,27 +34,23 @@ import {
     IconDroplet,
     IconEye,
     IconMapPin,
-    IconMessageCircle,
     IconRefresh,
     IconStethoscope,
     IconTrash,
     IconUpload,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useRef } from "react";
 import {
     useLabReportsQuery,
     useUploadLabReportMutation,
     useDeleteLabReportMutation,
     useReExtractLabReportMutation,
-    useLinkLabReportSessionMutation,
     type LabReportRecord,
     type BiomarkerStatus,
     type BiomarkerRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { DateText } from "@/ui/DateText";
-import { useAskAI } from "@/ui/ai/hooks/use-ask-ai";
 
 // ── Biomarker helpers ─────────────────────────────────────────────────────────
 
@@ -192,14 +188,12 @@ function LabReportCard({
     record,
     onDelete,
     onReExtract,
-    onAskAI,
     isPendingDelete,
     isPendingReExtract,
 }: Readonly<{
     record: LabReportRecord;
     onDelete: () => void;
     onReExtract: () => void;
-    onAskAI: () => void;
     isPendingDelete: boolean;
     isPendingReExtract: boolean;
 }>) {
@@ -245,16 +239,6 @@ function LabReportCard({
                             onClick={openSource}
                         >
                             <IconEye size={14} />
-                        </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label="Ask AI about this report">
-                        <ActionIcon
-                            variant="subtle"
-                            size="sm"
-                            color="primary"
-                            onClick={onAskAI}
-                        >
-                            <IconMessageCircle size={14} />
                         </ActionIcon>
                     </Tooltip>
                     <Tooltip label="Re-extract with AI">
@@ -395,9 +379,7 @@ export function LabReportsContent() {
     const upload = useUploadLabReportMutation();
     const deleteRecord = useDeleteLabReportMutation();
     const reExtract = useReExtractLabReportMutation();
-    const linkSession = useLinkLabReportSessionMutation();
     const resetRef = useRef<() => void>(null);
-    const router = useRouter();
 
     function handleUpload(file: File | null) {
         if (!file) return;
@@ -458,36 +440,6 @@ export function LabReportsContent() {
                     color: colors.danger,
                 }),
         });
-    }
-
-    const { askAI } = useAskAI();
-
-    function handleAskAI(record: LabReportRecord) {
-        if (record.sessionId) {
-            router.push(`/patient/assistant?id=${record.sessionId}`);
-        } else {
-            const newId = crypto.randomUUID();
-            linkSession.mutate(
-                { recordId: record.id, sessionId: newId },
-                {
-                    onSuccess: () => {
-                        void askAI({
-                            type: "file",
-                            text: `Analyse my lab report: ${record.testName}`,
-                            fileId: record.fileId,
-                            mimeType: record.fileMimeType,
-                            sessionId: newId,
-                        });
-                    },
-                    onError: (err) =>
-                        notifications.show({
-                            title: "Could not open AI chat",
-                            message: err.message,
-                            color: colors.danger,
-                        }),
-                },
-            );
-        }
     }
 
     return (
@@ -595,7 +547,6 @@ export function LabReportsContent() {
                                             record={r}
                                             onDelete={() => handleDelete(r)}
                                             onReExtract={() => handleReExtract(r)}
-                                            onAskAI={() => handleAskAI(r)}
                                             isPendingDelete={
                                                 deleteRecord.isPending &&
                                                 deleteRecord.variables === r.id

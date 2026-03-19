@@ -227,7 +227,7 @@ export function InputBar({
     const actionCfg = {
         mic: {
             icon: <IconMicrophone size={17} />,
-            color: "gray", variant: "subtle" as const,
+            color: "primary", variant: "light" as const,
             label: "Use microphone",
             onClick: toggleMic,
             disabled: isUploading || hasPendingToolCall || outOfCredits,
@@ -388,12 +388,11 @@ export function InputBar({
                                     onBlur={() => setFocused(false)}
                                     disabled={isUploading || hasPendingToolCall || outOfCredits}
                                     variant="unstyled"
+                                    px="sm"
                                     styles={{
                                         input: {
-                                            paddingTop: "var(--mantine-spacing-md)",
+                                            paddingTop: "var(--mantine-spacing-sm)",
                                             paddingBottom: "var(--mantine-spacing-xs)",
-                                            paddingLeft: "var(--mantine-spacing-md)",
-                                            paddingRight: "var(--mantine-spacing-md)",
                                             fontSize: "var(--mantine-font-size-sm)",
                                             lineHeight: 1.6,
                                             resize: "none",

@@ -54,7 +54,7 @@ export function MessageRow({
 
     return (
         <Stack
-            gap="xs"
+            gap="lg"
             style={isNew ? { animation: "msg-enter 0.3s ease-out both" } : undefined}
         >
             {showDate && <DateSeparator date={timestamp} />}

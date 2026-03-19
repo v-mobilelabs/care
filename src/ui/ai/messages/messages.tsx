@@ -82,17 +82,14 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
  */
 export function Messages(props: Readonly<MessagesProps>) {
     const { messages, isLoading, preparingLabel } = props;
-    const { bottomRef, viewportRef, showScrollBtn, checkScrollPosition, scrollToBottom, isNewMessage } =
+    const { bottomRef, viewportRef, showScrollBtn, scrollToBottom, isNewMessage } =
         useAutoScroll(messages, isLoading, preparingLabel);
-
-    const hasUserMessages = messages.some(m => m.role === "user");
 
     return (
         <Box style={{ flex: 1, position: "relative", overflow: "hidden" }}>
             <ScrollArea
                 style={{ height: "100%" }}
                 viewportRef={viewportRef}
-                onScrollPositionChange={checkScrollPosition}
             >
                 <MessageThread {...props} isNewMessage={isNewMessage} />
                 <div ref={bottomRef} />
@@ -117,9 +114,7 @@ export function Messages(props: Readonly<MessagesProps>) {
                 }
             `}</style>
 
-            {hasUserMessages && (
-                <ScrollToBottomFab visible={showScrollBtn} onClick={scrollToBottom} />
-            )}
+            <ScrollToBottomFab visible={showScrollBtn} onClick={scrollToBottom} />
         </Box>
     );
 }

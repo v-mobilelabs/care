@@ -9,6 +9,8 @@ export interface SessionDocument {
   profileId: string;
   title: string;
   messageCount: number;
+  /** The last agent type that handled this session (persisted for cross-worker routing). */
+  lastAgentType?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -21,6 +23,7 @@ export interface SessionDto {
   profileId: string;
   title: string;
   messageCount: number;
+  lastAgentType?: string;
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
@@ -84,6 +87,7 @@ export function toSessionDto(id: string, doc: SessionDocument): SessionDto {
     profileId: doc.profileId,
     title: doc.title,
     messageCount: doc.messageCount,
+    ...(doc.lastAgentType && { lastAgentType: doc.lastAgentType }),
     createdAt: doc.createdAt.toDate().toISOString(),
     updatedAt: doc.updatedAt.toDate().toISOString(),
   };

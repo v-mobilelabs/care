@@ -7,7 +7,11 @@ import {
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
-import { AddMessageUseCase, PrepareChatUseCase } from "@/data/sessions";
+import {
+  AddMessageUseCase,
+  PrepareChatUseCase,
+  SetSessionAgentUseCase,
+} from "@/data/sessions";
 import { CacheTags } from "@/data/cached";
 import {
   extractAndSaveMemories,
@@ -31,6 +35,7 @@ export const POST = WithContext(
       sanitizedMessages,
       messages,
       options,
+      agentType,
       loadingHints,
       sessionId,
       ctx,
@@ -114,6 +119,21 @@ export const POST = WithContext(
 
       // Bust the server-side usage cache so the next SSR render shows updated credits.
       revalidateTag(CacheTags.usage(user.uid), "seconds");
+
+      // Persist the agent type on the session for cross-worker routing affinity.
+      try {
+        await new SetSessionAgentUseCase().execute({
+          userId: user.uid,
+          profileId,
+          sessionId,
+          agentType,
+        });
+      } catch (agentErr) {
+        console.error(
+          "[Chat API] Failed to persist session agent type:",
+          agentErr,
+        );
+      }
 
       // Auto-extract memorable facts from the conversation (like Mem0's addMemories).
       try {
