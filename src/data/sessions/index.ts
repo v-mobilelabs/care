@@ -22,6 +22,7 @@ export { GetSessionUseCase } from "./use-cases/get-session.use-case";
 export { ListSessionsUseCase } from "./use-cases/list-sessions.use-case";
 export { UpdateSessionUseCase } from "./use-cases/update-session.use-case";
 export { DeleteSessionUseCase } from "./use-cases/delete-session.use-case";
+export { SetSessionAgentUseCase } from "./use-cases/set-session-agent.use-case";
 
 // Message
 export { AddMessageUseCase } from "./use-cases/add-message.use-case";
@@ -39,7 +40,6 @@ export { ListAllFilesUseCase } from "./use-cases/list-all-files.use-case";
 export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
 export { GetStorageMetricsUseCase } from "./use-cases/get-storage-metrics.use-case";
 export { ClassifyFileUseCase } from "./use-cases/classify-file.use-case";
-export { GenerateThumbnailUseCase } from "./use-cases/generate-thumbnail.use-case";
 export { GetFileSignedUrlUseCase } from "./use-cases/get-file-signed-url.use-case";
 export { ExtractPersonUseCase } from "./use-cases/extract-person.use-case";
 export type { ExtractedPersonResult } from "./use-cases/extract-person.use-case";

@@ -6,10 +6,10 @@ import {
   ListFilesUseCase,
   UploadFileUseCase,
   ClassifyFileUseCase,
-  GenerateThumbnailUseCase,
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from "@/data/sessions";
+import { GenerateThumbnailUseCase } from "@/data/sessions/use-cases/generate-thumbnail.use-case";
 import { CacheTags } from "@/data/cached";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

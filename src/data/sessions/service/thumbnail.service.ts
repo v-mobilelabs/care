@@ -1,5 +1,4 @@
 import sharp from "sharp";
-import { pdf } from "pdf-to-img";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -21,8 +20,10 @@ const IMAGE_MIME_TYPES = new Set([
 
 /**
  * Renders page 1 of a PDF to a PNG buffer using pdf-to-img (pdfjs-dist).
+ * Uses dynamic import to avoid loading native deps at module evaluation time.
  */
 async function renderPdfPage1(buffer: Buffer): Promise<Buffer> {
+  const { pdf } = await import("pdf-to-img");
   const doc = await pdf(buffer, { scale: 2 });
   const page = await doc.getPage(1);
   return Buffer.from(page);
