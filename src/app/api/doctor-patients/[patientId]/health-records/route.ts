@@ -5,7 +5,7 @@ import { ListConditionsUseCase } from "@/data/conditions";
 import { ListSoapNotesUseCase } from "@/data/soap-notes";
 import { ListMedicationsUseCase } from "@/data/medications";
 import { ListAssessmentsUseCase } from "@/data/assessments";
-import { ListBloodTestsUseCase } from "@/data/blood-tests";
+import { ListLabReportsUseCase } from "@/data/lab-reports";
 import { GetProfileUseCase } from "@/data/profile";
 import { GetPatientUseCase } from "@/data/patients";
 
@@ -18,9 +18,10 @@ export const GET = WithContext(
     const { patientId } = params;
 
     // ── Verify accepted consent ───────────────────────────────────────────
-    const link = await new GetDoctorPatientUseCase().execute(
-      GetDoctorPatientUseCase.validate({ doctorId: user.uid, patientId }),
-    );
+    const link = await new GetDoctorPatientUseCase().execute({
+      doctorId: user.uid,
+      patientId,
+    });
     if (!link || link.status !== "accepted") {
       throw ApiError.forbidden(
         "You do not have consent to view this patient\u2019s health records.",
@@ -33,7 +34,7 @@ export const GET = WithContext(
       soapNotes,
       medications,
       assessments,
-      bloodTests,
+      labReports,
       profile,
       patient,
     ] = await Promise.all([
@@ -41,13 +42,9 @@ export const GET = WithContext(
       new ListSoapNotesUseCase().execute({ userId: patientId }),
       new ListMedicationsUseCase().execute({ userId: patientId }),
       new ListAssessmentsUseCase().execute({ userId: patientId }),
-      new ListBloodTestsUseCase().execute({ userId: patientId }),
-      new GetProfileUseCase().execute(
-        GetProfileUseCase.validate({ userId: patientId }),
-      ),
-      new GetPatientUseCase().execute(
-        GetPatientUseCase.validate({ userId: patientId }),
-      ),
+      new ListLabReportsUseCase().execute({ userId: patientId }),
+      new GetProfileUseCase().execute({ userId: patientId }),
+      new GetPatientUseCase().execute({ userId: patientId }),
     ]);
 
     return NextResponse.json({
@@ -68,7 +65,7 @@ export const GET = WithContext(
       soapNotes,
       medications,
       assessments,
-      bloodTests,
+      labReports,
     });
   },
 );

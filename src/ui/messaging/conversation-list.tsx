@@ -28,7 +28,7 @@ interface ConversationListProps {
 export function ConversationList({
     onSelect,
     onClose,
-}: ConversationListProps) {
+}: Readonly<ConversationListProps>) {
     const { user } = useAuth();
     const { entries, loading } = useInbox(user?.uid ?? null);
 

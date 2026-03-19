@@ -13,7 +13,7 @@ export default function MeetLoading() {
             style={{
                 position: "fixed",
                 inset: 0,
-                background: "light-dark(#f5f5f7, #0f0f0f)",
+                background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
                 display: "flex",
                 flexDirection: "column",
                 animation: "meet-fade-in 0.3s ease-out",
@@ -120,7 +120,7 @@ export default function MeetLoading() {
                         inset: 0,
                         overflow: "hidden",
                         background:
-                            "radial-gradient(ellipse at 50% 40%, light-dark(#e8e8f0, #1a1a2e) 0%, light-dark(#f0f0f4, #0f0f0f) 70%)",
+                            "radial-gradient(ellipse at 50% 40%, light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-8)) 0%, light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9)) 70%)",
                     }}
                 >
                     <Stack align="center" justify="center" h="100%" gap="md">

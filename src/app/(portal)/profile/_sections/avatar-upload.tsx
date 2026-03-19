@@ -204,7 +204,7 @@ export function AvatarUpload({ src, name, onUpdated }: Readonly<AvatarUploadProp
                             height: 320,
                             borderRadius: "var(--mantine-radius-md)",
                             overflow: "hidden",
-                            background: "#111",
+                            background: "var(--mantine-color-dark-9)",
                         }}
                     >
                         {rawSrc && (

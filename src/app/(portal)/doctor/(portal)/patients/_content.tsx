@@ -32,8 +32,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import type { DoctorPatientDto } from "@/data/doctor-patients";
 import type { PatientSearchResultDto } from "@/data/doctor-patients";
 import { colors } from "@/ui/tokens";
@@ -229,16 +228,22 @@ function PatientCardContent({ patient, onRevoke, onReinvite }: Readonly<{
                                 size="xs"
                                 variant="light"
                                 radius="xl"
-                                color={isAccepted ? colors.success : isPending ? "yellow" : "gray"}
-                                leftSection={
-                                    isAccepted
-                                        ? <IconUserCheck size={10} />
-                                        : isPending
-                                            ? <IconClockHour4 size={10} />
-                                            : <IconUserOff size={10} />
-                                }
+                                color={(() => {
+                                    if (isAccepted) return colors.success;
+                                    if (isPending) return "yellow";
+                                    return "gray";
+                                })()}
+                                leftSection={(() => {
+                                    if (isAccepted) return <IconUserCheck size={10} />;
+                                    if (isPending) return <IconClockHour4 size={10} />;
+                                    return <IconUserOff size={10} />;
+                                })()}
                             >
-                                {isAccepted ? "Active" : isPending ? "Pending" : "Revoked"}
+                                {(() => {
+                                    if (isAccepted) return "Active";
+                                    if (isPending) return "Pending";
+                                    return "Revoked";
+                                })()}
                             </Badge>
                         </Group>
                         {patient.patientEmail && (

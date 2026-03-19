@@ -1,6 +1,6 @@
 import { Group, Badge, Box, ThemeIcon, Text, Loader, ActionIcon } from "@mantine/core";
 import { IconMessage, IconCalendar, IconTrash } from "@tabler/icons-react";
-import { useLinkStatus } from "next/link";
+import { useLinkStatus } from "@/ui/link";
 import type { SessionSummary } from "@/app/(portal)/patient/_query";
 import React from "react";
 
@@ -52,6 +52,7 @@ export function SessionRowContent({ session, isPendingDelete, onDelete }: Readon
                     size={28}
                     variant="subtle"
                     color="danger"
+                    aria-label="Delete session"
                     onClick={(e: React.MouseEvent) => {
                         e.preventDefault();
                         e.stopPropagation();

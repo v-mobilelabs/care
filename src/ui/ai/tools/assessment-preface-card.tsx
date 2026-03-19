@@ -1,14 +1,7 @@
 "use client";
 import { Badge, Box, Card, Group, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconClipboardHeart, IconClock, IconListCheck, IconStethoscope } from "@tabler/icons-react";
-
-export interface StartAssessmentInput {
-    title: string;
-    condition: string;
-    guideline: string;
-    estimatedQuestions: number;
-    estimatedMinutes: string;
-}
+import type { StartAssessmentInput } from "@/ui/ai/types";
 
 export function AssessmentPrefaceCard({ data }: Readonly<{ data: StartAssessmentInput }>) {
     return (

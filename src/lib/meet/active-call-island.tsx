@@ -203,8 +203,8 @@ export function ActiveCallIsland() {
                     paddingLeft: 4,
                     paddingRight: 12,
                     borderRadius: 20,
-                    background: "light-dark(#1a1a1a, #1a1a1a)",
-                    color: "#fff",
+                    background: "light-dark(var(--mantine-color-dark-9), var(--mantine-color-dark-9))",
+                    color: "var(--mantine-color-white)",
                     cursor: joining ? "wait" : "pointer",
                     animation: "di-appear 0.4s cubic-bezier(0.34,1.36,0.64,1) both",
                     transition: "transform 0.2s ease, box-shadow 0.2s ease",
@@ -242,8 +242,8 @@ export function ActiveCallIsland() {
                             width: 10,
                             height: 10,
                             borderRadius: "50%",
-                            background: "#34C759",
-                            border: "2px solid #1a1a1a",
+                            background: "var(--mantine-color-teal-6)",
+                            border: "2px solid var(--mantine-color-dark-9)",
                             animation: "di-pulse-dot 2s ease-in-out infinite",
                         }}
                     />
@@ -252,15 +252,15 @@ export function ActiveCallIsland() {
                 {/* Timer + label */}
                 <Group gap={6} wrap="nowrap">
                     {joining ? (
-                        <Loader size={12} color="#34C759" />
+                        <Loader size={12} color="teal.6" />
                     ) : (
-                        <IconPhoneCall size={13} color="#34C759" />
+                        <IconPhoneCall size={13} color="var(--mantine-color-teal-6)" />
                     )}
                     <Text
                         size="xs"
                         fw={600}
                         style={{
-                            color: "#34C759",
+                            color: "var(--mantine-color-teal-6)",
                             fontVariantNumeric: "tabular-nums",
                             letterSpacing: 0.3,
                         }}

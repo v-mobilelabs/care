@@ -9,12 +9,11 @@ import {
 export const PUT = WithContext<{ dependentId: string }>(
   async ({ user, req }, { dependentId }) => {
     const body = (await req.json()) as unknown;
-    const input = UpdateDependentUseCase.validate({
+    const dependent = await new UpdateDependentUseCase().execute({
       ...(body as object),
       ownerId: user.uid,
       dependentId,
     });
-    const dependent = await new UpdateDependentUseCase().execute(input);
     return NextResponse.json(dependent);
   },
 );
@@ -22,11 +21,10 @@ export const PUT = WithContext<{ dependentId: string }>(
 // DELETE /api/dependents/[dependentId] — delete a dependent profile
 export const DELETE = WithContext<{ dependentId: string }>(
   async ({ user }, { dependentId }) => {
-    const input = DeleteDependentUseCase.validate({
+    await new DeleteDependentUseCase().execute({
       ownerId: user.uid,
       dependentId,
     });
-    await new DeleteDependentUseCase().execute(input);
     return NextResponse.json({ ok: true });
   },
 );

@@ -35,9 +35,9 @@ import {
   type SoapNoteDocument,
 } from "@/data/soap-notes/models/soap-note.model";
 import {
-  toBloodTestDto,
-  type BloodTestDocument,
-} from "@/data/blood-tests/models/blood-test.model";
+  toLabReportDto,
+  type LabReportDocument,
+} from "@/data/lab-reports/models/lab-report.model";
 import {
   toAssessmentDto,
   type AssessmentDocument,
@@ -154,24 +154,24 @@ async function backfillSoapNotes(
   if (snap.size > 0) console.log(`  soapNotes: ${count}/${snap.size} indexed`);
 }
 
-async function backfillBloodTests(
+async function backfillLabReports(
   profileRef: FirebaseFirestore.DocumentReference,
   profileId: string,
 ): Promise<void> {
   const snap = await profileRef.collection("blood-tests").get();
   let count = 0;
   for (const doc of snap.docs) {
-    const data = doc.data() as BloodTestDocument;
+    const data = doc.data() as LabReportDocument;
     if (await isAlreadyIndexed(profileId, doc.id)) continue;
-    await ragIndexer.indexBloodTest(
+    await ragIndexer.indexLabReport(
       data.userId,
       profileId,
-      toBloodTestDto(doc.id, data),
+      toLabReportDto(doc.id, data),
     );
     count++;
   }
   if (snap.size > 0)
-    console.log(`  blood-tests: ${count}/${snap.size} indexed`);
+    console.log(`  lab-reports: ${count}/${snap.size} indexed`);
 }
 
 async function backfillAssessments(
@@ -252,7 +252,7 @@ async function backfillProfile(profileId: string): Promise<void> {
   await backfillVitals(profileRef, profileId);
   await backfillMedications(profileRef, profileId);
   await backfillSoapNotes(profileRef, profileId);
-  await backfillBloodTests(profileRef, profileId);
+  await backfillLabReports(profileRef, profileId);
   await backfillAssessments(profileRef, profileId);
   await backfillPrescriptions(profileRef, profileId);
 }

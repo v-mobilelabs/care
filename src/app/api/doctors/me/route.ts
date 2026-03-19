@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
-import { WithContext } from "@/lib/api/with-context";
+import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   GetDoctorProfileUseCase,
-  UpdateDoctorSchema,
+  UpdateDoctorProfileUseCase,
   doctorProfileRepository,
 } from "@/data/doctors";
 import { UpsertProfileUseCase } from "@/data/profile";
@@ -30,12 +30,7 @@ export const GET = WithContext({ kind: "doctor" }, async ({ user }) => {
   const profile = await new GetDoctorProfileUseCase().execute({
     uid: user.uid,
   });
-  if (!profile) {
-    return NextResponse.json(
-      { error: "Doctor profile not found." },
-      { status: 404 },
-    );
-  }
+  if (!profile) throw ApiError.notFound("Doctor profile not found.");
   return NextResponse.json(profile);
 });
 
@@ -112,17 +107,9 @@ export async function POST(req: NextRequest) {
 // PUT /api/doctors/me — update an authenticated doctor's professional fields.
 // Identity fields (name, phone, photoUrl) are updated via PUT /api/profile.
 export const PUT = WithContext({ kind: "doctor" }, async ({ user, req }) => {
-  const body = (await req.json()) as unknown;
-  const input = UpdateDoctorSchema.parse(body);
-
-  await doctorProfileRepository.upsert({
-    uid: user.uid,
-    specialty: input.specialty,
-    licenseNumber: input.licenseNumber,
-    bio: input.bio,
-  });
-
-  const profile = await new GetDoctorProfileUseCase().execute({
+  const body = await req.json();
+  const profile = await new UpdateDoctorProfileUseCase().execute({
+    ...(body as Record<string, unknown>),
     uid: user.uid,
   });
   return NextResponse.json(profile);

@@ -2,15 +2,14 @@
 import { Box, Text, Title } from "@mantine/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Messages } from "@/ui/chat/components/messages";
+import { Messages } from "@/ui/ai/messages";
 import { useUploadFileMutation, useProfileQuery } from "./_components/query";
 import type { FileRecord } from "./_components/query";
 import { getInitials } from "@/lib/get-initials";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { useActiveProfile } from "@/ui/chat/context/active-profile-context";
-import { useChatContext } from "@/ui/chat/context/chat-context";
-import { useMessages } from "@/ui/chat/hooks/use-messages";
-import { InputBar } from "@/ui/chat/components/input-bar";
+import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
+import { useChatContext, useMessagesContext } from "@/ui/ai/context/chat-context";
+import { InputBar } from "@/ui/ai/components/input-bar";
 import { StarterCards } from "./_components/starter-cards";
 import { ChatSkeleton } from "./_chat-skeleton";
 
@@ -58,7 +57,7 @@ export function ChatContent() {
         pendingFreeText,
         fetchNextPage, hasNextPage, isFetchingNextPage,
         error, regenerate,
-    } = useMessages(sessionId);
+    } = useMessagesContext();
 
     // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
     const [input, setInput] = useState("");
@@ -281,7 +280,7 @@ export function ChatContent() {
 
                     {/* Starter cards */}
                     <Box maw={760} mx="auto" w="100%" px="lg" pt="lg" pb="md">
-                        <StarterCards onSelect={setInput} />
+                        <StarterCards onSelect={setInput} onSend={async (text) => { await sendMessage({ text }); }} />
                     </Box>
                 </Box>
             )

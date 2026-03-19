@@ -6,11 +6,11 @@ import { getQueryClient } from "@/lib/query/client";
 import { ProfileDto } from "@/data/profile/models/profile.model";
 import { SessionPayload } from "@/lib/auth/jwt";
 
-export function QueryProvider({ children, user, profile }: {
+export function QueryProvider({ children, user, profile }: Readonly<{
   readonly children: React.ReactNode;
   readonly user: SessionPayload | null;
   readonly profile: ProfileDto | null;
-}) {
+}>) {
   const queryClient = getQueryClient();
   if (user && profile) {
     queryClient.setQueryData(["current-user"], user);

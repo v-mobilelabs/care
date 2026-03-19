@@ -69,6 +69,7 @@ export const POST = WithContext(async ({ user, req }) => {
   });
 
   // 3. AI extraction
+  // CreditsExhaustedError propagates to WithContext → standard 402 response.
   try {
     const extracted = await new ExtractInsuranceUseCase().execute({
       userId: user.uid,
@@ -78,12 +79,8 @@ export const POST = WithContext(async ({ user, req }) => {
 
     return NextResponse.json({ storagePath, documentUrl, extracted });
   } catch (err) {
-    const code = (err as { code?: string }).code;
-    if (code === "CREDITS_EXHAUSTED") {
-      throw ApiError.badRequest(
-        "Credits exhausted. Please try again tomorrow.",
-      );
-    }
+    // Let CreditsExhaustedError propagate to WithContext.
+    if ((err as { code?: string }).code === "CREDITS_EXHAUSTED") throw err;
     // Still return the uploaded file paths so the user can fill manually
     return NextResponse.json({
       storagePath,

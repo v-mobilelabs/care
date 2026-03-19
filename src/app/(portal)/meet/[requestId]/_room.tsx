@@ -1553,7 +1553,7 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
             style={{
                 position: "fixed",
                 inset: 0,
-                background: "light-dark(#f5f5f7, #0f0f0f)",
+                background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
                 display: "flex",
                 flexDirection: "column",
             }}
@@ -1671,7 +1671,7 @@ export function MeetingRoom({ requestId, joinInfo, localUser, remoteUser, exitRo
                                 <IconWifiOff size={40} color="var(--mantine-color-orange-4)" />
                             </Box>
                             <Stack align="center" gap={4}>
-                                <Text fw={600} size="md" c="#fff">
+                                <Text fw={600} size="md" c="white">
                                     Reconnecting…
                                 </Text>
                                 <Text size="sm" c="rgba(255,255,255,0.65)">

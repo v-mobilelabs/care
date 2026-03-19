@@ -42,8 +42,8 @@ export function RemoteVideo({
                 inset: 0,
                 overflow: "hidden",
                 background: remoteTileId === null && !isScreenSharing
-                    ? "radial-gradient(ellipse at 50% 40%, light-dark(#e8e8f0, #1a1a2e) 0%, light-dark(#f0f0f4, #0f0f0f) 70%)"
-                    : "light-dark(#e8e8ee, #111)",
+                    ? "radial-gradient(ellipse at 50% 40%, light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-8)) 0%, light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9)) 70%)"
+                    : "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-9))",
             }}
         >
             {/* Camera-off / waiting state — only when no screen share is active */}
@@ -114,10 +114,10 @@ export function RemoteVideo({
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
-                                            border: "2px solid light-dark(var(--mantine-color-body), #0f0f0f)",
+                                            border: "2px solid light-dark(var(--mantine-color-body), var(--mantine-color-dark-9))",
                                         }}
                                     >
-                                        <IconMicrophoneOff size={14} color="#fff" />
+                                        <IconMicrophoneOff size={14} color="var(--mantine-color-white)" />
                                     </Box>
                                 )}
                             </Box>
@@ -150,7 +150,7 @@ export function RemoteVideo({
                     width: "100%",
                     height: "100%",
                     objectFit: "contain",
-                    background: "#000",
+                    background: "var(--mantine-color-black)",
                     zIndex: isScreenSharing ? 1 : -1,
                     opacity: isScreenSharing ? 1 : 0,
                     pointerEvents: isScreenSharing ? "auto" : "none",
@@ -179,8 +179,8 @@ export function RemoteVideo({
                         animation: "meet-room-fade-in 0.3s ease-out",
                     }}
                 >
-                    <IconScreenShare size={14} color="#fff" />
-                    <Text size="xs" c="#fff" fw={500}>
+                    <IconScreenShare size={14} color="var(--mantine-color-white)" />
+                    <Text size="xs" c="white" fw={500}>
                         {remoteUser.name} is sharing their screen
                     </Text>
                 </Box>

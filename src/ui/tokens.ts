@@ -1,5 +1,5 @@
 /**
- * SwiftDrive Design Tokens
+ * Care AI Design Tokens
  *
  * Single source of truth for all design decisions.
  * Import from here instead of hardcoding values in components.

@@ -110,6 +110,8 @@ export interface FileRecord {
   label?: FileLabel;
   /** Confidence score 0–1 for the assigned label. */
   labelConfidence?: number;
+  /** Proxy URL to a generated WebP thumbnail (images only). */
+  thumbnailUrl?: string | null;
 }
 
 export type MedicationForm =
@@ -141,6 +143,8 @@ export interface PrescriptionRecord {
   userId: string;
   fileId?: string;
   fileUrl?: string;
+  fileMimeType?: string;
+  sessionId?: string;
   source: "extracted" | "generated";
   medications: PrescriptionMedicationRecord[];
   generalInstructions?: string;
@@ -181,6 +185,7 @@ export interface MedicationRecord {
   id: string;
   userId: string;
   sessionId?: string;
+  prescriptionId?: string;
   name: string;
   dosage?: string;
   form?: string;
@@ -849,9 +854,43 @@ export function useExtractPrescriptionMutation() {
   });
 }
 
+/** Link a chat session to a prescription for AI follow-up. */
+export function useLinkPrescriptionSessionMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  const prescKey = [...chatKeys.prescriptions(), pid] as const;
+  return useMutation({
+    mutationFn: ({
+      prescriptionId,
+      sessionId,
+    }: {
+      prescriptionId: string;
+      sessionId: string;
+    }) =>
+      apiFetch<PrescriptionRecord>(`/api/prescriptions/${prescriptionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      }),
+    onMutate: async ({ prescriptionId, sessionId }) => {
+      await qc.cancelQueries({ queryKey: prescKey });
+      const snapshot = qc.getQueryData<PrescriptionRecord[]>(prescKey);
+      qc.setQueryData<PrescriptionRecord[]>(prescKey, (old = []) =>
+        old.map((p) => (p.id === prescriptionId ? { ...p, sessionId } : p)),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(prescKey, ctx.snapshot);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: prescKey });
+    },
+  });
+}
+
 // ── Medications ───────────────────────────────────────────────────────────────
 
-/** Fetch all medications for the authenticated user. */
 export function useMedicationsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
@@ -859,14 +898,6 @@ export function useMedicationsQuery() {
     queryFn: () => apiFetch<MedicationRecord[]>("/api/medications"),
     staleTime: 30_000,
   });
-}
-
-/** Invalidate the medications cache. */
-export function useInvalidateMedications() {
-  const qc = useQueryClient();
-  const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.medications(), pid] });
 }
 
 export interface AddMedicationPayload {
@@ -1933,7 +1964,7 @@ export function useExtractInsuranceMutation() {
   });
 }
 
-// ── Blood Tests ───────────────────────────────────────────────────────────────
+// ── Lab Reports ───────────────────────────────────────────────────────────────
 
 export type BiomarkerStatus = "normal" | "low" | "high" | "critical";
 
@@ -1945,13 +1976,16 @@ export interface BiomarkerRecord {
   status: BiomarkerStatus;
 }
 
-export interface BloodTestRecord {
+export interface LabReportRecord {
   id: string;
   userId: string;
   fileId: string;
-  sessionId: string;
+  fileUrl?: string;
+  fileMimeType?: string;
+  sessionId?: string;
   testName: string;
   labName?: string;
+  labAddress?: string;
   orderedBy?: string;
   testDate?: string;
   notes?: string;
@@ -1960,30 +1994,30 @@ export interface BloodTestRecord {
   updatedAt?: string;
 }
 
-/** Fetch all blood test records for the authenticated user (or active dependent). */
-export function useBloodTestsQuery() {
+/** Fetch all lab report records for the authenticated user (or active dependent). */
+export function useLabReportsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
-    queryKey: [...chatKeys.bloodTests(), pid],
-    queryFn: () => apiFetch<BloodTestRecord[]>("/api/blood-tests"),
+    queryKey: [...chatKeys.labReports(), pid],
+    queryFn: () => apiFetch<LabReportRecord[]>("/api/lab-reports"),
     staleTime: 30_000,
   });
 }
 
 /**
- * Upload a blood test file (image / PDF / doc) and auto-extract structured
- * data via AI. Returns the created BloodTestRecord on success.
+ * Upload a lab report file (image / PDF / doc) and auto-extract structured
+ * data via AI. Returns the created LabReportRecord on success.
  */
-export function useUploadBloodTestMutation() {
+export function useUploadLabReportMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
   return useMutation({
-    mutationFn: async (file: File): Promise<BloodTestRecord> => {
+    mutationFn: async (file: File): Promise<LabReportRecord> => {
       const formData = new FormData();
       formData.append("file", file);
       const headers = new Headers();
       if (pid) headers.set("x-dependent-id", pid);
-      const res = await fetch("/api/blood-tests", {
+      const res = await fetch("/api/lab-reports", {
         method: "POST",
         body: formData,
         headers,
@@ -1994,55 +2028,95 @@ export function useUploadBloodTestMutation() {
         };
         throw new Error(body.error?.message ?? `Upload failed (${res.status})`);
       }
-      return res.json() as Promise<BloodTestRecord>;
+      return res.json() as Promise<LabReportRecord>;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.bloodTests(), pid] });
+      void qc.invalidateQueries({ queryKey: [...chatKeys.labReports(), pid] });
     },
   });
 }
 
-/** Delete a blood test record (and its underlying file). Optimistic update. */
-export function useDeleteBloodTestMutation() {
+/** Delete a lab report record (and its underlying file). Optimistic update. */
+export function useDeleteLabReportMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  const btKey = [...chatKeys.bloodTests(), pid] as const;
+  const lrKey = [...chatKeys.labReports(), pid] as const;
   return useMutation({
     mutationFn: (recordId: string) =>
-      apiFetch<{ ok: boolean }>(`/api/blood-tests/${recordId}`, {
+      apiFetch<{ ok: boolean }>(`/api/lab-reports/${recordId}`, {
         method: "DELETE",
       }),
     onMutate: async (recordId) => {
-      await qc.cancelQueries({ queryKey: btKey });
-      const snapshot = qc.getQueryData<BloodTestRecord[]>(btKey);
-      qc.setQueryData<BloodTestRecord[]>(btKey, (old = []) =>
+      await qc.cancelQueries({ queryKey: lrKey });
+      const snapshot = qc.getQueryData<LabReportRecord[]>(lrKey);
+      qc.setQueryData<LabReportRecord[]>(lrKey, (old = []) =>
         old.filter((r) => r.id !== recordId),
       );
       return { snapshot };
     },
     onError: (_err, _id, ctx) => {
-      if (ctx?.snapshot) qc.setQueryData(btKey, ctx.snapshot);
+      if (ctx?.snapshot) qc.setQueryData(lrKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: btKey });
+      void qc.invalidateQueries({ queryKey: lrKey });
     },
   });
 }
 
-/** Re-run AI extraction for an existing blood test record. */
-export function useReExtractBloodTestMutation() {
+/** Re-run AI extraction for an existing lab report record. */
+export function useReExtractLabReportMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
   return useMutation({
     mutationFn: (recordId: string) =>
-      apiFetch<BloodTestRecord>(`/api/blood-tests/${recordId}`, {
+      apiFetch<LabReportRecord>(`/api/lab-reports/${recordId}`, {
         method: "PATCH",
       }),
     onSuccess: (updated) => {
-      const btKey = [...chatKeys.bloodTests(), pid] as const;
-      qc.setQueryData<BloodTestRecord[]>(btKey, (old = []) =>
+      const lrKey = [...chatKeys.labReports(), pid] as const;
+      qc.setQueryData<LabReportRecord[]>(lrKey, (old = []) =>
         old.map((r) => (r.id === updated.id ? updated : r)),
       );
+    },
+  });
+}
+
+/** Link a chat session to a lab report (or update if already linked). */
+export function useLinkLabReportSessionMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveDependentId();
+  return useMutation({
+    mutationFn: ({
+      recordId,
+      sessionId,
+    }: {
+      recordId: string;
+      sessionId: string;
+    }) =>
+      apiFetch<LabReportRecord>(`/api/lab-reports/${recordId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ sessionId }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onMutate: async ({ recordId, sessionId }) => {
+      const lrKey = [...chatKeys.labReports(), pid] as const;
+      await qc.cancelQueries({ queryKey: lrKey });
+      const snapshot = qc.getQueryData<LabReportRecord[]>(lrKey);
+      qc.setQueryData<LabReportRecord[]>(lrKey, (old = []) =>
+        old.map((r) => (r.id === recordId ? { ...r, sessionId } : r)),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) {
+        const lrKey = [...chatKeys.labReports(), pid] as const;
+        qc.setQueryData(lrKey, ctx.snapshot);
+      }
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({
+        queryKey: [...chatKeys.labReports(), pid],
+      });
     },
   });
 }

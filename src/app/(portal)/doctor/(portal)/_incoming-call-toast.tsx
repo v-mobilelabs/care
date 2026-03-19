@@ -314,7 +314,7 @@ function IncomingCallToast({
                                 width: 16,
                                 height: 16,
                                 borderRadius: "50%",
-                                background: "#34C759",
+                                background: "var(--mantine-color-teal-6)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -332,7 +332,7 @@ function IncomingCallToast({
                                         : "iosPhoneWobble 1.2s ease-in-out infinite",
                                 }}
                             >
-                                <IconPhone size={8} color="#fff" />
+                                <IconPhone size={8} color="var(--mantine-color-white)" />
                             </Box>
                         </Box>
                     </Box>
@@ -377,7 +377,7 @@ function IncomingCallToast({
                             justifyContent: "center",
                         }}
                     >
-                        <Loader size={20} color="#34C759" />
+                        <Loader size={20} color="teal.6" />
                     </Box>
                 ) : (
                     <Group gap={6} wrap="nowrap">
@@ -389,8 +389,8 @@ function IncomingCallToast({
                             onClick={handleReject}
                             aria-label="Decline call"
                             style={{
-                                background: "#FF3B30",
-                                color: "#fff",
+                                background: "var(--mantine-color-red-6)",
+                                color: "var(--mantine-color-white)",
                                 border: "none",
                                 borderRadius: "50%",
                                 animation: "iosDeclineGlow 2s ease-in-out infinite",
@@ -413,8 +413,8 @@ function IncomingCallToast({
                             onClick={handleAccept}
                             aria-label="Accept call"
                             style={{
-                                background: "#34C759",
-                                color: "#fff",
+                                background: "var(--mantine-color-teal-6)",
+                                color: "var(--mantine-color-white)",
                                 border: "none",
                                 borderRadius: "50%",
                                 animation: "iosAcceptGlow 1.5s ease-in-out infinite",

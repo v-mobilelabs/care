@@ -24,7 +24,7 @@ import { useState, useTransition } from "react";
 
 import { firebaseApp } from "@/lib/firebase/client";
 import { signOut } from "@/lib/auth/sign-out";
-import { CONSENT_KEY } from "@/ui/chat/components/consent-gate";
+import { CONSENT_KEY } from "@/ui/ai/components/consent-gate";
 
 // ── Action row ────────────────────────────────────────────────────────────────
 

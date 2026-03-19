@@ -2,9 +2,11 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ConsentGate, hasConsented, CONSENT_KEY } from "@/ui/chat/components/consent-gate";
-import { ChatContext } from "../chat/context/chat-context";
-import { useProfileQuery } from "../chat/query";
+import { ConsentGate, hasConsented, CONSENT_KEY } from "@/ui/ai/components/consent-gate";
+import { ChatContext, MessagesContext } from "../ai/context/chat-context";
+import type { PendingAskAI } from "../ai/context/chat-context";
+import { useProfileQuery } from "../ai/query";
+import { useMessages } from "@/ui/ai/hooks/use-messages";
 
 export function AIAssistantProvider({ children }: Readonly<{ children: React.ReactNode }>) {
     const router = useRouter();
@@ -53,6 +55,43 @@ export function AIAssistantProvider({ children }: Readonly<{ children: React.Rea
         router.replace(`/patient/assistant?id=${id}`);
     }
 
+    // ── Shared messages state ─────────────────────────────────────────────────
+    const sessionId = urlSessionId ?? "";
+    const messagesValue = useMessages(sessionId);
+
+    // ── Pending ask-AI (set by useAskAI, auto-sent once hydrated) ─────────────
+    const [pendingAskAI, setPendingAskAI] = useState<PendingAskAI | null>(null);
+
+    useEffect(() => {
+        if (!pendingAskAI) return;
+        // Wait until the session ID matches and messages are hydrated.
+        if (pendingAskAI.sessionId !== sessionId) return;
+        if (!messagesValue.isHydrated) return;
+
+        const { text, files } = pendingAskAI;
+        // Defer state update to avoid calling setState synchronously in an effect.
+        queueMicrotask(() => setPendingAskAI(null));
+
+        // Set pending attachments so the server can store file references.
+        if (files && files.length > 0) {
+            messagesValue.setPendingAttachments(files);
+        }
+
+        // Build file parts for sendMessage.
+        const fileParts = files?.map((f) => ({
+            type: "file" as const,
+            url: f.url,
+            mediaType: f.mediaType,
+        }));
+
+        void messagesValue.sendMessage(
+            fileParts && fileParts.length > 0
+                ? { text, files: fileParts }
+                : { text },
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingAskAI, sessionId, messagesValue.isHydrated]);
+
     // Always render children so loading.tsx / Suspense boundaries can mount.
     // Show ConsentGate only once we definitively know consent is missing
     // (consented === false). Skipping it when null avoids a hydration mismatch
@@ -60,8 +99,10 @@ export function AIAssistantProvider({ children }: Readonly<{ children: React.Rea
     return (
         <>
             {consented === false && <ConsentGate onAccept={() => setConsented(true)} />}
-            <ChatContext.Provider value={{ sessionId: urlSessionId ?? "", onNewChat: handleNewChat, onSelectSession: handleSelectSession }}>
-                {children}
+            <ChatContext.Provider value={{ sessionId, onNewChat: handleNewChat, onSelectSession: handleSelectSession }}>
+                <MessagesContext.Provider value={{ messages: messagesValue, pendingAskAI, setPendingAskAI }}>
+                    {children}
+                </MessagesContext.Provider>
             </ChatContext.Provider>
         </>
     );

@@ -7,6 +7,8 @@ export interface MedicationDocument {
   userId: string;
   /** The chat session where this medication was detected */
   sessionId?: string;
+  /** The prescription that sourced this medication */
+  prescriptionId?: string;
   name: string;
   dosage?: string;
   form?: string;
@@ -26,6 +28,7 @@ export interface MedicationDto {
   id: string;
   userId: string;
   sessionId?: string;
+  prescriptionId?: string;
   name: string;
   dosage?: string;
   form?: string;
@@ -48,6 +51,7 @@ export function toMedicationDto(
     id,
     userId: doc.userId,
     sessionId: doc.sessionId,
+    prescriptionId: doc.prescriptionId,
     name: doc.name,
     dosage: doc.dosage,
     form: doc.form,
@@ -68,6 +72,7 @@ export const CreateMedicationSchema = z.object({
   /** Required for RAG indexing — the user's own profile ID */
   profileId: z.string().optional(),
   sessionId: z.string().optional(),
+  prescriptionId: z.string().optional(),
   name: z.string().min(1),
   dosage: z.string().optional(),
   form: z.string().optional(),

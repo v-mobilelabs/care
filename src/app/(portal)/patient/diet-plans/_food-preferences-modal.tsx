@@ -23,7 +23,7 @@ import {
     useProfileQuery,
     useUpsertProfileMutation,
 } from "@/app/(portal)/patient/_query";
-import { FOOD_PREFERENCE_SUGGESTIONS } from "@/ui/chat/profile/shared";
+import { FOOD_PREFERENCE_SUGGESTIONS } from "@/ui/ai/profile/shared";
 import { colors } from "@/ui/tokens";
 
 export function FoodPreferencesModal({

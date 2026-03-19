@@ -4,8 +4,8 @@ import { GetMeetingJoinInfoUseCase } from "@/data/meet";
 
 // GET /api/meet/[requestId]/session — full session data (join info + metadata)
 // Used as a TanStack Query fallback when the SSR-hydrated cache is empty.
-export const GET = WithContext(
-  async ({ user }, { requestId }: { requestId: string }) => {
+export const GET = WithContext<{ requestId: string }>(
+  async ({ user }, { requestId }) => {
     const session = await new GetMeetingJoinInfoUseCase().execute({
       requestId,
       userId: user.uid,

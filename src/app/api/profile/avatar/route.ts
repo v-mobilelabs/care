@@ -10,15 +10,15 @@ export const POST = WithContext(async ({ user, req }) => {
   const file = formData.get("file");
 
   if (!(file instanceof Blob)) {
-    throw new ApiError(400, "BAD_REQUEST", "Missing or invalid 'file' field.");
+    throw ApiError.badRequest("Missing or invalid 'file' field.");
   }
 
   if (!file.type.startsWith("image/")) {
-    throw new ApiError(400, "BAD_REQUEST", "Only image files are accepted.");
+    throw ApiError.badRequest("Only image files are accepted.");
   }
 
   if (file.size > 5 * 1024 * 1024) {
-    throw new ApiError(400, "BAD_REQUEST", "Image must be smaller than 5 MB.");
+    throw ApiError.badRequest("Image must be smaller than 5 MB.");
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -34,9 +34,10 @@ export const POST = WithContext(async ({ user, req }) => {
   const photoURL = `${fileRef.publicUrl()}?t=${Date.now()}`;
 
   // Persist Firestore profile — response depends on this succeeding.
-  await new UpsertProfileUseCase().execute(
-    UpsertProfileUseCase.validate({ userId: user.uid, photoUrl: photoURL }),
-  );
+  await new UpsertProfileUseCase().execute({
+    userId: user.uid,
+    photoUrl: photoURL,
+  });
 
   // Sync to Firebase Auth after the response — only affects future token mints,
   // not the current session, so the caller doesn't need to wait.

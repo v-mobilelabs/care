@@ -1,4 +1,4 @@
-import { isToolUIPart, safeValidateUIMessages } from "ai";
+import { isToolUIPart, safeValidateUIMessages, getToolName } from "ai";
 import type { UIMessage, Agent, ToolSet } from "ai";
 import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
@@ -9,13 +9,15 @@ import {
   clinicalAgent,
   dietPlannerChatAgent,
   prescriptionChatAgent,
-  bloodTestChatAgent,
+  labReportChatAgent,
   patientAgent,
   gatewayAgent,
 } from "@/data/shared/service/agents";
 import type { AgentCallOptions } from "@/data/shared/service/agents/base/agent";
 import type { AgentType } from "@/data/shared/service/agents";
 import { ragService } from "@/data/shared/service/rag/rag.service";
+import { messageRepository } from "../repositories/message.repository";
+import { toUIMessage } from "../models/message.model";
 
 // ── Input schema ──────────────────────────────────────────────────────────────
 
@@ -53,7 +55,7 @@ const AGENTS = {
   clinical: clinicalAgent,
   dietPlanner: dietPlannerChatAgent,
   prescription: prescriptionChatAgent,
-  bloodTest: bloodTestChatAgent,
+  labReport: labReportChatAgent,
   patient: patientAgent,
 } as const;
 
@@ -68,26 +70,41 @@ export class PrepareChatUseCase extends UseCase<
   protected async run(input: PrepareChatInput): Promise<PrepareChatResult> {
     const { userId, profileId, dependentId, body } = input;
 
-    // ── 1. Validate & parse messages ──────────────────────────────────────
+    // ── 1. Validate & parse incoming message(s) ────────────────────────────
+    // The client sends only the latest message (server-managed persistence).
+    // We load the full conversation history from Firestore and prepend it.
     const validationResult = await safeValidateUIMessages({
       messages: body.messages,
     });
     if (!validationResult.success || !validationResult.data.length) {
       throw ApiError.badRequest("messages is required.");
     }
-    const messages: UIMessage[] = validationResult.data;
+    const incomingMessages: UIMessage[] = validationResult.data;
 
-    // ── 2. Extract message context ────────────────────────────────────────
+    // ── 2. Load history from Firestore (existing sessions only) ──────────────
+    let messages: UIMessage[] = incomingMessages;
+    if (body.sessionId) {
+      const historyDtos = await messageRepository.listAllForSession(
+        userId,
+        profileId,
+        body.sessionId,
+      );
+      if (historyDtos.length > 0) {
+        messages = [...historyDtos.map(toUIMessage), ...incomingMessages];
+      }
+    }
+
+    // ── 3. Extract message context ────────────────────────────────────────
     const ctxStart = performance.now();
     const ctx = extractMessageContext(messages, body.attachmentUrls);
     console.log(
       `[PrepareChatUseCase] Context extraction: ${(performance.now() - ctxStart).toFixed(0)}ms`,
     );
 
-    // ── 3. Resolve sessionId ──────────────────────────────────────────────
+    // ── 4. Resolve sessionId ─────────────────────────────────────────────────
     const sessionId = body.sessionId ?? crypto.randomUUID();
 
-    // ── 4. Gateway routing ────────────────────────────────────────────────
+    // ── 5. Gateway routing ────────────────────────────────────────────────
     const gatewayStart = performance.now();
     const recentMessages = messages
       .filter((m) => m.role === "user")
@@ -106,7 +123,7 @@ export class PrepareChatUseCase extends UseCase<
 
     const agentType = gatewayDecision.agent;
 
-    // ── 5. Conditionally embed (only when RAG is needed) ──────────────────
+    // ── 6. Conditionally embed (only when RAG is needed) ──────────────────
     let queryEmbedding: number[] | undefined;
     if (gatewayDecision.needsRag) {
       queryEmbedding = await ragService.embedQuery(ctx.userQuery);
@@ -119,32 +136,40 @@ export class PrepareChatUseCase extends UseCase<
       `[PrepareChatUseCase] Gateway reasoning: ${gatewayDecision.reasoning}`,
     );
 
-    // ── 6. Sanitize messages (strip incomplete tool invocations) ──────────
+    // ── 7. Resolve agent (needed before sanitization to know valid tools) ─
+    const agent = AGENTS[agentType as keyof typeof AGENTS] ?? clinicalAgent;
+
+    // ── 8. Sanitize messages ──────────────────────────────────────────────
+    // Strip incomplete tool invocations AND tool parts for tools not in the
+    // selected agent's toolset (e.g. submitDailyPlan parts when routing to
+    // clinical agent after a diet planner conversation).
+    const agentToolNames = new Set(Object.keys(agent.tools ?? {}));
     const sanitizedMessages: UIMessage[] = messages.map((m) => {
       if (m.role !== "assistant") return m;
-      const hasIncomplete = m.parts.some(
+      const needsFilter = m.parts.some(
         (p) =>
           isToolUIPart(p) &&
-          (p.state === "input-available" || p.state === "approval-requested"),
+          (p.state === "input-available" ||
+            p.state === "approval-requested" ||
+            !agentToolNames.has(getToolName(p))),
       );
-      if (!hasIncomplete) return m;
+      if (!needsFilter) return m;
       return {
         ...m,
         parts: m.parts.filter(
           (p) =>
             !isToolUIPart(p) ||
-            (p.state !== "input-available" && p.state !== "approval-requested"),
+            (p.state !== "input-available" &&
+              p.state !== "approval-requested" &&
+              agentToolNames.has(getToolName(p))),
         ),
       };
     });
-
-    // ── 7. Resolve agent ──────────────────────────────────────────────────
-    const agent = AGENTS[agentType as keyof typeof AGENTS] ?? clinicalAgent;
     console.log(
       `[PrepareChatUseCase] Routing to ${agentType.toUpperCase()} agent`,
     );
 
-    // ── 8. Build options ──────────────────────────────────────────────────
+    // ── 9. Build options ──────────────────────────────────────────────────
     const options: AgentCallOptions = {
       userId,
       profileId,

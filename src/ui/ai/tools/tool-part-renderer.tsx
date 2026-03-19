@@ -1,82 +1,83 @@
 "use client";
 import { Group, Loader, Paper, Text, ThemeIcon } from "@mantine/core";
-import { IconCheck, IconExclamationCircle } from "@tabler/icons-react";
+import { IconExclamationCircle } from "@tabler/icons-react";
 import { isToolUIPart } from "ai";
-import type { UIDataTypes, UIMessagePart, UITools } from "ai";
-import type {
-    AskQuestionInput,
-    AssessmentInput,
-    ConditionInput,
-    DietPlanInput,
-    MedicineInput,
-    PatientSummaryInput,
-    PrescriptionInput,
-    SoapNoteInput,
-    StartAssessmentInput,
-} from "@/app/(portal)/patient/_types";
-import { extractToolInput, getToolPartName, getToolPartState } from "@/app/(portal)/patient/_types";
-import { AssessmentCompleteCard } from "./assessment-card";
+import type { UIMessagePart, UIDataTypes, UITools } from "ai";
+import { getToolPartName, getToolPartState, extractToolInput } from "@/ui/ai/types";
+import type { AskQuestionInput, StartAssessmentInput } from "@/ui/ai/types";
 import { AssessmentPrefaceCard } from "./assessment-preface-card";
-import { ConditionCard } from "./condition-card";
-import { DietPlanCard } from "./diet-plan-card";
-import { MedicineCard } from "./medicine-card";
-import { PatientSummaryCard } from "./patient-summary-card";
+import { ApprovalCard } from "./approval-card";
+import { DietDayCard } from "./diet-day-card";
 import { PrescriptionCard } from "./prescription-card";
 import { QuestionCard } from "./question-card";
-import { SoapNoteCard } from "./soap-note-card";
+import type { EnhancedDietDay } from "@/data/diet-plans/models/nutrition.model";
+import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
+
+// ── Friendly tool name mapping ────────────────────────────────────────────────
+
+const TOOL_LABELS: Record<string, string> = {
+    startAssessment: "Preparing assessment…",
+    recordCondition: "Recording condition…",
+    generatePrescription: "Preparing prescription…",
+    submitPrescription: "Preparing prescription…",
+};
+
+// ── Tool Part Dispatcher ──────────────────────────────────────────────────────
 
 export interface ToolPartRendererProps {
     part: UIMessagePart<UIDataTypes, UITools>;
     onAnswer: (toolCallId: string, answer: string) => void;
-    answeredIds: ReadonlySet<string>;
+    onApproval: (opts: { id: string; approved: boolean; reason?: string }) => void;
+    answeredIds: ReadonlyMap<string, string>;
     isLoading: boolean;
     onLearnMore?: (text: string) => void;
 }
 
-function getStreamingLabel(toolName: string | null): string {
-    if (toolName === "recordCondition") return "Identifying condition…";
-    if (toolName === "createPrescription") return "Creating prescription…";
-    if (toolName === "addMedicine") return "Documenting medicine…";
-    if (toolName === "completeAssessment") return "Completing assessment…";
-    if (toolName === "startAssessment") return "Preparing assessment…";
-    if (toolName === "askQuestion") return "Preparing question…";
-    if (toolName === "dosDonts") return "Building lifestyle guidance…";
-    if (toolName === "dietPlan") return "Creating your diet plan…";
-    if (toolName === "soapNote") return "Preparing clinical notes…";
-    if (toolName === "generatePatientSummary") return "Generating patient summary…";
-    return "Processing…";
+function ToolErrorCard({ toolName }: Readonly<{ toolName: string | null }>) {
+    return (
+        <Paper withBorder radius="lg" p="md" style={{ borderColor: "var(--mantine-color-red-4)" }}>
+            <Group gap="xs">
+                <ThemeIcon size={28} radius="md" color="red" variant="light"><IconExclamationCircle size={15} /></ThemeIcon>
+                <Text size="sm" c="red">Failed to process{toolName ? ` (${toolName})` : ""}. Please try again.</Text>
+            </Group>
+        </Paper>
+    );
 }
 
-export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLearnMore }: Readonly<ToolPartRendererProps>) {
+function ToolStreamingCard({ toolName }: Readonly<{ toolName: string | null }>) {
+    const label = toolName === "askQuestion" ? "Preparing question…" : (TOOL_LABELS[toolName ?? ""] ?? "Processing…");
+    return (
+        <Paper withBorder radius="lg" p="md">
+            <Group gap="xs"><Loader size={16} color="primary" /><Text size="sm" c="dimmed" fw={500}>{label}</Text></Group>
+        </Paper>
+    );
+}
+
+function renderApproval(part: UIMessagePart<UIDataTypes, UITools>, toolName: string | null, onApproval: ToolPartRendererProps["onApproval"]) {
+    const approval = (part as unknown as { approval?: { id: string } }).approval;
+    const input = (part as unknown as { input?: unknown }).input;
+    if (!approval) return null;
+
+    if (toolName === "submitPrescription" && input && typeof input === "object" && "medications" in input) {
+        return <PrescriptionCard data={input as SubmitPrescriptionInput} approval={approval} onApproval={onApproval} />;
+    }
+
+    return <ApprovalCard approval={approval} input={input} onApproval={onApproval} />;
+}
+
+export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLoading }: Readonly<ToolPartRendererProps>) {
     const state = getToolPartState(part);
     const toolName = getToolPartName(part);
     const toolCallId = (part as unknown as { toolCallId?: string }).toolCallId ?? "";
-    const isAnswered = answeredIds.has(toolCallId);
 
-    if (state === "output-error") {
-        return (
-            <Paper withBorder radius="lg" p="md" style={{ borderColor: "var(--mantine-color-red-4)" }}>
-                <Group gap="xs">
-                    <ThemeIcon size={28} radius="md" color="red" variant="light"><IconExclamationCircle size={15} /></ThemeIcon>
-                    <Text size="sm" c="red">Failed to process{toolName ? ` (${toolName})` : ""}. Please try again.</Text>
-                </Group>
-            </Paper>
-        );
-    }
+    if (state === "output-error") return <ToolErrorCard toolName={toolName} />;
+    if (state === "input-streaming") return <ToolStreamingCard toolName={toolName} />;
 
-    if (state === "input-streaming") {
-        const label = getStreamingLabel(toolName);
-        return (
-            <Paper withBorder radius="lg" p="md">
-                <Group gap="xs">
-                    <Loader size={16} color="primary" />
-                    <Text size="sm" c="dimmed" fw={500}>
-                        {label}
-                    </Text>
-                </Group>
-            </Paper>
-        );
-    }
+    const dietDay = extractToolInput<EnhancedDietDay>(part, "submitDailyPlan");
+    if (dietDay?.meals && dietDay?.dailyTotals) return <DietDayCard data={dietDay} />;
+
+    const prescription = extractToolInput<SubmitPrescriptionInput>(part, "submitPrescription");
+    if (prescription?.medications) return <PrescriptionCard data={prescription} />;
 
     if (!isToolUIPart(part)) return null;
 
@@ -84,48 +85,9 @@ export function ToolPartRenderer({ part, onAnswer, answeredIds, isLoading, onLea
     if (assessmentPreface) return <AssessmentPrefaceCard data={assessmentPreface} />;
 
     const question = extractToolInput<AskQuestionInput>(part, "askQuestion");
-    if (question) return <QuestionCard data={question} toolCallId={toolCallId} isAnswered={isAnswered} isLoading={isLoading} onAnswer={onAnswer} />;
+    if (question) return <QuestionCard data={question} toolCallId={toolCallId} isAnswered={answeredIds.has(toolCallId)} answeredValue={answeredIds.get(toolCallId)} isLoading={isLoading} onAnswer={onAnswer} />;
 
-    const condition = extractToolInput<ConditionInput>(part, "recordCondition");
-    if (condition) return <ConditionCard data={condition} onLearnMore={onLearnMore} />;
-
-    const prescription = extractToolInput<PrescriptionInput>(part, "createPrescription");
-    if (prescription) return <PrescriptionCard data={prescription} />;
-
-    const medicine = extractToolInput<MedicineInput>(part, "addMedicine");
-    if (medicine) return <MedicineCard data={medicine} />;
-
-    const assessment = extractToolInput<AssessmentInput>(part, "completeAssessment");
-    if (assessment) return <AssessmentCompleteCard data={assessment} />;
-
-    const dietPlan = extractToolInput<DietPlanInput>(part, "dietPlan");
-    if (dietPlan) return <DietPlanCard data={dietPlan} />;
-
-    const soapNote = extractToolInput<SoapNoteInput>(part, "soapNote");
-    if (soapNote) return <SoapNoteCard data={soapNote} />;
-
-    const patientSummary = extractToolInput<PatientSummaryInput>(part, "generatePatientSummary");
-    if (patientSummary) return <PatientSummaryCard data={patientSummary} />;
-
-    if (toolName) {
-        const isExecuting = state === "input-available";
-        const label = isExecuting
-            ? getStreamingLabel(toolName)
-            : `${toolName} completed`;
-        return (
-            <Paper withBorder radius="lg" p="md">
-                <Group gap="xs">
-                    {isExecuting
-                        ? <Loader size={16} color="primary" />
-                        : <ThemeIcon size={28} radius="md" color="teal" variant="light"><IconCheck size={15} /></ThemeIcon>
-                    }
-                    <Text size="sm" c="dimmed">
-                        {label}
-                    </Text>
-                </Group>
-            </Paper>
-        );
-    }
+    if (state === "approval-requested") return renderApproval(part, toolName, onApproval);
 
     return null;
 }

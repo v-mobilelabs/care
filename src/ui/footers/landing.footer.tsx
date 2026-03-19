@@ -3,7 +3,7 @@
 import { Group, Text, Anchor, Box, Container, ThemeIcon } from "@mantine/core";
 import { Copyright } from "./copyright";
 import { IconHeartbeat } from "@tabler/icons-react";
-import Link from "next/link";
+import Link from "@/ui/link";
 
 export function LandingFooter() {
   return (

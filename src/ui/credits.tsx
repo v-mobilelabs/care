@@ -2,7 +2,7 @@
 import { useCreditsQuery } from "@/app/(portal)/patient/_query";
 import { Badge, Loader, Skeleton, Tooltip } from "@mantine/core";
 import { IconBolt } from "@tabler/icons-react";
-import Link, { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useEffect, useRef, useState } from "react";
 
 function AnimatedCredits({ credits }: Readonly<{ credits: number }>) {

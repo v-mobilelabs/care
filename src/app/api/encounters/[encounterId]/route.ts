@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { GetEncounterUseCase } from "@/data/encounters";
 import {
+  GetEncounterUseCase,
   UpdateEncounterNotesUseCase,
   UpdateEncounterNotesSchema,
 } from "@/data/encounters";
@@ -22,7 +22,7 @@ export const GET = WithContext<{ encounterId: string }>(
 export const PATCH = WithContext<{ encounterId: string }>(
   { kind: "doctor" },
   async ({ user, req }, { encounterId }) => {
-    const body = await req.json();
+    const body = (await req.json()) as unknown;
     const { notes } = UpdateEncounterNotesSchema.parse(body);
 
     await new UpdateEncounterNotesUseCase().execute({
@@ -31,6 +31,6 @@ export const PATCH = WithContext<{ encounterId: string }>(
       notes,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ ok: true });
   },
 );

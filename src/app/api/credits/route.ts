@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 
 import { type ApiContext, WithContext } from "@/lib/api/with-context";
-import { GetUsageUseCase } from "@/data/usage/use-cases/get-usage.use-case";
+import { GetUsageUseCase } from "@/data/usage";
 
 export const dynamic = "force-dynamic";
 

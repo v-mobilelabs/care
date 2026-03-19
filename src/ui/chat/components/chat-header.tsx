@@ -12,20 +12,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { signOut } from "@/lib/auth/sign-out";
-import { useCreditsQuery, useProfileQuery } from "@/ui/chat/query";
-import { useChatContext } from "@/ui/chat/context/chat-context";
+import { useProfileQuery } from "@/ui/ai/query";
+import { useChatContext } from "@/ui/ai/context/chat-context";
 import { getInitials } from "@/lib/get-initials";
 import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 import { MessagesButton } from "@/ui/messaging/messages-button";
 import { NotificationsButton } from "@/ui/notifications/notifications-button";
-import { AppsModal } from "@/ui/chat/components/apps-modal";
+import { AppsModal } from "@/ui/ai/components/apps-modal";
 import { Credits } from "@/ui/credits";
 
 export function ChatHeader() {
     const { user } = useAuth();
     const router = useRouter();
     const [appsOpened, setAppsOpened] = useState(false);
-    const { data: credits } = useCreditsQuery();
     const { data: profile } = useProfileQuery();
     const { onNewChat } = useChatContext();
     const { online } = usePresenceStatus(user?.uid ?? "");
@@ -66,9 +65,7 @@ export function ChatHeader() {
                 <Group gap={8}>
                     <NotificationsButton />
                     <MessagesButton />
-                    {credits !== undefined && (
-                        <Credits />
-                    )}
+                    <Credits />
                     <Menu position="bottom-end" withArrow offset={8}>
                         <Menu.Target>
                             <Avatar

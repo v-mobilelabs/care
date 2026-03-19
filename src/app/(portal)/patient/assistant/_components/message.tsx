@@ -1,1 +1,1 @@
-export { FileMessage, StatusIndicator, TextMessage } from "@/ui/chat/components/message";
+export { FileMessage, StatusIndicator, TextMessage } from "@/ui/ai/components/message";

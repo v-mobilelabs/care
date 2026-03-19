@@ -503,7 +503,7 @@ function InsuranceCard({
                     )}
                     <Menu withinPortal position="bottom-end">
                         <Menu.Target>
-                            <ActionIcon variant="subtle" color="gray">
+                            <ActionIcon variant="subtle" color="gray" aria-label="Insurance card options">
                                 <IconDotsVertical size={16} />
                             </ActionIcon>
                         </Menu.Target>

@@ -248,6 +248,7 @@ function IncomingCallCard({
                                     radius="xl"
                                     color="red"
                                     variant="light"
+                                    aria-label="Reject call"
                                     loading={reject.isPending}
                                     onClick={handleReject}
                                     style={{

@@ -118,7 +118,7 @@ interface BiomarkerRecord {
     status: "normal" | "low" | "high" | "critical";
 }
 
-interface BloodTestRecord {
+interface LabReportRecord {
     id: string;
     testName: string;
     testDate?: string;
@@ -136,7 +136,7 @@ interface PatientHealthRecordsDto {
     soapNotes: SoapNoteRecord[];
     medications: MedicationRecord[];
     assessments: AssessmentRecord[];
-    bloodTests: BloodTestRecord[];
+    labReports: LabReportRecord[];
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -610,7 +610,11 @@ function BiomarkerRow({ b }: Readonly<{ b: BiomarkerRecord }>) {
                 <Badge
                     size="xs"
                     variant="light"
-                    color={b.status === "normal" ? "teal" : b.status === "critical" ? "red" : "yellow"}
+                    color={(() => {
+                        if (b.status === "normal") return "teal";
+                        if (b.status === "critical") return "red";
+                        return "yellow";
+                    })()}
                     leftSection={BIOMARKER_STATUS_ICON[b.status]}
                 >
                     {b.status}
@@ -620,7 +624,7 @@ function BiomarkerRow({ b }: Readonly<{ b: BiomarkerRecord }>) {
     );
 }
 
-function BloodTestCard({ record }: Readonly<{ record: BloodTestRecord }>) {
+function LabReportCard({ record }: Readonly<{ record: LabReportRecord }>) {
     const [expanded, { toggle }] = useDisclosure(false);
     const abnormalCount = record.biomarkers.filter((b) => b.status !== "normal").length;
     const criticalCount = record.biomarkers.filter((b) => b.status === "critical").length;
@@ -992,13 +996,13 @@ function MedicationsPanel({ medications }: Readonly<{ medications: MedicationRec
     );
 }
 
-function BloodTestsPanel({ bloodTests }: Readonly<{ bloodTests: BloodTestRecord[] }>) {
-    if (bloodTests.length === 0) {
-        return <EmptyState icon={<IconFlask size={32} />} message="No blood tests recorded for this patient." />;
+function LabReportsPanel({ labReports }: Readonly<{ labReports: LabReportRecord[] }>) {
+    if (labReports.length === 0) {
+        return <EmptyState icon={<IconFlask size={32} />} message="No lab reports recorded for this patient." />;
     }
     return (
         <Stack gap="sm">
-            {bloodTests.map((r) => <BloodTestCard key={r.id} record={r} />)}
+            {labReports.map((r) => <LabReportCard key={r.id} record={r} />)}
         </Stack>
     );
 }
@@ -1050,7 +1054,7 @@ function AccessDenied() {
 
 // ── Root content ──────────────────────────────────────────────────────────────
 
-export function PatientHealthRecordsContent({ patientId }: Props) {
+export function PatientHealthRecordsContent({ patientId }: Readonly<Props>) {
     const router = useRouter();
     const { user } = useAuth();
     const { openConversation } = useMessaging();
@@ -1192,8 +1196,8 @@ export function PatientHealthRecordsContent({ patientId }: Props) {
                         <Tabs.Tab value="medications" leftSection={<IconPill size={14} />}>
                             Medications
                         </Tabs.Tab>
-                        <Tabs.Tab value="blood-tests" leftSection={<IconFlask size={14} />}>
-                            Blood Tests
+                        <Tabs.Tab value="lab-reports" leftSection={<IconFlask size={14} />}>
+                            Lab Reports
                         </Tabs.Tab>
                     </Tabs.List>
 
@@ -1223,8 +1227,8 @@ export function PatientHealthRecordsContent({ patientId }: Props) {
                                         <Tabs.Panel value="medications">
                                             <MedicationsPanel medications={data.medications} />
                                         </Tabs.Panel>
-                                        <Tabs.Panel value="blood-tests">
-                                            <BloodTestsPanel bloodTests={data.bloodTests} />
+                                        <Tabs.Panel value="lab-reports">
+                                            <LabReportsPanel labReports={data.labReports} />
                                         </Tabs.Panel>
                                     </>
                                 )}

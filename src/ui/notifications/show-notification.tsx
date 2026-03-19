@@ -15,22 +15,22 @@ const typeConfig: Record<
 > = {
     info: {
         color: "blue",
-        gradient: "linear-gradient(135deg, #3b82f6, #6366f1)",
+        gradient: "linear-gradient(135deg, var(--mantine-color-blue-5), var(--mantine-color-indigo-5))",
         icon: <IconInfoCircle size={18} stroke={1.8} color="white" />,
     },
     success: {
         color: "teal",
-        gradient: "linear-gradient(135deg, #10b981, #14b8a6)",
+        gradient: "linear-gradient(135deg, var(--mantine-color-teal-5), var(--mantine-color-teal-4))",
         icon: <IconCircleCheck size={18} stroke={1.8} color="white" />,
     },
     warning: {
         color: "orange",
-        gradient: "linear-gradient(135deg, #f59e0b, #f97316)",
+        gradient: "linear-gradient(135deg, var(--mantine-color-yellow-6), var(--mantine-color-orange-5))",
         icon: <IconAlertTriangle size={18} stroke={1.8} color="white" />,
     },
     danger: {
         color: "red",
-        gradient: "linear-gradient(135deg, #ef4444, #f43f5e)",
+        gradient: "linear-gradient(135deg, var(--mantine-color-red-5), var(--mantine-color-pink-5))",
         icon: <IconAlertCircle size={18} stroke={1.8} color="white" />,
     },
 };

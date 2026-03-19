@@ -3,9 +3,10 @@ import { ActionIcon, Alert, Avatar, Box, Button, Group, ScrollArea, Stack, Text,
 import { IconAlertCircle, IconArrowDown, IconCoins, IconHeartbeat, IconRefresh } from "@tabler/icons-react";
 import type { ChatStatus, UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ToolPartRenderer } from "@/ui/chat/components/tool-cards";
+import { ToolPartRenderer } from "@/ui/ai/tools";
 import { FileMessage, StatusIndicator, TextMessage } from "./message";
-import { DateSeparator } from "@/ui/chat/components/date-separator";
+import { ReasoningBlock } from "@/ui/ai/components/reasoning-block";
+import { DateSeparator } from "@/ui/ai/components/date-separator";
 
 export type { ChatStatus };
 
@@ -204,6 +205,14 @@ export function Messages({
                             >
                                 {showDate && <DateSeparator date={currTs} />}
                                 {msg.parts.map((part, i) => {
+                                    if (part.type === "reasoning") {
+                                        return (
+                                            <Box key={i} pl={34}>
+                                                <ReasoningBlock text={(part as { text: string }).text} state={(part as { state?: "streaming" | "done" }).state} />
+                                            </Box>
+                                        );
+                                    }
+
                                     if (part.type === "file") {
                                         return (
                                             <FileMessage
@@ -284,6 +293,18 @@ export function Messages({
                 @keyframes msg-enter {
                     from { opacity: 0; transform: translateY(12px); }
                     to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes tts-pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.6; }
+                }
+                @keyframes reasoning-pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.4; }
+                }
+                @keyframes reasoning-dot {
+                    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+                    40% { opacity: 1; transform: scale(1.2); }
                 }
             `}</style>
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Paper, Box } from "@mantine/core";
-import { InputBar } from "@/ui/chat/components/input-bar";
+import { InputBar } from "@/ui/ai/components/input-bar";
 
 export function LandingChatOverlay() {
     // Minimal state for demo; in real use, lift state up or connect to chat logic

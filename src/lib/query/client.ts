@@ -9,9 +9,6 @@ function makeQueryClient() {
     defaultOptions: {
       queries: {
         staleTime: 60 * 60 * 24 * 365,
-        queryFn: async () => {
-          return {} as Record<string, unknown>;
-        },
       },
       dehydrate: {
         // include pending queries in dehydration

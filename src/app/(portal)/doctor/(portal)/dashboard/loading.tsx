@@ -17,7 +17,7 @@ export default function DoctorDashboardLoading() {
                         style={{
                             borderRadius: 16,
                             border: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                            background: "light-dark(#fff, var(--mantine-color-dark-7))",
+                            background: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-7))",
                         }}
                     >
                         <Skeleton height={20} width={160} mb="md" />
@@ -39,7 +39,7 @@ export default function DoctorDashboardLoading() {
                                 style={{
                                     borderRadius: 16,
                                     border: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                                    background: "light-dark(#fff, var(--mantine-color-dark-7))",
+                                    background: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-7))",
                                 }}
                             >
                                 <Skeleton height={11} width={100} mb={8} />

@@ -14,6 +14,7 @@ export class MedicationService {
   ): Promise<MedicationDto> {
     return medicationRepository.create(input.userId, dependentId, {
       sessionId: input.sessionId,
+      prescriptionId: input.prescriptionId,
       name: input.name,
       dosage: input.dosage,
       form: input.form,

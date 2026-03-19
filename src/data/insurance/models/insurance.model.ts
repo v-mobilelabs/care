@@ -86,7 +86,8 @@ export function toInsuranceDto(
     outOfPocketMax: doc.outOfPocketMax,
     notes: doc.notes,
     documentStoragePath: doc.documentStoragePath,
-    documentUrl: doc.documentUrl,
+    // Stable proxy URL — never expires. The proxy generates a fresh signed URL on each request.
+    documentUrl: doc.documentStoragePath ? `/api/files/${id}` : undefined,
     createdAt: doc.createdAt.toDate().toISOString(),
     updatedAt: doc.updatedAt.toDate().toISOString(),
   };

@@ -1,5 +1,5 @@
 import { Paper } from "@mantine/core";
-import Link from "next/link";
+import Link from "@/ui/link";
 import { SessionRowContent } from "./session-row-content";
 import type { SessionSummary } from "@/app/(portal)/patient/_query";
 import React from "react";

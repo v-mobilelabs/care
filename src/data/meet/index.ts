@@ -15,3 +15,5 @@ export { GetMeetingJoinInfoUseCase } from "./use-cases/get-meeting-join-info.use
 export { ListCallHistoryUseCase } from "./use-cases/list-call-history.use-case";
 export { GetCallMetricsUseCase } from "./use-cases/get-call-metrics.use-case";
 export { GetActiveMeetUseCase } from "./use-cases/get-active-meet.use-case";
+export { GetActiveCallForPatientUseCase } from "./use-cases/get-active-call-for-patient.use-case";
+export { ListOnlineDoctorsUseCase } from "./use-cases/list-online-doctors.use-case";

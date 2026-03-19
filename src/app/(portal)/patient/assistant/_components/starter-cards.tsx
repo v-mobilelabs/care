@@ -17,6 +17,7 @@ interface Starter {
 
 interface StarterCardsProps {
     onSelect: (prompt: string) => void;
+    onSend?: (prompt: string) => void;
 }
 
 // ── Starters ──────────────────────────────────────────────────────────────────
@@ -192,7 +193,7 @@ function InteractiveCard({ color, label, sub, onClick }: Readonly<CardProps>) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function StarterCards({ onSelect }: Readonly<StarterCardsProps>) {
+export function StarterCards({ onSelect, onSend }: Readonly<StarterCardsProps>) {
     const [activeCategory, setActiveCategory] = useState<Category>("all");
 
     const visible = activeCategory === "all"
@@ -229,7 +230,7 @@ export function StarterCards({ onSelect }: Readonly<StarterCardsProps>) {
 
             {/* Prompt grid */}
             <SimpleGrid cols={{ base: 2, xs: 2, sm: 3 }} spacing="md" w="100%">
-                {visible.map(({ color, label, sub, prompt }, index) => (
+                {visible.map(({ color, label, sub, prompt, category }, index) => (
                     <motion.div
                         key={label}
                         initial={{ opacity: 0, y: 30, scale: 0.9 }}
@@ -244,7 +245,13 @@ export function StarterCards({ onSelect }: Readonly<StarterCardsProps>) {
                             color={color}
                             label={label}
                             sub={sub}
-                            onClick={() => onSelect(prompt)}
+                            onClick={() => {
+                                if (category === "upload" || !onSend) {
+                                    onSelect(prompt);
+                                } else {
+                                    onSend(prompt);
+                                }
+                            }}
                         />
                     </motion.div>
                 ))}

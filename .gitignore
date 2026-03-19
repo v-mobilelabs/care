@@ -53,3 +53,4 @@ public/sw.js.map
 public/swe-worker-*.js
 public/workbox-*.js
 public/workbox-*.js.map
+.devtools

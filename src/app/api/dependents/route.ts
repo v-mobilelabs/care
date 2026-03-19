@@ -7,18 +7,18 @@ import {
 
 // GET /api/dependents — list all dependents for the authenticated user
 export const GET = WithContext(async ({ user }) => {
-  const input = ListDependentsUseCase.validate({ ownerId: user.uid });
-  const dependents = await new ListDependentsUseCase().execute(input);
+  const dependents = await new ListDependentsUseCase().execute({
+    ownerId: user.uid,
+  });
   return NextResponse.json(dependents);
 });
 
 // POST /api/dependents — create a new dependent profile
 export const POST = WithContext(async ({ user, req }) => {
   const body = (await req.json()) as unknown;
-  const input = CreateDependentUseCase.validate({
+  const dependent = await new CreateDependentUseCase().execute({
     ...(body as object),
     ownerId: user.uid,
   });
-  const dependent = await new CreateDependentUseCase().execute(input);
   return NextResponse.json(dependent, { status: 201 });
 });

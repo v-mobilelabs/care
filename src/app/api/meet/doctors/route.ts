@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { ListOnlineDoctorsUseCase } from "@/data/meet/use-cases/list-online-doctors.use-case";
+import { ListOnlineDoctorsUseCase } from "@/data/meet";
 
 // GET /api/meet/doctors — list doctors with availability:"available"
 export const GET = WithContext(async () => {

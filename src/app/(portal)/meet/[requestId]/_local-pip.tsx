@@ -47,6 +47,7 @@ export function LocalPip({
                     radius={999}
                     variant="filled"
                     color="dark"
+                    aria-label={pipMinimized ? "Show self view" : "Hide self view"}
                     onClick={() => setPipMinimized((v) => !v)}
                     style={{
                         position: "absolute",
@@ -73,7 +74,7 @@ export function LocalPip({
                         height: 40,
                         overflow: "hidden",
                         border: "2px solid var(--mantine-color-primary-7)",
-                        background: "radial-gradient(circle, light-dark(#e8e8f0, #1a1a2e), light-dark(#f0f0f4, #0f0f0f))",
+                        background: "radial-gradient(circle, light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-8)), light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9)))",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -93,7 +94,7 @@ export function LocalPip({
                         aspectRatio: "16/9",
                         overflow: "hidden",
                         border: "2px solid var(--mantine-color-primary-7)",
-                        background: cameraOn ? "light-dark(#e8e8ee, #1a1a1a)" : "radial-gradient(circle, light-dark(#e8e8f0, #1a1a2e), light-dark(#f0f0f4, #0f0f0f))",
+                        background: cameraOn ? "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-9))" : "radial-gradient(circle, light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-8)), light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9)))",
                         position: "relative",
                     }}
                 >

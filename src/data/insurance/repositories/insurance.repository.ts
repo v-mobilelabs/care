@@ -80,6 +80,18 @@ export const insuranceRepository = {
     return toInsuranceDto(snap.id, snap.data() as InsuranceDocument);
   },
 
+  /** Get a single insurance record without refreshing the signed URL. */
+  async findByIdRaw(
+    userId: string,
+    insuranceId: string,
+    dependentId?: string,
+  ): Promise<InsuranceDto | null> {
+    const ref = insuranceCol(userId, dependentId).doc(insuranceId);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    return toInsuranceDto(snap.id, snap.data() as InsuranceDocument);
+  },
+
   async delete(
     userId: string,
     insuranceId: string,

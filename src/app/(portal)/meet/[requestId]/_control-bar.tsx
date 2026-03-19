@@ -129,11 +129,12 @@ export function ControlBar({
                         radius={999}
                         variant="subtle"
                         color="gray"
+                        aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
                         onClick={onToggleMic}
                         style={{
                             background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
                             color: micOn
-                                ? "light-dark(var(--mantine-color-text), #fff)"
+                                ? "light-dark(var(--mantine-color-text), var(--mantine-color-white))"
                                 : "var(--mantine-color-red-6)",
                             transition: "background 0.15s ease, color 0.15s ease",
                         }}
@@ -149,11 +150,12 @@ export function ControlBar({
                         radius={999}
                         variant="subtle"
                         color="gray"
+                        aria-label={cameraOn ? "Turn off camera" : "Turn on camera"}
                         onClick={onToggleCamera}
                         style={{
                             background: "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
                             color: cameraOn
-                                ? "light-dark(var(--mantine-color-text), #fff)"
+                                ? "light-dark(var(--mantine-color-text), var(--mantine-color-white))"
                                 : "var(--mantine-color-red-6)",
                             transition: "background 0.15s ease, color 0.15s ease",
                         }}
@@ -169,12 +171,13 @@ export function ControlBar({
                         radius={999}
                         variant={screenShareOn ? "light" : "subtle"}
                         color={screenShareOn ? "primary" : "gray"}
+                        aria-label={screenShareOn ? "Stop sharing screen" : "Share screen"}
                         onClick={onToggleScreenShare}
                         style={{
                             background: screenShareOn ? undefined : "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
                             color: screenShareOn
                                 ? "var(--mantine-color-primary-4)"
-                                : "light-dark(var(--mantine-color-text), #fff)",
+                                : "light-dark(var(--mantine-color-text), var(--mantine-color-white))",
                             transition: "background 0.15s ease, color 0.15s ease",
                         }}
                     >
@@ -196,10 +199,11 @@ export function ControlBar({
                             radius={999}
                             variant={chatOpen ? "light" : "subtle"}
                             color={chatOpen ? "primary" : "gray"}
+                            aria-label={chatOpen ? "Close chat" : "Open chat"}
                             onClick={onToggleChat}
                             style={{
                                 background: chatOpen ? undefined : "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                                color: "light-dark(var(--mantine-color-text), #fff)",
+                                color: "light-dark(var(--mantine-color-text), var(--mantine-color-white))",
                                 transition: "background 0.15s ease",
                             }}
                         >
@@ -215,10 +219,11 @@ export function ControlBar({
                         radius={999}
                         variant={settingsOpen ? "light" : "subtle"}
                         color={settingsOpen ? "primary" : "gray"}
+                        aria-label="Settings"
                         onClick={() => setSettingsOpen((v) => !v)}
                         style={{
                             background: settingsOpen ? undefined : "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                            color: "light-dark(var(--mantine-color-text), #fff)",
+                            color: "light-dark(var(--mantine-color-text), var(--mantine-color-white))",
                             transition: "background 0.15s ease",
                         }}
                     >
@@ -238,12 +243,12 @@ export function ControlBar({
                     overlayProps={{ backgroundOpacity: 0.35, blur: 4 }}
                     styles={{
                         header: {
-                            background: "light-dark(#fff, #1a1a1e)",
+                            background: "var(--mantine-color-body)",
                             borderBottom: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
                         },
                         title: { fontWeight: 700, fontSize: 14 },
-                        body: { padding: 0, background: "light-dark(#fff, #1a1a1e)" },
-                        content: { background: "light-dark(#fff, #1a1a1e)" },
+                        body: { padding: 0, background: "var(--mantine-color-body)" },
+                        content: { background: "var(--mantine-color-body)" },
                     }}
                 >
                     {/* ── Devices ── */}
@@ -475,6 +480,7 @@ export function ControlBar({
                             radius={999}
                             variant="light"
                             color="gray"
+                            aria-label="Go to Dashboard"
                             onClick={() => {
                                 onMinimize?.();
                                 onNavigateDashboard();
@@ -495,6 +501,7 @@ export function ControlBar({
                         radius={999}
                         color="red"
                         variant="filled"
+                        aria-label="End call"
                         onClick={onEnd}
                         style={{ boxShadow: "0 4px 16px rgba(239,68,68,0.4)" }}
                     >

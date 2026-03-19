@@ -177,6 +177,7 @@ export function ChatSidebar({
                     radius="xl"
                     variant="subtle"
                     color="gray"
+                    aria-label="Close chat"
                     onClick={onClose}
                     style={{
                         background:
@@ -272,10 +273,10 @@ export function ChatSidebar({
                                                     ? `18px 18px ${isLast ? "4px" : "18px"} 18px`
                                                     : `18px 18px 18px ${isLast ? "4px" : "18px"}`,
                                                 background: isLocal
-                                                    ? "linear-gradient(180deg, #007AFF 0%, #0071EE 100%)"
+                                                    ? "linear-gradient(180deg, var(--mantine-color-primary-filled) 0%, var(--mantine-color-primary-7) 100%)"
                                                     : "light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.1))",
                                                 color: isLocal
-                                                    ? "#fff"
+                                                    ? "var(--mantine-color-white)"
                                                     : "light-dark(var(--mantine-color-black), var(--mantine-color-white))",
                                                 transition: `border-radius ${motion.duration.fast} ${motion.easing.standard}`,
                                             }}
@@ -369,6 +370,7 @@ export function ChatSidebar({
                             radius="xl"
                             variant="filled"
                             color="gray"
+                            aria-label="Scroll to bottom"
                             onClick={scrollToBottom}
                             style={{
                                 background:
@@ -428,7 +430,7 @@ export function ChatSidebar({
                                 letterSpacing: -0.2,
                                 transition: `border-color ${motion.duration.fast} ${motion.easing.standard}`,
                                 "&:focus": {
-                                    borderColor: "#007AFF",
+                                    borderColor: "var(--mantine-color-primary-filled)",
                                 },
                             },
                         }}
@@ -438,14 +440,15 @@ export function ChatSidebar({
                         radius="xl"
                         variant={draft.trim() ? "filled" : "subtle"}
                         color={draft.trim() ? "blue" : "gray"}
+                        aria-label="Send message"
                         onClick={onSend}
                         disabled={!draft.trim()}
                         style={{
                             background: draft.trim()
-                                ? "#007AFF"
+                                ? "var(--mantine-color-primary-filled)"
                                 : "light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06))",
                             color: draft.trim()
-                                ? "#fff"
+                                ? "var(--mantine-color-white)"
                                 : "light-dark(rgba(0,0,0,0.3), rgba(255,255,255,0.25))",
                             transition: `all ${motion.duration.fast} ${motion.easing.standard}`,
                             flexShrink: 0,

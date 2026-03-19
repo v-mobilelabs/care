@@ -22,7 +22,11 @@ export function StorageBar() {
     const usedMB = metrics.usedBytes / (1024 * 1024);
     const limitMB = metrics.limitBytes / (1024 * 1024);
     const pct = Math.min((metrics.usedBytes / metrics.limitBytes) * 100, 100);
-    const barColor = pct >= 90 ? "red" : pct >= 75 ? "orange" : "primary";
+    const barColor = (() => {
+        if (pct >= 90) return "red";
+        if (pct >= 75) return "orange";
+        return "primary";
+    })();
 
     return (
         <Paper withBorder radius="md" p="sm">

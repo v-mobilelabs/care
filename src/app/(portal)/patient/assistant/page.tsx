@@ -4,32 +4,25 @@ import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "./_components/keys";
 import { ListMessagesUseCase } from "@/data/sessions";
-import { GetCreditsUseCase } from "@/data/credits";
 import { ChatContent } from "./_content";
 import { ChatSkeleton } from "./_chat-skeleton";
-import { ActiveProfileProvider } from "@/ui/chat/context/active-profile-context";
+import { ActiveProfileProvider } from "@/ui/ai/context/active-profile-context";
 
 async function ChatData({
     userId,
     sessionId,
 }: Readonly<{ userId: string; sessionId: string }>) {
     const queryClient = getQueryClient();
-    await Promise.all([
-        queryClient.prefetchInfiniteQuery({
-            queryKey: chatKeys.messages(sessionId),
-            queryFn: () =>
-                new ListMessagesUseCase().execute({
-                    userId,
-                    profileId: userId,
-                    sessionId,
-                }),
-            initialPageParam: undefined as string | undefined,
-        }),
-        queryClient.prefetchQuery({
-            queryKey: chatKeys.credits(),
-            queryFn: () => new GetCreditsUseCase().execute({ userId }),
-        }),
-    ]);
+    await queryClient.prefetchInfiniteQuery({
+        queryKey: chatKeys.messages(sessionId),
+        queryFn: () =>
+            new ListMessagesUseCase().execute({
+                userId,
+                profileId: userId,
+                sessionId,
+            }),
+        initialPageParam: undefined as string | undefined,
+    });
     // Wrap ChatContent with ActiveProfileProvider to provide context
     return (
         <Hydrate client={queryClient}>

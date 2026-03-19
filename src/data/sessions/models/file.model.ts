@@ -25,7 +25,7 @@ export type FileLabel = (typeof FILE_LABELS)[number];
 
 export const FILE_LABEL_DISPLAY: Record<FileLabel, string> = {
   xray: "X-Ray",
-  blood_test: "Blood Test",
+  blood_test: "Lab Report",
   prescription: "Prescription",
   scan: "Scan",
   report: "Report",
@@ -98,6 +98,8 @@ export interface FileDocument {
   label?: FileLabel;
   /** Confidence score 0–1 for the assigned label. */
   labelConfidence?: number;
+  /** GCS path to the generated WebP thumbnail (background, post-upload). */
+  thumbnailPath?: string;
 }
 
 // ── DTO — outbound (API responses) ───────────────────────────────────────────
@@ -115,6 +117,7 @@ export interface FileDto {
   extractedData?: ExtractedPrescriptionData;
   label?: FileLabel;
   labelConfidence?: number;
+  thumbnailUrl?: string | null;
 }
 
 // ── DTO — inbound (upload) ────────────────────────────────────────────────────
@@ -183,10 +186,12 @@ export function toFileDto(id: string, doc: FileDocument): FileDto {
     mimeType: doc.mimeType,
     size: doc.size,
     storagePath: doc.storagePath,
-    downloadUrl: doc.downloadUrl,
+    // Stable proxy URL — never expires. The proxy generates a fresh signed URL on each request.
+    downloadUrl: `/api/files/${id}`,
     createdAt: doc.createdAt.toDate().toISOString(),
     extractedData: doc.extractedData,
     label: doc.label,
     labelConfidence: doc.labelConfidence,
+    thumbnailUrl: doc.thumbnailPath ? `/api/files/${id}/thumbnail` : null,
   };
 }

@@ -66,12 +66,12 @@ export function FeedbackModal({ opened, requestId, onDismiss }: Readonly<Feedbac
             overlayProps={{ backgroundOpacity: 0.55, blur: 8 }}
             styles={{
                 header: {
-                    background: "light-dark(#fff, #1a1a1e)",
+                    background: "var(--mantine-color-body)",
                     borderBottom: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
                 },
                 title: { fontWeight: 700, fontSize: 16 },
-                body: { background: "light-dark(#fff, #1a1a1e)" },
-                content: { background: "light-dark(#fff, #1a1a1e)" },
+                body: { background: "var(--mantine-color-body)" },
+                content: { background: "var(--mantine-color-body)" },
             }}
         >
             <Stack gap="md" style={{ padding: "8px 0" }}>
@@ -84,6 +84,7 @@ export function FeedbackModal({ opened, requestId, onDismiss }: Readonly<Feedbac
                                 size={44}
                                 radius="xl"
                                 variant="transparent"
+                                aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                                 onMouseEnter={() => setHoveredStar(star)}
                                 onMouseLeave={() => setHoveredStar(0)}
                                 onClick={() => setRating(star)}

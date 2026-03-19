@@ -1,7 +1,7 @@
 "use client";
 import { Box, Group, Tabs, ThemeIcon, Title, Text } from "@mantine/core";
 import { IconClipboardHeart } from "@tabler/icons-react";
-import Link from "next/link";
+import Link from "@/ui/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
 
@@ -9,7 +9,7 @@ const tabs = [
     { label: "Overview", value: "overview" },
     { label: "Conditions", value: "conditions" },
     { label: "SOAP Notes", value: "soap-notes" },
-    { label: "Blood Tests", value: "blood-tests" },
+    { label: "Lab Reports", value: "lab-reports" },
 ];
 
 export default function HealthRecordsLayout({ children }: { children: ReactNode }) {

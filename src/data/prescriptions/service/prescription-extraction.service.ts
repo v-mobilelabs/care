@@ -95,6 +95,7 @@ export class PrescriptionExtractionService {
     return prescriptionRepository.create(input.userId, {
       fileId: input.fileId,
       fileUrl: file.downloadUrl ?? undefined,
+      fileMimeType: file.mimeType,
       source: "extracted",
       medications: result.medications.map(
         (m): PrescriptionMedication => ({

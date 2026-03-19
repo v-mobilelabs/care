@@ -19,8 +19,11 @@ import {
     IconChevronRight,
     IconDotsVertical,
     IconEdit,
+    IconMessageCircle,
+    IconPrescription,
     IconTrash,
 } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
 
 import { type MedicationRecord, type MedicationStatus } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
@@ -58,6 +61,7 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
     onDelete: () => void;
 }>) {
     const [expanded, { toggle }] = useDisclosure(false);
+    const router = useRouter();
     const statusColor = STATUS_COLOR[med.status];
     const hasDetails = !!(med.dosage ?? med.form ?? med.frequency ?? med.duration ?? med.instructions ?? med.condition);
 
@@ -107,6 +111,17 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                                     {med.condition}
                                 </Badge>
                             )}
+                            {med.prescriptionId && (
+                                <Badge
+                                    size="xs"
+                                    variant="light"
+                                    color="indigo"
+                                    radius="sm"
+                                    leftSection={<IconPrescription size={10} />}
+                                >
+                                    Prescription
+                                </Badge>
+                            )}
                             <Text size="xs" c="dimmed">{formatDate(med.createdAt)}</Text>
                         </Group>
                     </Box>
@@ -132,6 +147,15 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                             </ActionIcon>
                         </Menu.Target>
                         <Menu.Dropdown>
+                            <Menu.Item
+                                leftSection={<IconMessageCircle size={14} />}
+                                onClick={() => {
+                                    const sessionId = med.sessionId ?? crypto.randomUUID();
+                                    router.push(`/patient/assistant?id=${sessionId}`);
+                                }}
+                            >
+                                Chat about this
+                            </Menu.Item>
                             <Menu.Item leftSection={<IconEdit size={14} />} onClick={onEdit}>
                                 Edit
                             </Menu.Item>

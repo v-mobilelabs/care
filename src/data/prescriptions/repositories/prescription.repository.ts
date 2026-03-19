@@ -85,4 +85,16 @@ export const prescriptionRepository = {
   ): Promise<void> {
     await prescriptionDoc(userId, prescriptionId, dependentId).delete();
   },
+
+  async patchSessionId(
+    userId: string,
+    prescriptionId: string,
+    sessionId: string,
+    dependentId?: string,
+  ): Promise<PrescriptionDto> {
+    const ref = prescriptionDoc(userId, prescriptionId, dependentId);
+    await ref.update({ sessionId });
+    const snap = await ref.get();
+    return toPrescriptionDto(snap.id, snap.data() as PrescriptionDocument);
+  },
 };

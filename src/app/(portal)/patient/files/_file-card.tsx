@@ -53,7 +53,7 @@ function getMimeLabel(mimeType: string): string {
 
 const LABEL_DISPLAY: Record<FileLabel, string> = {
     xray: "X-Ray",
-    blood_test: "Blood Test",
+    blood_test: "Lab Report",
     prescription: "Prescription",
     scan: "Scan",
     report: "Report",
@@ -196,9 +196,9 @@ export function FileCard({ file, isPendingDelete, onDelete }: Readonly<{
                     overflow: "hidden",
                 }}
             >
-                {isImage && file.downloadUrl && !imgError ? (
+                {isImage && (file.thumbnailUrl ?? file.downloadUrl) && !imgError ? (
                     <Image
-                        src={file.downloadUrl}
+                        src={file.thumbnailUrl ?? file.downloadUrl!}
                         alt={file.name}
                         style={{ width: "100%", height: 140, objectFit: "cover" }}
                         onError={() => setImgError(true)}

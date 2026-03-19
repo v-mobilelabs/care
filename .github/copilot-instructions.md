@@ -1,4 +1,4 @@
-# SwiftDrive — Copilot Instructions
+# Care AI — Copilot Instructions
 
 ## Stack
 

@@ -1,130 +1,173 @@
 "use client";
-import { ActionIcon, Badge, Box, Collapse, Group, Paper, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
-import { notifications } from "@mantine/notifications";
-import { IconBookmark, IconBookmarkFilled, IconCapsule, IconCheck, IconChevronDown, IconClipboardHeart } from "@tabler/icons-react";
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useAddMedicationMutation } from "@/app/(portal)/patient/_query";
-import type { PrescriptionInput } from "@/app/(portal)/patient/_types";
+import { Accordion, Badge, Box, Button, Card, Divider, Group, Stack, Text, ThemeIcon } from "@mantine/core";
+import { IconAlertTriangle, IconCalendarEvent, IconCheck, IconClipboardList, IconDroplet, IconNeedle, IconPill, IconStethoscope, IconX } from "@tabler/icons-react";
+import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
 
-export interface PrescriptionCardProps {
-    data: PrescriptionInput;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+type Medication = SubmitPrescriptionInput["medications"][number];
+
+const FORM_ICON: Record<string, React.ReactNode> = {
+    Tablet: <IconPill size={14} />,
+    Capsule: <IconPill size={14} />,
+    "Oral Solution": <IconDroplet size={14} />,
+    Suspension: <IconDroplet size={14} />,
+    Injection: <IconNeedle size={14} />,
+    Syrup: <IconDroplet size={14} />,
+    "Eye Drops": <IconDroplet size={14} />,
+};
+
+function formIcon(form: string) {
+    return FORM_ICON[form] ?? <IconPill size={14} />;
 }
 
-export function PrescriptionCard({ data }: Readonly<PrescriptionCardProps>) {
-    const addMedication = useAddMedicationMutation();
-    const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-    const [opened, { toggle }] = useDisclosure(false);
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-    function handleSaveMed(name: string, dosage: string, frequency: string, duration: string) {
-        const key = `${name}:${dosage}`;
-        if (savedIds.has(key)) return;
-        addMedication.mutate(
-            { name, dosage: dosage || undefined, frequency: frequency || undefined, duration: duration || undefined, condition: data.condition || undefined, status: "active" },
-            {
-                onSuccess: () => {
-                    setSavedIds((prev) => { const s = new Set(prev); s.add(key); return s; });
-                    notifications.show({ title: "Medication saved", message: `${name} added to your medications.`, color: "teal", icon: <IconCheck size={16} /> });
-                },
-            },
-        );
-    }
-
+function MedControl({ med }: Readonly<{ med: Medication }>) {
     return (
-        <Paper withBorder radius="lg" p={0} style={{ overflow: "hidden", borderLeft: "4px solid var(--mantine-color-violet-5)" }}>
-            <UnstyledButton onClick={toggle} style={{ width: "100%", display: "block" }} aria-expanded={opened}>
-                <Box px="md" py="sm">
-                    <Group gap="sm" wrap="nowrap" align="center">
-                        <ThemeIcon size={32} radius="md" color="violet" variant="filled" style={{ flexShrink: 0 }}>
-                            <IconClipboardHeart size={16} />
-                        </ThemeIcon>
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text size="xs" c="dimmed" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Prescription</Text>
-                            <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{data.title}</Text>
-                            <Text size="xs" c="dimmed">{data.condition}</Text>
-                        </Box>
-                        <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-                            <Badge size="xs" color="violet" variant="light">{data.medications.length} med{data.medications.length > 1 ? "s" : ""}</Badge>
-                            {data.urgent && <Badge color="red" size="xs" variant="filled">Urgent</Badge>}
-                            <ThemeIcon size={20} radius="xl" color="gray" variant="subtle"
-                                style={{ transition: "transform 200ms ease", transform: opened ? "rotate(180deg)" : "rotate(0deg)" }}>
-                                <IconChevronDown size={13} />
-                            </ThemeIcon>
-                        </Group>
-                    </Group>
-                </Box>
-            </UnstyledButton>
-            <Collapse in={opened}>
-                <Box px="md" py="sm">
-                    <Box style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                        <Table verticalSpacing="xs" fz="sm" withTableBorder withColumnBorders style={{ minWidth: 380 }}>
-                            <Table.Thead>
-                                <Table.Tr>
-                                    <Table.Th>Medication</Table.Th>
-                                    <Table.Th>Dosage</Table.Th>
-                                    <Table.Th>Frequency</Table.Th>
-                                    <Table.Th>Duration</Table.Th>
-                                    <Table.Th></Table.Th>
-                                </Table.Tr>
-                            </Table.Thead>
-                            <Table.Tbody>
-                                {data.medications.map((m) => {
-                                    const key = `${m.name}:${m.dosage}`;
-                                    const saved = savedIds.has(key);
-                                    return (
-                                        <Table.Tr key={key}>
-                                            <Table.Td>
-                                                <Group gap={6}><IconCapsule size={13} /><Text size="sm" fw={500}>{m.name}</Text><Badge size="xs" variant="dot" color="gray">{m.form}</Badge></Group>
-                                            </Table.Td>
-                                            <Table.Td>{m.dosage}</Table.Td>
-                                            <Table.Td>{m.frequency}</Table.Td>
-                                            <Table.Td>{m.duration}</Table.Td>
-                                            <Table.Td>
-                                                <ActionIcon
-                                                    size={22}
-                                                    variant={saved ? "filled" : "subtle"}
-                                                    color={saved ? "teal" : "gray"}
-                                                    onClick={() => handleSaveMed(m.name, m.dosage, m.frequency, m.duration)}
-                                                    disabled={saved || addMedication.isPending}
-                                                    title={saved ? "Saved to my medications" : "Save to my medications"}
-                                                >
-                                                    <AnimatePresence mode="wait" initial={false}>
-                                                        {saved ? (
-                                                            <motion.div
-                                                                key="saved"
-                                                                initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
-                                                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                                                                exit={{ scale: 0.5, opacity: 0, rotate: 20 }}
-                                                                transition={{ duration: 0.25, ease: "easeInOut" }}
-                                                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-                                                            >
-                                                                <IconBookmarkFilled size={12} />
-                                                            </motion.div>
-                                                        ) : (
-                                                            <motion.div
-                                                                key="unsaved"
-                                                                initial={{ scale: 0.5, opacity: 0, rotate: 20 }}
-                                                                animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                                                                exit={{ scale: 0.5, opacity: 0, rotate: -20 }}
-                                                                transition={{ duration: 0.25, ease: "easeInOut" }}
-                                                                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-                                                            >
-                                                                <IconBookmark size={12} />
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </ActionIcon>
-                                            </Table.Td>
-                                        </Table.Tr>
-                                    );
-                                })}
-                            </Table.Tbody>
-                        </Table>
-                        {data.notes && <Text size="xs" c="dimmed" mt={6}>📝 {data.notes}</Text>}
-                    </Box>
-                </Box>
-            </Collapse>
-        </Paper>
+        <Group gap="sm" wrap="nowrap" style={{ flex: 1 }}>
+            <ThemeIcon size={24} radius="xl" variant="light" color="primary">
+                {formIcon(med.form)}
+            </ThemeIcon>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm" fw={600} truncate>
+                    {med.name} {med.dosage}
+                </Text>
+                <Text size="xs" c="dimmed">
+                    {med.form} · {med.frequency} · {med.duration}
+                </Text>
+            </Box>
+        </Group>
+    );
+}
+
+function MedDetail({ label, value }: Readonly<{ label: string; value: string }>) {
+    return (
+        <Group gap={6} wrap="nowrap" align="start">
+            <Text size="xs" c="dimmed" fw={600} style={{ minWidth: 80 }}>
+                {label}
+            </Text>
+            <Text size="xs">{value}</Text>
+        </Group>
+    );
+}
+
+function MedPanel({ med }: Readonly<{ med: Medication }>) {
+    return (
+        <Accordion.Item value={med.name}>
+            <Accordion.Control>
+                <MedControl med={med} />
+            </Accordion.Control>
+            <Accordion.Panel>
+                <Stack gap={6}>
+                    <MedDetail label="Indication" value={med.indication} />
+                    <MedDetail label="Dosage" value={`${med.dosage} ${med.form}`} />
+                    <MedDetail label="Frequency" value={med.frequency} />
+                    <MedDetail label="Duration" value={med.duration} />
+                    {med.instructions && <MedDetail label="Instructions" value={med.instructions} />}
+                    {med.monitoring && <MedDetail label="Monitoring" value={med.monitoring} />}
+                </Stack>
+            </Accordion.Panel>
+        </Accordion.Item>
+    );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+function HeaderBadge({ count }: Readonly<{ count: number }>) {
+    return (
+        <Group gap="sm" wrap="nowrap">
+            <ThemeIcon size={32} radius="md" color="primary" variant="filled" style={{ flexShrink: 0 }}>
+                <IconClipboardList size={16} />
+            </ThemeIcon>
+            <Box style={{ minWidth: 0 }}>
+                <Text size="xs" c="primary" fw={500} style={{ lineHeight: 1, marginBottom: 1 }}>Prescription</Text>
+                <Text fw={700} size="sm" style={{ lineHeight: 1.3 }}>{count} medication{count > 1 ? "s" : ""}</Text>
+            </Box>
+        </Group>
+    );
+}
+
+function PrescriptionHeader({ data }: Readonly<{ data: SubmitPrescriptionInput }>) {
+    return (
+        <Card.Section withBorder p="sm" style={{
+            background: "light-dark(var(--mantine-color-primary-0), var(--mantine-color-dark-8))",
+        }}>
+            <Group gap="sm" wrap="nowrap" justify="space-between">
+                <HeaderBadge count={data.medications.length} />
+                {data.urgent && (
+                    <Badge color="red" variant="filled" leftSection={<IconAlertTriangle size={12} />}>Urgent</Badge>
+                )}
+            </Group>
+        </Card.Section>
+    );
+}
+
+function ApprovalActions({ approval, onApproval }: Readonly<{ approval: { id: string }; onApproval: PrescriptionCardProps["onApproval"] }>) {
+    if (!onApproval) return null;
+    return (
+        <>
+            <Divider />
+            <Group gap="sm">
+                <Button size="sm" color="teal" leftSection={<IconCheck size={14} />}
+                    onClick={() => onApproval({ id: approval.id, approved: true })}>
+                    Approve
+                </Button>
+                <Button size="sm" color="red" variant="outline" leftSection={<IconX size={14} />}
+                    onClick={() => onApproval({ id: approval.id, approved: false, reason: "Patient declined" })}>
+                    Decline
+                </Button>
+            </Group>
+        </>
+    );
+}
+
+function FooterNote({ icon, color, children }: Readonly<{ icon: React.ReactNode; color: string; children: React.ReactNode }>) {
+    return (
+        <Group gap={6} wrap="nowrap" align="start">
+            <ThemeIcon size={20} radius="xl" color={color} variant="light">{icon}</ThemeIcon>
+            <Text size="xs">{children}</Text>
+        </Group>
+    );
+}
+
+function PrescriptionFooter({ data, approval, onApproval }: Readonly<Pick<PrescriptionCardProps, "data" | "approval" | "onApproval">>) {
+    if (!data.generalInstructions && !data.followUp && !approval) return null;
+    return (
+        <Card.Section p="sm" style={{
+            background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
+        }}>
+            <Stack gap="xs">
+                {data.generalInstructions && (
+                    <FooterNote icon={<IconStethoscope size={11} />} color="teal">{data.generalInstructions}</FooterNote>
+                )}
+                {data.followUp && (
+                    <FooterNote icon={<IconCalendarEvent size={11} />} color="primary">
+                        <Text span fw={600}>Follow-up:</Text> {data.followUp}
+                    </FooterNote>
+                )}
+                {approval && <ApprovalActions approval={approval} onApproval={onApproval} />}
+            </Stack>
+        </Card.Section>
+    );
+}
+
+export interface PrescriptionCardProps {
+    data: SubmitPrescriptionInput;
+    approval?: { id: string };
+    onApproval?: (opts: { id: string; approved: boolean; reason?: string }) => void;
+}
+
+export function PrescriptionCard({ data, approval, onApproval }: Readonly<PrescriptionCardProps>) {
+    return (
+        <Card withBorder p={0} radius="lg" style={{ overflow: "hidden" }}>
+            <PrescriptionHeader data={data} />
+            <Accordion multiple chevronPosition="right" defaultValue={data.medications.map((m) => m.name)}>
+                {data.medications.map((med) => (
+                    <MedPanel key={med.name} med={med} />
+                ))}
+            </Accordion>
+            <PrescriptionFooter data={data} approval={approval} onApproval={onApproval} />
+        </Card>
     );
 }

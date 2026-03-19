@@ -42,14 +42,14 @@ async function PatientData({
             const { ListSoapNotesUseCase } = await import("@/data/soap-notes");
             const { ListMedicationsUseCase } = await import("@/data/medications");
             const { ListAssessmentsUseCase } = await import("@/data/assessments");
-            const { ListBloodTestsUseCase } = await import("@/data/blood-tests");
+            const { ListLabReportsUseCase } = await import("@/data/lab-reports");
             const { profileRepository } = await import("@/data/profile");
             const { patientRepository } = await import("@/data/patients");
 
             const link = await doctorPatientRepository.get(userId, patientId);
             if (!link?.status || link.status !== "accepted") return null;
 
-            const [conditions, soapNotes, medications, assessments, bloodTests, profile, patient] =
+            const [conditions, soapNotes, medications, assessments, labReports, profile, patient] =
                 await Promise.all([
                     new ListConditionsUseCase().execute(
                         { userId: patientId },
@@ -63,7 +63,7 @@ async function PatientData({
                     new ListAssessmentsUseCase().execute(
                         { userId: patientId },
                     ),
-                    new ListBloodTestsUseCase().execute(
+                    new ListLabReportsUseCase().execute(
                         { userId: patientId },
                     ),
                     profileRepository.get(patientId),
@@ -88,7 +88,7 @@ async function PatientData({
                 soapNotes,
                 medications,
                 assessments,
-                bloodTests,
+                labReports,
             };
         },
     });

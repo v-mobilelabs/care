@@ -9,6 +9,9 @@ export { DeleteDoctorUseCase } from "./use-cases/delete-doctor.use-case";
 // ── Doctor portal / professional profile ──────────────────────────────────────
 export { RegisterDoctorUseCase } from "./use-cases/register-doctor.use-case";
 export { GetDoctorProfileUseCase } from "./use-cases/get-doctor-profile.use-case";
+export { UpdateDoctorProfileUseCase } from "./use-cases/update-doctor-profile.use-case";
+export { LookupClinicUseCase } from "./use-cases/lookup-clinic.use-case";
+export type { ClinicResult } from "./use-cases/lookup-clinic.use-case";
 export { UpdateDoctorAvailabilityUseCase } from "./use-cases/update-doctor-availability.use-case";
 export type { UpdateDoctorAvailabilityInput } from "./use-cases/update-doctor-availability.use-case";
 export { doctorProfileRepository } from "./repositories/doctor-profile.repository";

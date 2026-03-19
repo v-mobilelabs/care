@@ -49,7 +49,7 @@ export type AnalyticsEvent =
   | { name: "assessment_viewed"; params?: { assessment_id?: string } }
   | { name: "assessment_completed"; params?: { assessment_id?: string } }
   | { name: "soap_note_viewed"; params?: { note_id?: string } }
-  | { name: "blood_test_viewed"; params?: { record_id?: string } }
+  | { name: "lab_report_viewed"; params?: { record_id?: string } }
   | { name: "vital_recorded"; params?: { vital_type?: string } }
 
   // Doctors

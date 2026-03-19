@@ -31,8 +31,7 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useCallHistory } from "./_query";
 import type { CallRequestDto, CallRequestStatus } from "@/data/meet";
 import { colors } from "@/ui/tokens";

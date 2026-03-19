@@ -2,8 +2,11 @@ import type { UserKind } from "@/lib/auth/jwt";
 import {
     IconAi,
     IconCalendarStats,
+    IconCapsule,
     IconChartBar,
+    IconDroplet,
     IconFiles,
+    IconHeartbeat,
     IconHistory,
     IconLayoutDashboard,
     IconPhone,
@@ -59,7 +62,7 @@ export type ApplicationInfo = {
  * ```
  */
 
-const ICON_SIZE = "xs";
+const ICON_SIZE = 18;
 export function getNavigationMenus(userKind: UserKind): NavigationMenus {
     if (userKind === "doctor") {
         return {
@@ -135,6 +138,16 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 href: "/patient/prescriptions",
             },
             {
+                label: "Medications",
+                icon: <IconCapsule size={ICON_SIZE} />,
+                href: "/patient/medications",
+            },
+            {
+                label: "Lab Reports",
+                icon: <IconDroplet size={ICON_SIZE} />,
+                href: "/patient/lab-reports",
+            },
+            {
                 label: "Files",
                 icon: <IconFiles size={ICON_SIZE} />,
                 href: "/patient/files",
@@ -146,6 +159,11 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 label: "Profile",
                 icon: <IconUserCircle size={ICON_SIZE} />,
                 href: "/profile",
+            },
+            {
+                label: "Health Details",
+                icon: <IconHeartbeat size={ICON_SIZE} />,
+                href: "/patient/details",
             },
             {
                 label: "Usage",

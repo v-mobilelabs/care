@@ -12,8 +12,7 @@
  */
 import { Box, Group, Loader, Text, UnstyledButton } from "@mantine/core";
 import { IconClock } from "@tabler/icons-react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useState } from "react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useCallState } from "@/lib/meet/use-call-state";
@@ -41,19 +40,19 @@ function QueueIslandContent({ pos, isNext }: Readonly<{ pos: number; isNext: boo
                 {pending ? (
                     <Loader size={10} color="white" type="dots" />
                 ) : (
-                    <Text size="xs" fw={700} style={{ color: "#fff", lineHeight: 1 }}>
+                    <Text size="xs" fw={700} style={{ color: "var(--mantine-color-white)", lineHeight: 1 }}>
                         {pos}
                     </Text>
                 )}
             </Box>
 
             <Group gap={6} wrap="nowrap">
-                <IconClock size={14} color={isNext ? "#34C759" : "rgba(255,255,255,0.8)"} />
+                <IconClock size={14} color={isNext ? "var(--mantine-color-teal-6)" : "rgba(255,255,255,0.8)"} />
                 <Text
                     size="xs"
                     fw={600}
                     style={{
-                        color: isNext ? "#34C759" : "rgba(255,255,255,0.9)",
+                        color: isNext ? "var(--mantine-color-teal-6)" : "rgba(255,255,255,0.9)",
                         letterSpacing: 0.2,
                     }}
                 >
@@ -112,8 +111,8 @@ export function QueuePositionIsland() {
                     paddingLeft: 10,
                     paddingRight: 14,
                     borderRadius: 20,
-                    background: "light-dark(#1a1a1a, #1a1a1a)",
-                    color: "#fff",
+                    background: "light-dark(var(--mantine-color-dark-9), var(--mantine-color-dark-9))",
+                    color: "var(--mantine-color-white)",
                     cursor: "pointer",
                     animation: "qpi-appear 0.4s cubic-bezier(0.34,1.36,0.64,1) both",
                     transition: "transform 0.2s ease, box-shadow 0.2s ease",

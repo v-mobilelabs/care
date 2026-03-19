@@ -100,4 +100,22 @@ export const messageRepository = {
     snap.docs.forEach((d: QueryDocumentSnapshot) => batch.delete(d.ref));
     await batch.commit();
   },
+
+  /**
+   * Fetch all messages for a session ordered oldest-first.
+   * Used server-side so the AI agent gets the full conversation history
+   * when the client sends only the latest message (server-managed persistence).
+   */
+  async listAllForSession(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+  ): Promise<MessageDto[]> {
+    const snap = await messagesCol(userId, profileId, sessionId)
+      .orderBy("createdAt", "asc")
+      .get();
+    return (snap.docs as QueryDocumentSnapshot[]).map((d) =>
+      toMessageDto(d.id, d.data() as MessageDocument),
+    );
+  },
 };

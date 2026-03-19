@@ -20,7 +20,7 @@ const MeetingRoom = dynamic(
                 style={{
                     position: "fixed",
                     inset: 0,
-                    background: "light-dark(#f5f5f7, #0f0f0f)",
+                    background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
                     animation: "overlay-fade-in 0.3s ease-out",
                 }}
             >

@@ -2,7 +2,7 @@
 import { Button, Container, Group, Loader, Skeleton } from "@mantine/core";
 import { IconMail, IconMailOpened } from "@tabler/icons-react";
 import { Logo } from "../brand/logo";
-import Link, { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 

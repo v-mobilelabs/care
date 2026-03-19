@@ -209,7 +209,7 @@ export const EnhancedFoodSchema = z.object({
   item: z.string().min(1),
   fdcId: z.string().optional(), // USDA FDC ID if available
   portion: z.string(),
-  weight_grams: z.number().positive(),
+  weight_grams: z.number().min(1),
   calories: z.number().nonnegative(),
   macros: z.object({
     protein_g: z.number().nonnegative(),

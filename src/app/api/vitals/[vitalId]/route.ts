@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { WithContext } from "@/lib/api/with-context";
+import { WithContext, ApiError } from "@/lib/api/with-context";
 import { GetVitalUseCase, DeleteVitalUseCase } from "@/data/vitals";
 
 // GET /api/vitals/[vitalId] — get a single vital reading
@@ -9,8 +9,7 @@ export const GET = WithContext<{ vitalId: string }>(
       userId: user.uid,
       vitalId,
     });
-    if (!vital)
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!vital) throw ApiError.notFound("Vital not found.");
     return NextResponse.json(vital);
   },
 );
@@ -22,6 +21,6 @@ export const DELETE = WithContext<{ vitalId: string }>(
       userId: user.uid,
       vitalId,
     });
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json({ ok: true });
   },
 );

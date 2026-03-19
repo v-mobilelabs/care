@@ -161,7 +161,7 @@ export function WaitingLobby({
             style={{
                 position: "fixed",
                 inset: 0,
-                background: "light-dark(#f5f5f7, #0f0f0f)",
+                background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -200,7 +200,7 @@ export function WaitingLobby({
                         aspectRatio: "16/9",
                         overflow: "hidden",
                         border: "2px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.08))",
-                        background: "radial-gradient(ellipse at 50% 40%, light-dark(#e8e8f0, #1a1a2e), light-dark(#f0f0f4, #0f0f0f))",
+                        background: "radial-gradient(ellipse at 50% 40%, light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-8)), light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9)))",
                         position: "relative",
                         animation: "wl-scale-in 0.4s ease-out 0.05s both",
                     }}
@@ -258,6 +258,7 @@ export function WaitingLobby({
                                     size={44}
                                     radius={999}
                                     variant="default"
+                                    aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
                                     onClick={toggleMic}
                                     style={{
                                         background: micOn
@@ -266,7 +267,7 @@ export function WaitingLobby({
                                         backdropFilter: "blur(12px)",
                                         border: "1px solid light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))",
                                         color: micOn
-                                            ? "light-dark(var(--mantine-color-dark-7), #fff)"
+                                            ? "light-dark(var(--mantine-color-dark-7), var(--mantine-color-white))"
                                             : "var(--mantine-color-red-6)",
                                         position: "relative",
                                         overflow: "hidden",
@@ -294,6 +295,7 @@ export function WaitingLobby({
                                     size={44}
                                     radius={999}
                                     variant="default"
+                                    aria-label={cameraOn ? "Turn off camera" : "Turn on camera"}
                                     onClick={toggleCamera}
                                     style={{
                                         background: cameraOn
@@ -302,7 +304,7 @@ export function WaitingLobby({
                                         backdropFilter: "blur(12px)",
                                         border: "1px solid light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.12))",
                                         color: cameraOn
-                                            ? "light-dark(var(--mantine-color-dark-7), #fff)"
+                                            ? "light-dark(var(--mantine-color-dark-7), var(--mantine-color-white))"
                                             : "var(--mantine-color-red-6)",
                                     }}
                                 >

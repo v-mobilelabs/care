@@ -4,15 +4,18 @@ import { useRef, useState } from "react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCamera, IconCheck, IconReportMedical, IconUpload } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
 
 import {
     usePrescriptionsQuery,
     useUploadPrescriptionMutation,
     useDeletePrescriptionMutation,
     useExtractPrescriptionMutation,
+    useLinkPrescriptionSessionMutation,
     type PrescriptionRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
+import { useAskAI } from "@/ui/ai/hooks/use-ask-ai";
 import { PrescriptionDetailDrawer } from "./_prescription-detail-drawer";
 import { PrescriptionCard } from "./_prescription-card";
 import { EmptyPrescriptions } from "./_empty-prescriptions";
@@ -24,6 +27,10 @@ export function PrescriptionsContent() {
     const upload = useUploadPrescriptionMutation();
     const deleteRx = useDeletePrescriptionMutation();
     const extract = useExtractPrescriptionMutation();
+
+    const linkSession = useLinkPrescriptionSessionMutation();
+    const { askAI } = useAskAI();
+    const router = useRouter();
 
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +89,34 @@ export function PrescriptionsContent() {
                 });
             },
         });
+    }
+
+    function handleAskAI(file: PrescriptionRecord) {
+        if (file.sessionId) {
+            router.push(`/patient/assistant?id=${file.sessionId}`);
+        } else {
+            const newId = crypto.randomUUID();
+            linkSession.mutate(
+                { prescriptionId: file.id, sessionId: newId },
+                {
+                    onSuccess: () => {
+                        void askAI({
+                            type: "file",
+                            text: `Analyse my prescription${file.prescribedBy ? ` from Dr. ${file.prescribedBy}` : ""}`,
+                            fileId: file.fileId!,
+                            mimeType: file.fileMimeType,
+                            sessionId: newId,
+                        });
+                    },
+                    onError: (err) =>
+                        notifications.show({
+                            title: "Could not open AI chat",
+                            message: err.message,
+                            color: colors.danger,
+                        }),
+                },
+            );
+        }
     }
 
     function handleDelete(file: PrescriptionRecord) {
@@ -256,6 +291,7 @@ export function PrescriptionsContent() {
                                                 onDelete={() => handleDelete(rx)}
                                                 onExtract={() => handleExtract(rx)}
                                                 onOpenDetail={() => setDetailFileId(rx.id)}
+                                                onAskAI={() => handleAskAI(rx)}
                                             />
                                         ))}
                                     </SimpleGrid>

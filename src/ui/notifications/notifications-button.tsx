@@ -2,8 +2,7 @@
 import { ActionIcon, Indicator, Loader, Tooltip } from "@mantine/core";
 import { IconBell } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useNotificationCenter } from "../providers/notification-provider";
 
 function BellIcon() {

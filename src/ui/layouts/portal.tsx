@@ -1,21 +1,19 @@
 "use client";
 import {
   AppShell,
-  Box,
   Burger,
   Group,
   Menu,
   NavLink,
   Paper,
   ScrollArea,
-  Skeleton,
   Text,
   ThemeIcon,
+  Loader
 } from "@mantine/core";
 import { PortalFooter } from "../footers/portal.footer";
 import { useDisclosure } from "@mantine/hooks";
 import { Logo } from "../brand/logo";
-import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { BreadcrumbsBar } from "../breadcrumbs";
@@ -29,17 +27,8 @@ import { MessagesButton } from "../messaging/messages-button";
 import { NotificationsButton } from "../notifications/notifications-button";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
 import { useMessaging } from "../providers/messaging-provider";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
-import { Loader } from "@mantine/core";
-
-const ColorSchemeToggle = dynamic(
-  () => import("@/ui/color-scheme-toggle").then((mod) => mod.default),
-  {
-    ssr: false,
-    loading: () => <Skeleton height={28} width={28} radius="xl" />,
-  }
-);
+import Link, { useLinkStatus } from "@/ui/link";
+import ColorSchemeToggle from "@/ui/color-scheme-toggle";
 
 type MenuItem = {
   label: string;

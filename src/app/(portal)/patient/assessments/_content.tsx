@@ -30,8 +30,7 @@ import {
     IconMessageQuestion,
     IconTrash,
 } from "@tabler/icons-react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 
 import {
     useAssessmentsQuery,

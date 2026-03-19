@@ -50,7 +50,7 @@ const PRESCRIPTION_KEYWORDS = [
   "prescription for",
 ];
 
-const BLOOD_TEST_KEYWORDS = [
+const LAB_REPORT_KEYWORDS = [
   "blood test",
   "blood results",
   "lab results",
@@ -120,9 +120,9 @@ function tryKeywordRoute(
       reasoning: "Keyword match: prescription intent detected",
     };
   }
-  if (matchesAny(query, BLOOD_TEST_KEYWORDS)) {
+  if (matchesAny(query, LAB_REPORT_KEYWORDS)) {
     return {
-      agent: "bloodTest",
+      agent: "labReport",
       reasoning: "Keyword match: blood test / lab results intent detected",
     };
   }
@@ -273,7 +273,7 @@ function inferThinkingLevel(
 /** Hints that should bypass the agent cache (might need diet/prescription/blood test). */
 const DIET_HINT_WORDS = ["diet", "meal", "food", "eat", "nutrition", "calorie"];
 const RX_HINT_WORDS = ["prescri", "refill", "medication order"];
-const BT_HINT_WORDS = [
+const LR_HINT_WORDS = [
   "blood test",
   "lab result",
   "biomarker",
@@ -297,7 +297,7 @@ function hintsSpecialist(query: string): boolean {
   return (
     DIET_HINT_WORDS.some((k) => lower.includes(k)) ||
     RX_HINT_WORDS.some((k) => lower.includes(k)) ||
-    BT_HINT_WORDS.some((k) => lower.includes(k)) ||
+    LR_HINT_WORDS.some((k) => lower.includes(k)) ||
     PATIENT_HINT_WORDS.some((k) => lower.includes(k))
   );
 }
@@ -312,7 +312,7 @@ export const AgentType = z.enum([
   "clinical", // General medical reasoning and assessment
   "dietPlanner", // 7-day meal plan generation
   "prescription", // Prescription generation and medication management
-  "bloodTest", // Blood test interpretation and analysis
+  "labReport", // Lab report interpretation and analysis
   "patient", // Patient data retrieval (profile, health metrics, medications)
 ]);
 export type AgentType = z.infer<typeof AgentType>;
@@ -358,7 +358,7 @@ function buildLoadingHints(
         "Preparing your prescription...",
       );
       break;
-    case "bloodTest":
+    case "labReport":
       hints.push(
         "Analysing your test results...",
         "Checking reference ranges...",

@@ -20,7 +20,7 @@ import type {
 } from "@/data/assessments/models/assessment.model";
 import type { SoapNoteDto } from "@/data/soap-notes/models/soap-note.model";
 import type { MedicationDto } from "@/data/medications/models/medication.model";
-import type { BloodTestDto } from "@/data/blood-tests/models/blood-test.model";
+import type { LabReportDto } from "@/data/lab-reports/models/lab-report.model";
 import type { PrescriptionDto } from "@/data/prescriptions/models/prescription.model";
 import type { ProfileDto } from "@/data/profile/models/profile.model";
 import type { PatientDto } from "@/data/patients/models/patient.model";
@@ -214,12 +214,12 @@ export class RAGIndexerService {
   }
 
   /**
-   * Index a blood test with its biomarker results.
+   * Index a lab report with its biomarker results.
    */
-  async indexBloodTest(
+  async indexLabReport(
     userId: string,
     profileId: string,
-    test: BloodTestDto,
+    test: LabReportDto,
     dependentId?: string,
   ): Promise<void> {
     const biomarkerLines = test.biomarkers

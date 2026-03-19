@@ -32,7 +32,7 @@ interface MessageThreadProps {
 export function MessageThread({
     conversationId,
     onBack,
-}: MessageThreadProps) {
+}: Readonly<MessageThreadProps>) {
     const { user } = useAuth();
     const myUid = user?.uid ?? null;
 

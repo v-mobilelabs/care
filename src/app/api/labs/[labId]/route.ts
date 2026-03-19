@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { WithContext } from "@/lib/api/with-context";
+import { WithContext, ApiError } from "@/lib/api/with-context";
 import { GetLabUseCase, DeleteLabUseCase } from "@/data/labs";
 
 // GET /api/labs/[labId] — get a single lab result
@@ -9,7 +9,7 @@ export const GET = WithContext<{ labId: string }>(
       userId: user.uid,
       labId,
     });
-    if (!lab) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!lab) throw ApiError.notFound("Lab not found.");
     return NextResponse.json(lab);
   },
 );
@@ -21,6 +21,6 @@ export const DELETE = WithContext<{ labId: string }>(
       userId: user.uid,
       labId,
     });
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json({ ok: true });
   },
 );

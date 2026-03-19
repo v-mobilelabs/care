@@ -1,6 +1,6 @@
 import { Box, Group, Text, ThemeIcon } from "@mantine/core";
 import { IconHeartbeat } from "@tabler/icons-react";
-import Link from "next/link";
+import Link from "@/ui/link";
 
 export function Logo() {
   return (

@@ -3,10 +3,9 @@ import { WithContext, ApiError } from "@/lib/api/with-context";
 import { GetMeetRequestUseCase } from "@/data/meet";
 
 // GET /api/meet/[requestId] — fetch call request (must be a participant)
-export const GET = WithContext(
-  async ({ user }, { requestId }: { requestId: string }) => {
-    const input = GetMeetRequestUseCase.validate({ requestId });
-    const request = await new GetMeetRequestUseCase().execute(input);
+export const GET = WithContext<{ requestId: string }>(
+  async ({ user }, { requestId }) => {
+    const request = await new GetMeetRequestUseCase().execute({ requestId });
     if (!request) throw ApiError.notFound("Call request not found.");
 
     if (request.doctorId !== user.uid && request.patientId !== user.uid) {

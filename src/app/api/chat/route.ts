@@ -1,4 +1,9 @@
-import { createAgentUIStreamResponse } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  createAgentUIStream,
+  consumeStream,
+} from "ai";
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
@@ -8,7 +13,7 @@ import {
   extractAndSaveMemories,
   extractTextFromParts,
 } from "@/data/memory/service/extract-memories";
-import { CreditsExhaustedError } from "@/lib/errors";
+import { CreditsExhaustedError, GuardrailError } from "@/lib/errors";
 
 // Increased from 60s to 180s to support complex tool executions like dietPlanTool
 // which generates 35+ detailed meal entries with nutrition data
@@ -26,7 +31,6 @@ export const POST = WithContext(
       sanitizedMessages,
       messages,
       options,
-      agentType,
       loadingHints,
       sessionId,
       ctx,
@@ -50,9 +54,30 @@ export const POST = WithContext(
     // without blocking on DB writes. Next.js after() keeps the serverless function
     // alive until the task finishes, so writes are guaranteed to complete.
     after(async () => {
+      // Always save the user message — even if the client disconnected before
+      // the AI produced any output. This ensures the conversation history in
+      // Firestore stays consistent with what the client has already shown.
+      try {
+        await new AddMessageUseCase().execute({
+          userId: user.uid,
+          profileId,
+          sessionId,
+          title: ctx.title,
+          role: "user",
+          content:
+            ctx.storableParts.length > 0
+              ? JSON.stringify(ctx.storableParts)
+              : ctx.userQuery,
+        });
+      } catch (saveError) {
+        console.error("[Chat API] Failed to save user message:", saveError);
+      }
+
+      // Only save the assistant message if we captured a response (onFinish
+      // fires with finishReason:"abort" and empty parts on early disconnect).
       if (!persistPayload) {
         console.warn(
-          "[Chat API] after(): no response parts captured, skipping save",
+          "[Chat API] after(): no assistant response captured (client disconnected early)",
         );
         return;
       }
@@ -70,31 +95,21 @@ export const POST = WithContext(
         );
       }
       try {
-        console.log("[Chat API] Saving messages to Firestore...");
-        await Promise.all([
-          new AddMessageUseCase().execute({
-            userId: user.uid,
-            profileId,
-            sessionId,
-            title: ctx.title,
-            role: "user",
-            content:
-              ctx.storableParts.length > 0
-                ? JSON.stringify(ctx.storableParts)
-                : ctx.userQuery,
-          }),
-          new AddMessageUseCase().execute({
-            userId: user.uid,
-            profileId,
-            sessionId,
-            role: "assistant",
-            content: JSON.stringify(persistPayload.responseParts),
-            ...(capturedUsage && { usage: capturedUsage }),
-          }),
-        ]);
-        console.log("[Chat API] Both messages saved successfully");
+        console.log("[Chat API] Saving assistant message to Firestore...");
+        await new AddMessageUseCase().execute({
+          userId: user.uid,
+          profileId,
+          sessionId,
+          role: "assistant",
+          content: JSON.stringify(persistPayload.responseParts),
+          ...(capturedUsage && { usage: capturedUsage }),
+        });
+        console.log("[Chat API] Assistant message saved successfully");
       } catch (saveError) {
-        console.error("[Chat API] Failed to save messages:", saveError);
+        console.error(
+          "[Chat API] Failed to save assistant message:",
+          saveError,
+        );
       }
 
       // Bust the server-side usage cache so the next SSR render shows updated credits.
@@ -114,49 +129,83 @@ export const POST = WithContext(
       }
     });
 
-    return createAgentUIStreamResponse({
-      agent,
-      uiMessages: sanitizedMessages,
-      options,
-      abortSignal: req.signal,
-      // Type-cast: originalMessages is only used for message ID generation,
-      // but the generic constraint expects InferUITools<ToolSet> vs UITools.
-      originalMessages: messages as Parameters<
-        typeof createAgentUIStreamResponse
-      >[0]["originalMessages"],
-      headers: {
-        "X-Session-Id": sessionId,
-        "X-Loading-Hints": JSON.stringify(loadingHints),
-        "X-Agent-Type": agentType,
+    // ── Stream: write progress parts, then merge the agent stream ───────────
+    function handleStepFinish(stepResult: {
+      usage?: { inputTokens?: number; outputTokens?: number };
+    }) {
+      if (stepResult.usage) {
+        totalInputTokens += stepResult.usage.inputTokens ?? 0;
+        totalOutputTokens += stepResult.usage.outputTokens ?? 0;
+      }
+    }
+
+    function handleFinish({
+      responseMessage,
+      finishReason,
+    }: {
+      responseMessage: { parts?: unknown[] };
+      finishReason?: string;
+    }) {
+      console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
+      if (!responseMessage.parts?.length) return;
+      persistPayload = {
+        responseParts: responseMessage.parts,
+        userContent:
+          ctx.storableParts.length > 0
+            ? JSON.stringify(ctx.storableParts)
+            : ctx.userQuery,
+      };
+    }
+
+    function handleStreamError(error: unknown): string {
+      console.error(`[Chat API] Stream error:`, error);
+      if (error instanceof CreditsExhaustedError) {
+        return JSON.stringify({
+          error: { code: error.code, message: error.toResponseMessage() },
+        });
+      }
+      if (error instanceof GuardrailError) {
+        return JSON.stringify({
+          error: { code: error.code, message: error.toResponseMessage() },
+        });
+      }
+      return "An error occurred while generating the response.";
+    }
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writer.write({
+          type: "data-progress",
+          data: { stage: "Preparing your response…", loadingHints },
+        });
+
+        const agentStream = await createAgentUIStream({
+          agent,
+          uiMessages: sanitizedMessages,
+          options,
+          abortSignal: req.signal,
+          originalMessages: messages as Parameters<
+            typeof createAgentUIStream
+          >[0]["originalMessages"],
+          onStepFinish: handleStepFinish,
+          onFinish: handleFinish,
+        });
+
+        writer.merge(agentStream);
       },
-      onStepFinish: (stepResult) => {
-        if (stepResult.usage) {
-          totalInputTokens += stepResult.usage.inputTokens ?? 0;
-          totalOutputTokens += stepResult.usage.outputTokens ?? 0;
-        }
-      },
-      onFinish: ({ responseMessage, finishReason }) => {
-        console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
-        if (!responseMessage.parts?.length) return;
-        persistPayload = {
-          responseParts: responseMessage.parts,
-          userContent:
-            ctx.storableParts.length > 0
-              ? JSON.stringify(ctx.storableParts)
-              : ctx.userQuery,
-        };
-      },
-      onError: (error) => {
-        console.error(`[Chat API] Stream error:`, error);
-        if (error instanceof CreditsExhaustedError) {
-          return JSON.stringify({
-            error: {
-              code: error.code,
-              message: error.toResponseMessage(),
-            },
-          });
-        }
-        return "An error occurred while generating the response.";
+      onError: handleStreamError,
+    });
+
+    return createUIMessageStreamResponse({
+      stream,
+      headers: { "X-Session-Id": sessionId },
+      // Consume the SSE stream on the server so the LLM runs to completion
+      // and onFinish fires even when the client disconnects mid-stream.
+      consumeSseStream: ({ stream: sseStream }) => {
+        consumeStream({
+          stream: sseStream,
+          onError: (e) => console.error("[Chat API] consumeStream error:", e),
+        });
       },
     });
   },

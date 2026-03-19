@@ -40,7 +40,9 @@ import type {
   ToolSet,
   LanguageModel,
 } from "ai";
+import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { creditMiddleware } from "@/data/shared/service/middleware/credit.middleware";
+import { guardrailMiddleware } from "@/data/shared/service/middleware/guardrail.middleware";
 import { ragMiddleware } from "@/data/shared/service/middleware/rag.middleware";
 import { memoryMiddleware } from "@/data/shared/service/middleware/memory.middleware";
 import {
@@ -85,8 +87,8 @@ export interface AgentConfig {
   buildSystemPrompt: () => string;
   /** Build per-request tools with execute functions bound to the request context. */
   buildTools: (options: AgentCallOptions) => ToolSet;
-  /** Return additional per-request context (e.g. attachment note). */
-  buildDynamicContext?: (options: AgentCallOptions) => string;
+  /** Return additional per-request context (e.g. attachment note). May be async. */
+  buildDynamicContext?: (options: AgentCallOptions) => string | Promise<string>;
   /** LLM model for medium/high thinking. Default: gemini-3.1-pro-preview. */
   model?: LanguageModel;
   /** Model ID string for context cache key. Default: "gemini-3.1-pro-preview". */
@@ -208,7 +210,7 @@ export function createAgent(
         ),
       };
       const staticPrompt = buildSystemPrompt();
-      const dynamicContext = buildDynamicContext?.(options) ?? "";
+      const dynamicContext = (await buildDynamicContext?.(options)) ?? "";
 
       console.log(
         `[${id}] Instructions: static ${staticPrompt.length} chars + dynamic ${dynamicContext.length} chars | Tools: ${Object.keys(tools).join(", ")}`,
@@ -245,6 +247,10 @@ export function createAgent(
 
       // ── 4. Middleware chain ─────────────────────────────────────────
       const middleware: LanguageModelMiddleware[] = [
+        guardrailMiddleware({
+          userId: options.userId,
+          userQuery: options.userQuery,
+        }),
         creditMiddleware(options.userId),
         memoryMiddleware({
           agentId: id,
@@ -264,13 +270,15 @@ export function createAgent(
         }),
         ...(cacheName ? [cachedContentMiddleware] : []),
         addToolInputExamplesMiddleware(),
+        ...(process.env.NODE_ENV === "development"
+          ? [devToolsMiddleware()]
+          : []),
       ];
 
       const wrappedModel = wrapLanguageModel({
         model: activeModel as Parameters<typeof wrapLanguageModel>[0]["model"],
         middleware,
       });
-
       // ── 5. Instructions ─────────────────────────────────────────────
       // When cache is active, static prompt is in cache — omit instructions.
       // Dynamic context + RAG are injected by ragMiddleware as synthetic turns.

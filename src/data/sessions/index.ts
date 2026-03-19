@@ -39,3 +39,7 @@ export { ListAllFilesUseCase } from "./use-cases/list-all-files.use-case";
 export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
 export { GetStorageMetricsUseCase } from "./use-cases/get-storage-metrics.use-case";
 export { ClassifyFileUseCase } from "./use-cases/classify-file.use-case";
+export { GenerateThumbnailUseCase } from "./use-cases/generate-thumbnail.use-case";
+export { GetFileSignedUrlUseCase } from "./use-cases/get-file-signed-url.use-case";
+export { ExtractPersonUseCase } from "./use-cases/extract-person.use-case";
+export type { ExtractedPersonResult } from "./use-cases/extract-person.use-case";

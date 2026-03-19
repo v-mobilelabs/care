@@ -10,8 +10,7 @@ import {
     Title,
 } from "@mantine/core";
 import { IconFolder } from "@tabler/icons-react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 
 function StartChatLabel() {
     const { pending } = useLinkStatus();

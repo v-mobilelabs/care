@@ -35,6 +35,10 @@ export interface PrescriptionDocument {
   fileId?: string;
   /** Signed download URL for the source file */
   fileUrl?: string;
+  /** MIME type of the source file (e.g. image/jpeg, application/pdf) */
+  fileMimeType?: string;
+  /** Chat session linked to this prescription for follow-up questions */
+  sessionId?: string;
   /** "extracted" when from file upload, "generated" when AI-recommended */
   source: "extracted" | "generated";
   medications: PrescriptionMedication[];
@@ -55,6 +59,8 @@ export interface PrescriptionDto {
   userId: string;
   fileId?: string;
   fileUrl?: string;
+  fileMimeType?: string;
+  sessionId?: string;
   source: "extracted" | "generated";
   medications: PrescriptionMedication[];
   generalInstructions?: string;
@@ -134,6 +140,8 @@ export function toPrescriptionDto(
     userId: doc.userId,
     fileId: doc.fileId,
     fileUrl: doc.fileUrl,
+    fileMimeType: doc.fileMimeType,
+    sessionId: doc.sessionId,
     source: doc.source,
     medications: doc.medications,
     generalInstructions: doc.generalInstructions,

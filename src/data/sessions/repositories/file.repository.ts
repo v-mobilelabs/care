@@ -25,6 +25,10 @@ const fileDoc = (profileId: string, fileId: string) =>
 const gcStoragePath = (profileId: string, fileId: string, name: string) =>
   `profiles/${profileId}/files/${fileId}/${name}`;
 
+/** GCS object path for a thumbnail */
+const gcThumbnailPath = (profileId: string, fileId: string) =>
+  `profiles/${profileId}/files/${fileId}/thumb.webp`;
+
 /** Signed URL expiry — 7 days (GCS maximum for service-account-signed URLs). */
 const SIGNED_URL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -173,7 +177,7 @@ export const fileRepository = {
     }
   },
 
-  /** Delete GCS object and Firestore metadata. */
+  /** Delete GCS object, thumbnail, and Firestore metadata. */
   async delete(profileId: string, fileId: string): Promise<void> {
     const snap = await fileDoc(profileId, fileId).get();
     if (!snap.exists) return;
@@ -183,6 +187,13 @@ export const fileRepository = {
       await bucket.file(doc.storagePath).delete();
     } catch {
       /* file may already be deleted */
+    }
+    if (doc.thumbnailPath) {
+      try {
+        await bucket.file(doc.thumbnailPath).delete();
+      } catch {
+        /* thumbnail may already be deleted */
+      }
     }
 
     await snap.ref.delete();
@@ -217,15 +228,52 @@ export const fileRepository = {
     }
   },
 
-  /** Patch arbitrary fields on an existing file document (e.g. extractedData, label). */
+  /** Patch arbitrary fields on an existing file document (e.g. extractedData, label, thumbnailPath). */
   async patch(
     profileId: string,
     fileId: string,
     data: Partial<
-      Pick<FileDocument, "extractedData" | "label" | "labelConfidence">
+      Pick<FileDocument, "extractedData" | "label" | "labelConfidence" | "thumbnailPath">
     >,
   ): Promise<void> {
     await fileDoc(profileId, fileId).update(data as Record<string, unknown>);
+  },
+
+  /**
+   * Upload a thumbnail buffer to GCS and patch the Firestore doc with the path.
+   * Returns the GCS object path.
+   */
+  async uploadThumbnail(
+    profileId: string,
+    fileId: string,
+    buffer: Buffer,
+  ): Promise<string> {
+    const thumbPath = gcThumbnailPath(profileId, fileId);
+    const gcsFile = bucket.file(thumbPath);
+    await gcsFile.save(buffer, {
+      contentType: "image/webp",
+      metadata: { cacheControl: "private, max-age=31536000" },
+    });
+    await fileDoc(profileId, fileId).update({ thumbnailPath: thumbPath });
+    return thumbPath;
+  },
+
+  /** Generate a fresh signed URL for a file's thumbnail. */
+  async getThumbnailSignedUrl(
+    profileId: string,
+    fileId: string,
+  ): Promise<string | null> {
+    const snap = await fileDoc(profileId, fileId).get();
+    if (!snap.exists) return null;
+    const doc = snap.data() as FileDocument;
+    if (!doc.thumbnailPath) return null;
+
+    const gcsFile = bucket.file(doc.thumbnailPath);
+    const [url] = await gcsFile.getSignedUrl({
+      action: "read",
+      expires: Date.now() + SIGNED_URL_EXPIRY_MS,
+    });
+    return url;
   },
 
   /** Delete all files tagged with a given sessionId (used when deleting a chat session). */

@@ -9,8 +9,7 @@
  */
 import { Box, Group, Loader, Text, UnstyledButton } from "@mantine/core";
 import { IconUsers } from "@tabler/icons-react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useState } from "react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
@@ -36,7 +35,7 @@ function WaitingIslandContent({ pendingCount }: Readonly<{ pendingCount: number 
                 {pending ? (
                     <Loader size={10} color="white" type="dots" />
                 ) : (
-                    <Text size="xs" fw={700} style={{ color: "#fff", lineHeight: 1 }}>
+                    <Text size="xs" fw={700} style={{ color: "var(--mantine-color-white)", lineHeight: 1 }}>
                         {pendingCount}
                     </Text>
                 )}
@@ -113,8 +112,8 @@ export function WaitingQueueIsland() {
                     paddingLeft: 10,
                     paddingRight: 14,
                     borderRadius: 20,
-                    background: "light-dark(#1a1a1a, #1a1a1a)",
-                    color: "#fff",
+                    background: "light-dark(var(--mantine-color-dark-9), var(--mantine-color-dark-9))",
+                    color: "var(--mantine-color-white)",
                     cursor: "pointer",
                     animation: "wqi-appear 0.4s cubic-bezier(0.34,1.36,0.64,1) both",
                     transition: "transform 0.2s ease, box-shadow 0.2s ease",

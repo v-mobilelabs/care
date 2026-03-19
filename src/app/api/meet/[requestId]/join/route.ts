@@ -3,8 +3,8 @@ import { WithContext } from "@/lib/api/with-context";
 import { GetMeetingJoinInfoUseCase } from "@/data/meet";
 
 // GET /api/meet/[requestId]/join — get Chime join credentials
-export const GET = WithContext(
-  async ({ user }, { requestId }: { requestId: string }) => {
+export const GET = WithContext<{ requestId: string }>(
+  async ({ user }, { requestId }) => {
     const joinInfo = await new GetMeetingJoinInfoUseCase().execute({
       requestId,
       userId: user.uid,

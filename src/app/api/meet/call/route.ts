@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { WithContext } from "@/lib/api/with-context";
+import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   CreateCallRequestUseCase,
   CancelCallUseCase,
-  meetRepository,
+  GetActiveCallForPatientUseCase,
 } from "@/data/meet";
 import { GetDoctorProfileUseCase } from "@/data/doctors";
 // GET /api/meet/call — get active call for patient
 export const GET = WithContext(async ({ user }) => {
-  const active = await meetRepository.getActiveForPatient(user.uid);
+  const active = await new GetActiveCallForPatientUseCase().execute({
+    patientId: user.uid,
+  });
   return NextResponse.json(active ?? null);
 });
 
@@ -16,10 +18,7 @@ export const GET = WithContext(async ({ user }) => {
 export const POST = WithContext(async ({ user, req }) => {
   const body = (await req.json().catch(() => ({}))) as { doctorId?: string };
   if (!body.doctorId) {
-    return NextResponse.json(
-      { error: { code: "BAD_REQUEST", message: "doctorId is required" } },
-      { status: 400 },
-    );
+    throw ApiError.badRequest("doctorId is required");
   }
 
   // Verify doctor exists and is online (available in Firestore)
@@ -28,14 +27,10 @@ export const POST = WithContext(async ({ user, req }) => {
   });
 
   if (!doctorProfile || doctorProfile.availability !== "available") {
-    return NextResponse.json(
-      {
-        error: {
-          code: "UNAVAILABLE",
-          message: "Doctor is not available right now.",
-        },
-      },
-      { status: 409 },
+    throw new ApiError(
+      409,
+      "UNAVAILABLE",
+      "Doctor is not available right now.",
     );
   }
 
@@ -72,10 +67,7 @@ export const DELETE = WithContext(async ({ user, req }) => {
   const { searchParams } = new URL(req.url);
   const requestId = searchParams.get("requestId");
   if (!requestId) {
-    return NextResponse.json(
-      { error: { code: "BAD_REQUEST", message: "requestId is required" } },
-      { status: 400 },
-    );
+    throw ApiError.badRequest("requestId is required");
   }
 
   await new CancelCallUseCase().execute({

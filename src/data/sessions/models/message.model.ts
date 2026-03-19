@@ -101,3 +101,12 @@ export function parseMessageContent(content: string): UIMessage["parts"] {
     return [{ type: "text", text: content }];
   }
 }
+
+/** Convert a persisted MessageDto back to an AI SDK UIMessage. */
+export function toUIMessage(dto: MessageDto): UIMessage {
+  return {
+    id: dto.id,
+    role: dto.role,
+    parts: parseMessageContent(dto.content),
+  } as UIMessage;
+}

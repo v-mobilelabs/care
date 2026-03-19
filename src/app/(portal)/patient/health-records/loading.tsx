@@ -3,11 +3,11 @@ import { Box, Group, ScrollArea, Skeleton, SimpleGrid, Stack } from "@mantine/co
 // ── iOS design tokens ─────────────────────────────────────────────────────────
 
 const ios = {
-    cardBg: "light-dark(#fff, #1c1c1e)",
+    cardBg: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-7))",
     cardRadius: 14,
     cardShadow: "light-dark(0 0.5px 2px rgba(0,0,0,0.06), none)",
-    pageBg: "light-dark(#f2f2f7, #000)",
-    separator: "0.5px solid light-dark(#d1d1d6, #38383a)",
+    pageBg: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-black))",
+    separator: "0.5px solid light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-5))",
 } as const;
 
 // ── Record card skeleton ──────────────────────────────────────────────────────

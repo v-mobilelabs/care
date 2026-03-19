@@ -1,21 +1,8 @@
-import { google } from "@ai-sdk/google";
-import { generateText } from "ai";
-import { z } from "zod";
 import { NextResponse } from "next/server";
-import { WithContext } from "@/lib/api/with-context";
-import { aiService } from "@/data/shared/service/ai.service";
+import { WithContext, ApiError } from "@/lib/api/with-context";
+import { LookupClinicUseCase } from "@/data/doctors";
 
 export const maxDuration = 30;
-
-const ClinicResultSchema = z.object({
-  clinicName: z.string(),
-  address: z.string(),
-  phone: z.string().optional(),
-  website: z.string().optional(),
-  hours: z.string().optional(),
-  rating: z.number().optional(),
-  placeId: z.string().optional(),
-});
 
 /**
  * POST /api/doctors/lookup
@@ -34,64 +21,23 @@ export const POST = WithContext(async ({ req, user }) => {
   const { name, specialty, address } = body;
 
   if (!name || !specialty || !address) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "BAD_REQUEST",
-          message: "name, specialty, and address are required.",
-        },
-      },
-      { status: 400 },
-    );
+    throw ApiError.badRequest("name, specialty, and address are required.");
   }
 
-  const systemPrompt = [
-    "You are a medical directory assistant that looks up clinic and doctor information using Google Search.",
-    "When given a doctor's name, specialty, and location, search for their clinic or practice details.",
-    "Always respond with ONLY a valid JSON object matching this exact structure (no markdown, no explanation):",
-    `{`,
-    `  "clinicName": "string — the clinic or practice name",`,
-    `  "address": "string — full street address",`,
-    `  "phone": "string (optional) — phone number",`,
-    `  "website": "string (optional) — website URL",`,
-    `  "hours": "string (optional) — business hours",`,
-    `  "rating": number (optional) — Google rating 0-5`,
-    `}`,
-    "If a field is unknown, omit it. Never return null or placeholder values.",
-  ].join("\n");
-
-  const userPrompt = [
-    `Find the clinic/practice details for:`,
-    `Doctor: ${name}`,
-    `Specialty: ${specialty}`,
-    `Location: ${address}`,
-    ``,
-    `Search Google and return the structured JSON with clinic details.`,
-  ].join("\n");
-
-  const { text } = await generateText({
-    model: aiService.forUser(user.uid).fast,
-    tools: { googleSearch: google.tools.googleSearch({}) },
-    system: systemPrompt,
-    prompt: userPrompt,
+  const clinic = await new LookupClinicUseCase().execute({
+    userId: user.uid,
+    name,
+    specialty,
+    address,
   });
 
-  // Extract JSON from the model response (strip any markdown code fences)
-  const jsonMatch = /\{[\s\S]*\}/.exec(text);
-  if (!jsonMatch) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "PARSE_ERROR",
-          message: "AI did not return valid clinic data.",
-        },
-      },
-      { status: 502 },
+  if (!clinic) {
+    throw new ApiError(
+      502,
+      "PARSE_ERROR",
+      "AI did not return valid clinic data.",
     );
   }
-
-  const parsed = JSON.parse(jsonMatch[0]) as unknown;
-  const clinic = ClinicResultSchema.parse(parsed);
 
   return NextResponse.json(clinic);
 });

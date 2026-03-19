@@ -39,8 +39,7 @@ import {
   IconWaveSine,
   IconYoga,
 } from "@tabler/icons-react";
-import Link from "next/link";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "@/ui/link";
 import { useState } from "react";
 import { Loader } from "@mantine/core";
 
