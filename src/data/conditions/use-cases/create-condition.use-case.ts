@@ -8,22 +8,7 @@ import {
   type ConditionDto,
 } from "../models/condition.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
-import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
-@Indexable({
-  type: "condition",
-  contentFields: [
-    "name",
-    "icd10",
-    "severity",
-    "status",
-    "description",
-    "symptoms",
-    "createdAt",
-  ],
-  sourceIdField: "id",
-  metadataFields: ["severity", "status", "createdAt"],
-})
 export class CreateConditionUseCase extends UseCase<
   CreateConditionInput,
   ConditionDto

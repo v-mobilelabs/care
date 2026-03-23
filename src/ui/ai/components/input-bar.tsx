@@ -37,6 +37,7 @@ import { useMic } from "@/ui/ai/hooks/use-mic";
 import { useLiveSpeech } from "@/ui/ai/hooks/use-live-speech";
 import { LiveOverlay } from "@/ui/ai/components/live-overlay";
 import { FilePickerDrawer } from "./file-picker-drawer";
+import { ContextUsageIndicator } from "./context-usage-indicator";
 import type { FileRecord } from "@/ui/ai/query";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -71,6 +72,8 @@ export interface InputBarProps {
     onAnswerFreeText?: (toolCallId: string, answer: string) => void;
     /** Whether to show the medical disclaimer below the input bar. Defaults to true. */
     showDisclaimer?: boolean;
+    /** Total context tokens used vs max context window — drives the ring indicator. */
+    contextUsage?: { inputTokens: number; outputTokens: number; maxTokens: number };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,9 +102,11 @@ export function InputBar({
     pendingFreeText,
     onAnswerFreeText,
     showDisclaimer = true,
+    contextUsage,
 }: Readonly<InputBarProps>) {
     const outOfCredits = creditsRemaining === 0;
-    const isBusy = isLoading || isUploading || hasPendingToolCall;
+    const hasBlockingToolCall = hasPendingToolCall && !pendingFreeText;
+    const isBusy = isLoading || isUploading || hasBlockingToolCall;
     const [attachments, setAttachments] = useState<File[]>([]);
     const [existingFileAttachments, setExistingFileAttachments] = useState<FileRecord[]>([]);
     const [filePickerOpened, setFilePickerOpened] = useState(false);
@@ -126,7 +131,7 @@ export function InputBar({
     // ── Hooks ─────────────────────────────────────────────────────────────────
     const { isListening, toggleMic } = useMic({ input, setInput: onInputChange });
 
-    const { liveMode, livePhase, liveTranscript, liveAIText, openLive, closeLive } =
+    const { liveMode, livePhase, liveTranscript, liveAIText, closeLive } =
         useLiveSpeech({ onSendMessage: (text) => onSend(text), messages, status });
 
     // ── Attachment helpers ────────────────────────────────────────────────────
@@ -170,7 +175,7 @@ export function InputBar({
         const hasFiles = attachments.length > 0 || existingFileAttachments.length > 0;
         if ((!text && !hasFiles) || outOfCredits) return;
         // Hard block: file upload in-flight or awaiting a tool-call response
-        if (isUploading || hasPendingToolCall) return;
+        if (isUploading || hasBlockingToolCall) return;
 
         // If the AI is still streaming, stop and start a new session with this message
         if (isLoading) {
@@ -230,7 +235,7 @@ export function InputBar({
             color: "primary", variant: "light" as const,
             label: "Use microphone",
             onClick: toggleMic,
-            disabled: isUploading || hasPendingToolCall || outOfCredits,
+            disabled: isUploading || hasBlockingToolCall || outOfCredits,
         },
         send: {
             icon: <IconSend size={16} />,
@@ -376,7 +381,7 @@ export function InputBar({
                                     ref={textareaRef}
                                     placeholder={(() => {
                                         if (pendingFreeText) return "Type your answer…";
-                                        if (hasPendingToolCall) return "Please respond to the question above first…";
+                                        if (hasBlockingToolCall) return "Please respond to the question above first…";
                                         return "Describe your symptoms…";
                                     })()}
                                     minRows={1} maxRows={6} autosize
@@ -386,7 +391,7 @@ export function InputBar({
                                     onKeyDown={handleKeyDown}
                                     onFocus={() => setFocused(true)}
                                     onBlur={() => setFocused(false)}
-                                    disabled={isUploading || hasPendingToolCall || outOfCredits}
+                                    disabled={isUploading || hasBlockingToolCall || outOfCredits}
                                     variant="unstyled"
                                     px="sm"
                                     styles={{
@@ -412,7 +417,7 @@ export function InputBar({
                                                     radius="xl"
                                                     color={totalAttachments > 0 ? "primary" : "gray"}
                                                     variant={totalAttachments > 0 ? "light" : "subtle"}
-                                                    disabled={isUploading || hasPendingToolCall || outOfCredits}
+                                                    disabled={isUploading || hasBlockingToolCall || outOfCredits}
                                                     aria-label="Attach files"
                                                 >
                                                     <IconPlus size={17} style={{
@@ -442,8 +447,13 @@ export function InputBar({
                                             </Menu.Item>
                                         </Menu.Dropdown>
                                     </Menu>
-                                    {/* Unified action button — morphs between mic / send / stop / upload */}
-                                    <Group gap={4}>
+                                    {/* Context usage ring + action button */}
+                                    <Group gap={6}>
+                                        <ContextUsageIndicator
+                                            inputTokens={contextUsage?.inputTokens ?? 0}
+                                            outputTokens={contextUsage?.outputTokens ?? 0}
+                                            maxTokens={contextUsage?.maxTokens ?? 1_048_576}
+                                        />
                                         <Tooltip label={actionCfg.label} withArrow position="top">
                                             <ActionIcon
                                                 size={TOOLBAR_ICON_SIZE}

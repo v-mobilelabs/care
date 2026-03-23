@@ -7,7 +7,7 @@ import {
     useEffect,
     type ReactNode,
 } from "react";
-import { setActiveDependentId } from "@/ui/ai/query";
+import { setActiveDependentId as setActiveDependentIdExternal } from "@/ui/ai/query";
 
 const STORAGE_KEY = "careai:activeProfile";
 
@@ -41,10 +41,10 @@ interface ActiveProfileContextValue {
 const ActiveProfileContext = createContext<ActiveProfileContextValue | null>(null);
 
 export function ActiveProfileProvider({ children }: Readonly<{ children: ReactNode }>) {
-    const [activeDependentId, setLocal] = useState<string | undefined>(
+    const [activeDependentId, setActiveDependentId] = useState<string | undefined>(
         () => readStorage().dependentId
     );
-    const [activeProfileLabel, setLabel] = useState(
+    const [activeProfileLabel, setActiveProfileLabel] = useState(
         () => readStorage().label ?? "My Profile"
     );
 
@@ -52,15 +52,15 @@ export function ActiveProfileProvider({ children }: Readonly<{ children: ReactNo
     useEffect(() => {
         const stored = readStorage();
         if (stored.dependentId) {
-            setActiveDependentId(stored.dependentId);
+            setActiveDependentIdExternal(stored.dependentId);
         }
     }, []);
 
     const switchProfile = useCallback(
         (dependentId: string | undefined, label = "My Profile") => {
-            setLocal(dependentId);
-            setLabel(label);
             setActiveDependentId(dependentId);
+            setActiveProfileLabel(label);
+            setActiveDependentIdExternal(dependentId);
             writeStorage({ dependentId, label });
         },
         [],

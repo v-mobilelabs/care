@@ -4,7 +4,9 @@ import { bucket } from "@/lib/firebase/admin";
 import {
   fileService,
   type FileService,
-} from "@/data/sessions/service/file.service";
+  validateFileContentService,
+  type ValidateFileContentService,
+} from "@/data/files";
 import {
   ExtractionSchema,
   type ExtractPrescriptionInput,
@@ -19,6 +21,18 @@ const EXTRACTION_PROMPT = `You are a clinical data extraction assistant.
 Extract ALL medications from this prescription accurately.
 For each medication extract: name, dosage, form, frequency, duration, instructions, and condition/indication if present.
 Also capture the prescribing doctor name and prescription date if visible.
+
+IMPORTANT — Frequency interpretation:
+- Convert numeric dosing shorthands to plain English:
+  1-0-1 = Twice daily (morning and night)
+  1-1-1 = Three times daily
+  1-0-0 = Once daily (morning)
+  0-0-1 = Once daily (night)
+  0-1-0 = Once daily (afternoon)
+  1-1-1-1 = Four times daily
+  SOS or PRN = As needed
+- Always output the human-readable frequency, never the raw numeric pattern.
+
 Return only information that is clearly visible — do not guess or infer missing fields.`;
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -27,6 +41,7 @@ export class PrescriptionExtractionService {
   constructor(
     private readonly files: FileService = fileService,
     private readonly ai: AIService = aiService,
+    private readonly validator: ValidateFileContentService = validateFileContentService,
   ) {}
 
   async extract(input: ExtractPrescriptionInput): Promise<PrescriptionDto> {
@@ -49,6 +64,14 @@ export class PrescriptionExtractionService {
     const [bytes] = await bucket.file(file.storagePath).download();
     const base64 = bytes.toString("base64");
     const dataUri = `data:${file.mimeType};base64,${base64}`;
+
+    // 2b. Guardrail — verify the file is actually a prescription before extraction
+    await this.validator.assertType(
+      input.userId,
+      file.mimeType,
+      bytes as Buffer,
+      "prescription",
+    );
 
     // 3. Build AI SDK content part (image vs PDF/file)
     const mediaPart = file.mimeType.startsWith("image/")

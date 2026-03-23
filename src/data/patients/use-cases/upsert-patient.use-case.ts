@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
-import { patientRepository } from "../repositories/patient.repository";
+import { patientService } from "../service/patient.service";
 import {
   UpsertPatientSchema,
   type UpsertPatientInput,
@@ -48,6 +48,6 @@ export class UpsertPatientUseCase extends UseCase<
   }
 
   protected async run(input: UpsertPatientInput): Promise<PatientDto> {
-    return patientRepository.upsert(input);
+    return patientService.upsert(input);
   }
 }

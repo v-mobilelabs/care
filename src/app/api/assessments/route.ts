@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   ListAssessmentsUseCase,
   CreateAssessmentUseCase,
 } from "@/data/assessments";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/assessments — list all assessments for the authenticated user
 export const GET = WithContext(async ({ user, dependentId }) => {
@@ -20,5 +22,6 @@ export const POST = WithContext(async ({ user, req, dependentId }) => {
     ...body,
     userId: user.uid,
   });
+  revalidateTag(CacheTags.assessments(user.uid), "minutes");
   return NextResponse.json(assessment, { status: 201 });
 });

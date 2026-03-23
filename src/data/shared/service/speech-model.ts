@@ -57,7 +57,7 @@ function pcmToWav(pcm: Uint8Array, sampleRate: number): Uint8Array {
 
 function toWav(file: Readonly<{ uint8Array: Uint8Array; mediaType: string }>) {
   if (!file.mediaType.startsWith("audio/L16")) return file.uint8Array;
-  const rateMatch = file.mediaType.match(/rate=(\d+)/);
+  const rateMatch = /rate=(\d+)/.exec(file.mediaType);
   return pcmToWav(file.uint8Array, Number(rateMatch?.[1] ?? 24000));
 }
 

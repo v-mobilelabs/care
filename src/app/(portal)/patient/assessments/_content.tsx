@@ -1,14 +1,15 @@
 "use client";
+import { useState } from "react";
 import {
     ActionIcon,
     Badge,
     Box,
-    Card,
     Collapse,
     Container,
     Divider,
     Group,
     Loader,
+    Pagination,
     Paper,
     ScrollArea,
     Skeleton,
@@ -39,16 +40,9 @@ import {
     type QaPair,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
+import { formatDate } from "@/lib/format";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+const PAGE_SIZE = 10;
 
 const RISK_COLOR: Record<
     NonNullable<AssessmentRecord["riskLevel"]>,
@@ -309,6 +303,11 @@ function EmptyState() {
 export function AssessmentsContent() {
     const { data: assessments = [], isLoading } = useAssessmentsQuery();
     const deleteAssessment = useDeleteAssessmentMutation();
+    const [page, setPage] = useState(1);
+
+    const totalPages = Math.max(1, Math.ceil(assessments.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = assessments.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     function handleDelete(id: string, title: string) {
         modals.openConfirmModal({
@@ -330,6 +329,12 @@ export function AssessmentsContent() {
                             color: colors.success,
                             icon: <IconCheck size={16} />,
                         }),
+                    onError: () =>
+                        notifications.show({
+                            title: "Delete failed",
+                            message: `Could not delete ${title}. Please try again.`,
+                            color: colors.danger,
+                        }),
                 });
             },
         });
@@ -337,57 +342,60 @@ export function AssessmentsContent() {
 
     return (
         <Container pt="md">
-            <Card radius="xl" shadow="xl">
-                <Card.Section px="xl" py="lg" withBorder>
-                    <Group justify="space-between" wrap="nowrap">
-                        <Group gap={12} wrap="nowrap">
-                            <ThemeIcon size={40} radius="md" color="primary" variant="light">
-                                <IconClipboardHeart size={22} />
-                            </ThemeIcon>
-                            <Box>
-                                <Title order={3} style={{ lineHeight: 1.2 }}>My Assessments</Title>
-                                <Text size="xs" c="dimmed">
-                                    AI clinical assessments — linked to your chat sessions
-                                </Text>
-                            </Box>
-                        </Group>
-                        {!isLoading && assessments.length > 0 && (
-                            <Badge variant="light" color="primary" radius="xl" size="lg">
-                                {assessments.length}
-                            </Badge>
-                        )}
+            <Stack>
+                <Group justify="space-between" wrap="nowrap">
+                    <Group gap="sm" wrap="nowrap">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                            <IconClipboardHeart size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>My Assessments</Title>
+                            <Text size="xs" c="dimmed">
+                                AI clinical assessments — linked to your chat sessions
+                            </Text>
+                        </Box>
                     </Group>
-                </Card.Section>
-                <Card.Section p="md">
-                    <Box style={{ flex: 1, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }}>
-                            <Box maw={800} mx="auto">
-                                {(() => {
-                                    if (isLoading) return <AssessmentSkeletons />;
-                                    if (assessments.length === 0) return <EmptyState />;
-                                    return (
-                                        <Stack gap="sm">
-                                            {assessments.map((assessment: AssessmentRecord) => (
-                                                <AssessmentCard
-                                                    key={assessment.id}
-                                                    assessment={assessment}
-                                                    isPendingDelete={
-                                                        deleteAssessment.isPending &&
-                                                        deleteAssessment.variables === assessment.id
-                                                    }
-                                                    onDelete={() =>
-                                                        handleDelete(assessment.id, assessment.title)
-                                                    }
-                                                />
-                                            ))}
-                                        </Stack>
-                                    );
-                                })()}
-                            </Box>
-                        </ScrollArea>
-                    </Box>
-                </Card.Section>
-            </Card>
+                    {!isLoading && assessments.length > 0 && (
+                        <Badge variant="light" color="gray" size="sm" radius="xl">
+                            {assessments.length}
+                        </Badge>
+                    )}
+                </Group>
+
+                <Box>
+                    {isLoading && <AssessmentSkeletons />}
+
+                    {!isLoading && assessments.length === 0 && <EmptyState />}
+
+                    {!isLoading && assessments.length > 0 && (
+                        <Stack gap="sm">
+                            {paginated.map((assessment: AssessmentRecord) => (
+                                <AssessmentCard
+                                    key={assessment.id}
+                                    assessment={assessment}
+                                    isPendingDelete={
+                                        deleteAssessment.isPending &&
+                                        deleteAssessment.variables === assessment.id
+                                    }
+                                    onDelete={() =>
+                                        handleDelete(assessment.id, assessment.title)
+                                    }
+                                />
+                            ))}
+                            {totalPages > 1 && (
+                                <Group justify="center" mt="md">
+                                    <Pagination
+                                        size="sm"
+                                        total={totalPages}
+                                        value={safePage}
+                                        onChange={setPage}
+                                    />
+                                </Group>
+                            )}
+                        </Stack>
+                    )}
+                </Box>
+            </Stack>
         </Container>
     );
 }

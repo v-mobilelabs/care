@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
-import { patientRepository } from "../repositories/patient.repository";
+import { patientService } from "../service/patient.service";
 import type { PatientDto } from "../models/patient.model";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -26,6 +26,6 @@ export class GetPatientUseCase extends UseCase<
   }
 
   protected async run(input: GetPatientInput): Promise<PatientDto | null> {
-    return patientRepository.get(input.userId);
+    return patientService.get(input.userId);
   }
 }

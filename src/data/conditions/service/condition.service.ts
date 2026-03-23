@@ -11,19 +11,15 @@ export class ConditionService {
     input: CreateConditionInput,
     dependentId?: string,
   ): Promise<ConditionDto> {
-    return conditionRepository.create(
-      input.userId,
-      {
-        sessionId: input.sessionId,
-        name: input.name,
-        icd10: input.icd10,
-        severity: input.severity,
-        status: input.status,
-        description: input.description,
-        symptoms: input.symptoms,
-      },
-      dependentId,
-    );
+    return conditionRepository.create(input.userId, dependentId, {
+      sessionId: input.sessionId,
+      name: input.name,
+      icd10: input.icd10,
+      severity: input.severity,
+      status: input.status,
+      description: input.description,
+      symptoms: input.symptoms,
+    });
   }
 
   async list(

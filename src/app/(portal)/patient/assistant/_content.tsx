@@ -1,10 +1,9 @@
 "use client";
 import { Box, Text, Title } from "@mantine/core";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Messages } from "@/ui/ai/messages";
-import { useUploadFileMutation, useProfileQuery } from "./_components/query";
-import type { FileRecord } from "./_components/query";
+import { useUploadFileMutation, useProfileQuery, type FileRecord } from "@/app/(portal)/patient/_query";
 import { getInitials } from "@/lib/get-initials";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
@@ -19,26 +18,36 @@ import { ChatSkeleton } from "./_chat-skeleton";
 export function ChatContent() {
     const [inputBarHeight, setInputBarHeight] = useState(0);
     const observerRef = useRef<ResizeObserver | null>(null);
-    const inputBarRef = useCallback((node: HTMLDivElement | null) => {
+    // Tracks whether the user saw the empty (centered) state before messages appeared.
+    const sawEmptyStateRef = useRef(false);
+    const inputBarRef = (node: HTMLDivElement | null) => {
         if (observerRef.current) {
             observerRef.current.disconnect();
             observerRef.current = null;
         }
         if (node) {
+            // Animate the fixed bar sliding in from center when transitioning from empty state.
+            if (sawEmptyStateRef.current) {
+                sawEmptyStateRef.current = false;
+                node.animate(
+                    [{ transform: "translateY(-30vh)", opacity: 0.6 }, { transform: "translateY(0)", opacity: 1 }],
+                    { duration: 500, easing: "cubic-bezier(0, 0, 0.2, 1)", fill: "forwards" },
+                );
+            }
             const observer = new ResizeObserver(([entry]) => {
                 setInputBarHeight(entry.contentRect.height);
             });
             observer.observe(node);
             observerRef.current = observer;
         }
-    }, []);
+    };
 
     const { sessionId } = useChatContext();
     const { activeDependentId } = useActiveProfile();
     const uploadFile = useUploadFileMutation();
     const { data: profile } = useProfileQuery();
     const { data: user } = useCurrentUser();
-    const userInitials = getInitials(profile?.name ?? profile?.name, user?.email);
+    const userInitials = getInitials(profile?.name, user?.email);
     const firstName = profile?.name?.split(" ")[0] ?? "there";
 
     const searchParams = useSearchParams();
@@ -46,9 +55,9 @@ export function ChatContent() {
 
     // ── Messages hook ─────────────────────────────────────────────────────────
     const {
-        messages, messageTimestamps, messageUsage, sendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
+        messages, messageTimestamps, messageUsage, messageAgentTypes, liveUsage, sendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
         answeredIds,
-        phraseIdx, phraseFading, loadingHints,
+        phraseIdx, phraseFading, loadingHints, agentType,
         editingId, editingText, setEditingText,
         handleEditStart, handleEditCancel, handleEditSubmit, handleEditKeyDown,
         handleAnswer,
@@ -58,7 +67,7 @@ export function ChatContent() {
         fetchNextPage, hasNextPage, isFetchingNextPage,
         error, regenerate,
     } = useMessagesContext();
-
+    console.log("ChatContent render", { messages, messagesLength: messages?.length });
     // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
     const [input, setInput] = useState("");
     // True while file uploads are in-flight (before the AI stream starts).
@@ -79,6 +88,7 @@ export function ChatContent() {
             pendingSessionRef.current = null;
             setPendingSend(null);
             void (async () => {
+                const fileParts: Array<{ type: "file"; url: string; mediaType: string }> = [];
                 if (files && files.length > 0) {
                     setIsUploading(true);
                     const results = await Promise.all(
@@ -87,13 +97,13 @@ export function ChatContent() {
                         })
                     ).catch(() => []);
                     setIsUploading(false);
-                    setPendingAttachments(
-                        results
-                            .filter((r) => r.downloadUrl)
-                            .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
-                    );
+                    for (const r of results) {
+                        if (r.downloadUrl) {
+                            fileParts.push({ type: "file", url: r.downloadUrl, mediaType: r.mimeType });
+                        }
+                    }
                 }
-                await sendMessage({ text, files });
+                await sendMessage({ text, ...(fileParts.length > 0 && { files: fileParts }) });
             })();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,7 +111,7 @@ export function ChatContent() {
 
     // ── File/message send logic (no person-check) ─────────────────────────────
     const checkAndSend = async (text: string, files?: FileList, existingFiles?: FileRecord[]): Promise<void> => {
-        const attachments: { url: string; mediaType: string }[] = [];
+        const fileParts: Array<{ type: "file"; url: string; mediaType: string }> = [];
         if (files && files.length > 0) {
             setIsUploading(true);
             const results = await Promise.all(
@@ -110,23 +120,22 @@ export function ChatContent() {
                 })
             ).catch(() => [] as Array<{ downloadUrl?: string; mimeType: string }>);
             setIsUploading(false);
-            attachments.push(
-                ...results
-                    .filter((r) => r.downloadUrl)
-                    .map((r) => ({ url: r.downloadUrl!, mediaType: r.mimeType })),
-            );
+            for (const r of results) {
+                if (r.downloadUrl) {
+                    fileParts.push({ type: "file", url: r.downloadUrl, mediaType: r.mimeType });
+                }
+            }
         }
         if (existingFiles && existingFiles.length > 0) {
-            attachments.push(
-                ...existingFiles
-                    .filter((f) => f.downloadUrl)
-                    .map((f) => ({ url: f.downloadUrl as string, mediaType: f.mimeType })),
-            );
+            for (const f of existingFiles) {
+                if (f.downloadUrl) {
+                    fileParts.push({ type: "file", url: f.downloadUrl, mediaType: f.mimeType });
+                }
+            }
         }
-        if (attachments.length > 0) setPendingAttachments(attachments);
-        await sendMessage({ text, files });
+        if (fileParts.length > 0) setPendingAttachments(fileParts.map(({ url, mediaType }) => ({ url, mediaType })));
+        await sendMessage({ text, ...(fileParts.length > 0 && { files: fileParts }) });
     };
-    const isChecking = false;
 
     // Auto-submit a pre-filled message from the ?message= param (e.g. "Create diet plan" shortcut).
     const autoSentRef = useRef(false);
@@ -144,12 +153,31 @@ export function ChatContent() {
 
     // ── Render ────────────────────────────────────────────────────────────────
 
+    // Compute cumulative context tokens: DB usage (previous messages) + live
+    // usage (current stream, available before background persistence finishes).
+    const contextUsage = (() => {
+        let input = 0;
+        let output = 0;
+        if (messageUsage) {
+            for (const u of messageUsage.values()) {
+                input += u.promptTokens;
+                output += u.completionTokens;
+            }
+        }
+        if (liveUsage) {
+            input += liveUsage.inputTokens;
+            output += liveUsage.outputTokens;
+        }
+        if (input === 0 && output === 0) return undefined;
+        return { inputTokens: input, outputTokens: output, maxTokens: 1_048_576 };
+    })();
+
     const inputBarNode = (
         <InputBar
             input={input}
             onInputChange={setInput}
             isLoading={isLoading}
-            isUploading={isUploading || isChecking}
+            isUploading={isUploading}
             messages={messages}
             status={status}
             onSend={async (text: string, files?: FileList, existingFiles?: FileRecord[]) => {
@@ -167,6 +195,7 @@ export function ChatContent() {
             pendingFreeText={pendingFreeText}
             onAnswerFreeText={handleAnswer}
             showDisclaimer={hasUserMessages}
+            contextUsage={contextUsage}
         />
     );
 
@@ -176,21 +205,18 @@ export function ChatContent() {
 
     // Gemini-style layout — input centered in empty state, fixed at bottom after first message
     return (
-        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", position: "relative" }}>
+        <Box style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 6.5rem)", overflow: "hidden", position: "relative" }}>
             {hasUserMessages ? (
                 <>
                     {/* Messages — scrollable area */}
-                    <Box mb={inputBarHeight - 64} style={{ flex: 1, overflow: "auto" }}>
+                    <Box mb={inputBarHeight} style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                         <Messages
                             messages={messages}
                             messageTimestamps={messageTimestamps}
                             messageUsage={messageUsage}
+                            messageAgentTypes={messageAgentTypes}
                             isLoading={isLoading}
-                            preparingLabel={(() => {
-                                if (isChecking) return "Scanning file\u2026";
-                                if (isUploading) return "Enhancing & uploading\u2026";
-                                return undefined;
-                            })()}
+                            preparingLabel={isUploading ? "Enhancing & uploading\u2026" : undefined}
                             chatStatus={status}
                             userPhotoURL={profile?.photoUrl ?? user?.photoURL}
                             userInitials={userInitials}
@@ -200,6 +226,7 @@ export function ChatContent() {
                             phraseIdx={phraseIdx}
                             phraseFading={phraseFading}
                             loadingHints={loadingHints}
+                            agentType={agentType}
                             error={error}
                             onRetry={regenerate}
                             onAnswer={handleAnswer}
@@ -249,6 +276,7 @@ export function ChatContent() {
             ) : (
                 /* Empty state — vertically centered like Gemini */
                 <Box
+                    ref={() => { sawEmptyStateRef.current = true; }}
                     style={{
                         flex: 1,
                         display: "flex",
@@ -268,7 +296,18 @@ export function ChatContent() {
                                 WebkitTextFillColor: "transparent",
                             }}
                         >
-                            Hi, {firstName}
+                            Hi,{" "}
+                            <span
+                                style={{
+                                    background: "linear-gradient(90deg, var(--mantine-color-primary-5) 0%, var(--mantine-color-violet-3) 40%, var(--mantine-color-white) 50%, var(--mantine-color-violet-3) 60%, var(--mantine-color-primary-5) 100%)",
+                                    backgroundSize: "200% auto",
+                                    WebkitBackgroundClip: "text",
+                                    WebkitTextFillColor: "transparent",
+                                    animation: "shimmer 3s ease-in-out infinite",
+                                }}
+                            >
+                                {firstName}
+                            </span>
                         </Title>
                         <Text size="lg" c="dimmed">Where should we start?</Text>
                     </Box>

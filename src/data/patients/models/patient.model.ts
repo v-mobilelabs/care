@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase-admin/firestore";
+import { z } from "zod";
 
 // ── Firestore document shape ──────────────────────────────────────────────────
 
@@ -62,7 +63,6 @@ export type UpsertPatientInput = Omit<
 };
 
 // ── Zod schema — used in PATCH /api/patients/me ─────────────────────────────
-import { z } from "zod";
 
 export const UpsertPatientSchema = z.object({
   dateOfBirth: z.string().optional(),

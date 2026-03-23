@@ -10,8 +10,10 @@
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { revalidateTag } from "next/cache";
 import { memoryRepository } from "../repositories/memory.repository";
 import type { MemoryCategory } from "../models/memory.model";
+import { CacheTags } from "@/data/cached";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -25,7 +27,8 @@ const extractionSchema = z.object({
         content: z.string().describe("Concise one-sentence patient fact"),
       }),
     )
-    .describe("New facts extracted from the conversation"),
+    .max(10)
+    .describe("Up to 10 new facts extracted from this conversation turn"),
 });
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -35,6 +38,13 @@ function buildPrompt(
   userMessage: string,
   assistantMessage: string,
 ): string {
+  // Truncate to keep the prompt focused on the current turn and avoid
+  // generating too many facts that exhaust the output token budget.
+  const PATIENT_LIMIT = 500;
+  const ASSISTANT_LIMIT = 1500;
+  const truncated = (s: string, limit: number) =>
+    s.length > limit ? s.slice(0, limit) + "…" : s;
+
   return [
     "Extract important patient-specific facts from this medical conversation that should be remembered for future sessions.",
     "",
@@ -44,20 +54,21 @@ function buildPrompt(
     "- Do NOT extract: greetings, generic advice, questions without clear patient-specific answers, facts already saved",
     "- Keep each fact concise (one sentence, max 30 words)",
     "- Return an empty facts array if nothing new is worth saving",
+    "- Return at most 5 facts — choose only the most clinically significant new ones",
     "",
     "ALREADY SAVED (do NOT duplicate):",
     existing || "Nothing saved yet.",
     "",
     "CONVERSATION:",
-    `Patient: ${userMessage}`,
-    `Assistant: ${assistantMessage}`,
+    `Patient: ${truncated(userMessage, PATIENT_LIMIT)}`,
+    `Assistant: ${truncated(assistantMessage, ASSISTANT_LIMIT)}`,
   ].join("\n");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function fetchExistingFacts(profileId: string): Promise<string> {
-  const existing = await memoryRepository.list(profileId, 50);
+  const existing = await memoryRepository.list(profileId, 20);
   if (existing.length === 0) return "";
   return existing.map((m) => `- [${m.category}] ${m.content}`).join("\n");
 }
@@ -71,6 +82,8 @@ async function extractFacts(
     model: google("gemini-2.5-flash-lite"),
     schema: extractionSchema,
     prompt: buildPrompt(existing, userMessage, assistantMessage),
+    temperature: 0,
+    maxOutputTokens: 1024,
   });
   return object.facts;
 }
@@ -122,6 +135,7 @@ async function runExtraction(input: ExtractInput): Promise<number> {
   );
   if (facts.length === 0) return 0;
   await saveFacts(facts, input.userId, input.profileId, input.sessionId);
+  revalidateTag(CacheTags.memories(input.profileId), "seconds");
   console.log(
     `[Memory] Auto-extracted ${facts.length} fact(s) for profile ${input.profileId}`,
   );

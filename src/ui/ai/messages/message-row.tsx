@@ -15,6 +15,9 @@ export interface MessageRowProps {
     userPhotoURL?: string | null;
     userInitials?: string;
     messageUsage?: ReadonlyMap<string, { promptTokens: number; completionTokens: number; totalTokens: number }>;
+    /** Per-message agent type map (DB-persisted + live overlay). */
+    messageAgentTypes?: ReadonlyMap<string, string>;
+    agentType?: string;
     editingId: string | null;
     editingText: string;
     answeredIds: ReadonlyMap<string, string>;
@@ -37,6 +40,8 @@ export function MessageRow({
     userPhotoURL,
     userInitials,
     messageUsage,
+    messageAgentTypes,
+    agentType,
     editingId,
     editingText,
     answeredIds,
@@ -90,6 +95,7 @@ export function MessageRow({
                             editingText={editingText}
                             isLoading={isLoading}
                             usage={isUser ? undefined : messageUsage?.get(msg.id)}
+                            agentType={isUser ? undefined : (messageAgentTypes?.get(msg.id) ?? agentType)}
                             onEditStart={onEditStart}
                             onEditChange={onEditChange}
                             onEditKeyDown={onEditKeyDown}

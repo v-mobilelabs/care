@@ -1,6 +1,7 @@
 "use client";
 import { Box, ScrollArea, Stack } from "@mantine/core";
 import { StatusIndicator } from "@/ui/ai/components/message";
+export type { MessagesProps } from "./messages.types";
 import type { MessagesProps } from "./messages.types";
 import { useAutoScroll } from "./use-auto-scroll";
 import { RetryBlock } from "./retry-block";
@@ -8,15 +9,14 @@ import { MessageRow } from "./message-row";
 import { LoadMoreButton } from "./load-more-button";
 import { ScrollToBottomFab } from "./scroll-to-bottom-fab";
 
-export type { MessagesProps };
-
 // ── Inner thread renderer (keeps Messages under max-lines-per-function) ──────
 
 function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: string) => boolean }>) {
     const {
-        messages, messageTimestamps, messageUsage, isLoading, chatStatus,
+        messages, messageTimestamps, messageUsage, messageAgentTypes,
+        isLoading, chatStatus,
         userPhotoURL, userInitials, answeredIds, editingId, editingText,
-        phraseIdx, phraseFading, loadingHints, onAnswer, onApproval,
+        phraseIdx, phraseFading, loadingHints, agentType, onAnswer, onApproval,
         onEditStart, onEditChange, onEditKeyDown, onEditCancel, onEditSubmit,
         onLearnMore, error, onRetry, preparingLabel, hasNextPage,
         isFetchingNextPage, onLoadMore, isNewMessage,
@@ -24,7 +24,7 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
 
     const lastMsg = messages.at(-1);
     const unansweredUser = lastMsg?.role === "user";
-
+    console.log("count: ", messages.length)
     return (
         <Stack gap="lg" maw={760} mx="auto" px="lg" pt="lg" pb={80}>
             {hasNextPage && (
@@ -42,6 +42,8 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
                     userPhotoURL={userPhotoURL}
                     userInitials={userInitials}
                     messageUsage={messageUsage}
+                    messageAgentTypes={messageAgentTypes}
+                    agentType={agentType}
                     editingId={editingId}
                     editingText={editingText}
                     answeredIds={answeredIds}
@@ -66,6 +68,7 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
                     phraseIdx={phraseIdx}
                     phraseFading={phraseFading}
                     loadingHints={loadingHints}
+                    agentType={agentType}
                     overrideLabel={preparingLabel && !isLoading ? preparingLabel : undefined}
                 />
             )}

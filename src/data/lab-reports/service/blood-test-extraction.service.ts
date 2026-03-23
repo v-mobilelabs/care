@@ -29,6 +29,7 @@ export class BloodTestExtractionService {
     private readonly ai: AIService = aiService,
   ) {}
 
+  // eslint-disable-next-line max-lines-per-function
   async extract(input: ExtractBloodTestInput): Promise<BloodTestDto> {
     // 1. Resolve file metadata
     const file = await this.files.getRaw({

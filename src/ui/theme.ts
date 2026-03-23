@@ -183,6 +183,9 @@ export const theme: MantineThemeOverride = createTheme({
   components: {
     // Layout
     Container: {
+      defaultProps: {
+        px: { base: "xs", md: "0" },
+      },
       // Mobile: comfortable side padding; ≥md: let content breathe (px 0)
     },
     AppShell: {

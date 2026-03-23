@@ -1,11 +1,15 @@
 import {
+  FieldValue,
   Timestamp,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { db } from "@/lib/firebase/admin";
-import type { MessageDocument } from "../models/message.model";
-import { toMessageDto } from "../models/message.model";
-import type { MessageDto, PaginatedMessages } from "../models/message.model";
+import {
+  toMessageDto,
+  type MessageDocument,
+  type MessageDto,
+  type PaginatedMessages,
+} from "../models/message.model";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -26,7 +30,7 @@ export const messageRepository = {
     userId: string,
     profileId: string,
     sessionId: string,
-    data: Pick<MessageDocument, "role" | "content" | "usage">,
+    data: Pick<MessageDocument, "role" | "content" | "usage" | "agentType">,
   ): Promise<MessageDto> {
     const doc: MessageDocument = {
       sessionId,
@@ -35,6 +39,7 @@ export const messageRepository = {
       content: data.content,
       createdAt: Timestamp.now(),
       ...(data.usage && { usage: data.usage }),
+      ...(data.agentType && { agentType: data.agentType }),
     };
     const ref = await messagesCol(userId, profileId, sessionId).add(doc);
     return toMessageDto(ref.id, doc);
@@ -88,6 +93,31 @@ export const messageRepository = {
     ).get();
     if (!snap.exists) return null;
     return toMessageDto(snap.id, snap.data() as MessageDocument);
+  },
+
+  /** Update the content (and optionally accumulate usage) of an existing message. */
+  // eslint-disable-next-line max-lines-per-function
+  async updateContent(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+    messageId: string,
+    content: string,
+    usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    },
+  ): Promise<void> {
+    const updates: Record<string, unknown> = { content };
+    if (usage) {
+      updates["usage.promptTokens"] = FieldValue.increment(usage.promptTokens);
+      updates["usage.completionTokens"] = FieldValue.increment(
+        usage.completionTokens,
+      );
+      updates["usage.totalTokens"] = FieldValue.increment(usage.totalTokens);
+    }
+    await messageDoc(userId, profileId, sessionId, messageId).update(updates);
   },
 
   async deleteAll(

@@ -29,3 +29,37 @@ export async function revalidateFiles() {
   const uid = await requireUserId();
   updateTag(CacheTags.files(uid));
 }
+
+export async function revalidateMemories(profileId: string) {
+  updateTag(CacheTags.memories(profileId));
+}
+
+export async function revalidatePatient() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.patient(uid));
+}
+
+export async function revalidateMedications() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.medications(uid));
+}
+
+export async function revalidateAssessments() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.assessments(uid));
+}
+
+export async function revalidateDependents() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.dependents(uid));
+}
+
+export async function revalidateSessions() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.sessions(uid));
+}
+
+export async function revalidateVitals() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.vitals(uid));
+}

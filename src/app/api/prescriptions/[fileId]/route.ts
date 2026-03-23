@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { GetFileUseCase, DeleteFileUseCase } from "@/data/sessions";
-import { DeletePrescriptionByFileUseCase } from "@/data/prescriptions";
+import { GetFileUseCase, DeleteFileUseCase } from "@/data/files";
+import { DeletePrescriptionUseCase } from "@/data/prescriptions";
 import { prescriptionRepository } from "@/data/prescriptions/repositories/prescription.repository";
+import { ragService } from "@/data/shared/service/rag/rag.service";
 
 // GET /api/prescriptions/[fileId] — refresh signed URL
 export const GET = WithContext<{ fileId: string }>(
@@ -18,21 +19,42 @@ export const GET = WithContext<{ fileId: string }>(
 );
 
 // DELETE /api/prescriptions/[fileId]
+// The param doubles as a prescriptionId for delete operations.
 export const DELETE = WithContext<{ fileId: string }>(
-  async ({ user, profileId, dependentId }, { fileId }) => {
-    // Delete from files collection
-    await new DeleteFileUseCase().execute({
-      userId: user.uid,
-      profileId,
-      fileId,
-    });
+  async ({ user, profileId, dependentId }, { fileId: prescriptionId }) => {
+    // Look up the prescription to find its backing file (if any)
+    const prescription = await prescriptionRepository.findById(
+      user.uid,
+      prescriptionId,
+      dependentId,
+    );
+    if (!prescription) throw ApiError.notFound("Prescription not found.");
 
-    // Cascade: delete from prescriptions collection + RAG index
-    await new DeletePrescriptionByFileUseCase(dependentId).execute({
-      userId: user.uid,
-      profileId,
-      fileId,
-    });
+    // If there's a backing file, delete it
+    if (prescription.fileId) {
+      await new DeleteFileUseCase()
+        .execute({ userId: user.uid, profileId, fileId: prescription.fileId })
+        .catch(() => {
+          /* file may already be gone */
+        });
+    }
+
+    // Delete prescription doc + remove from RAG index
+    await Promise.all([
+      new DeletePrescriptionUseCase(dependentId).execute({
+        userId: user.uid,
+        prescriptionId,
+      }),
+      ragService
+        .removeDocument({
+          userId: user.uid,
+          profileId,
+          sourceId: prescriptionId,
+        })
+        .catch(() => {
+          /* RAG entry may not exist */
+        }),
+    ]);
 
     return NextResponse.json({ ok: true });
   },

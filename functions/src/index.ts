@@ -16,8 +16,8 @@ const gcThumbnailPath = (profileId: string, fileId: string) =>
 
 /**
  * Triggered when a new file document is created in profiles/{profileId}/files/{fileId}.
- * Downloads the original file, generates a WebP thumbnail, uploads it to GCS,
- * and patches the Firestore doc with the thumbnailPath.
+ * - Images: generates a WebP thumbnail, uploads to GCS, saves thumbnailPath.
+ * - Documents: saves a placeholder thumbnail URL directly.
  */
 export const generateThumbnail = onDocumentCreated(
   "profiles/{profileId}/files/{fileId}",
@@ -40,8 +40,8 @@ export const generateThumbnail = onDocumentCreated(
     }
 
     try {
-      const thumbBuffer = await generate(downloadUrl, mimeType);
-      if (!thumbBuffer) {
+      const result = await generate(downloadUrl, mimeType);
+      if (!result) {
         logger.info("Unsupported file type for thumbnail, skipping.", {
           profileId,
           fileId,
@@ -50,24 +50,36 @@ export const generateThumbnail = onDocumentCreated(
         return;
       }
 
-      // Upload thumbnail to GCS
-      const thumbPath = gcThumbnailPath(profileId, fileId);
-      const gcsFile = bucket.file(thumbPath);
-      await gcsFile.save(thumbBuffer, {
-        contentType: "image/webp",
-        metadata: { cacheControl: "private, max-age=31536000" },
-      });
+      if (result.type === "buffer") {
+        // Upload generated thumbnail to GCS
+        const thumbPath = gcThumbnailPath(profileId, fileId);
+        const gcsFile = bucket.file(thumbPath);
+        await gcsFile.save(result.data, {
+          contentType: "image/webp",
+          metadata: { cacheControl: "private, max-age=31536000" },
+        });
 
-      // Patch Firestore doc with thumbnail path
-      await db
-        .doc(`profiles/${profileId}/files/${fileId}`)
-        .update({ thumbnailPath: thumbPath });
+        await db
+          .doc(`profiles/${profileId}/files/${fileId}`)
+          .update({ thumbnailPath: thumbPath });
 
-      logger.info("Thumbnail generated successfully.", {
-        profileId,
-        fileId,
-        thumbPath,
-      });
+        logger.info("Thumbnail generated and uploaded.", {
+          profileId,
+          fileId,
+          thumbPath,
+        });
+      } else {
+        // Store placeholder URL directly on the document
+        await db
+          .doc(`profiles/${profileId}/files/${fileId}`)
+          .update({ thumbnailUrl: result.url });
+
+        logger.info("Placeholder thumbnail URL saved.", {
+          profileId,
+          fileId,
+          mimeType,
+        });
+      }
     } catch (err) {
       logger.error("Failed to generate thumbnail.", {
         profileId,

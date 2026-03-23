@@ -19,36 +19,17 @@ const IMAGE_MIME_TYPES = new Set([
 // ── Service ───────────────────────────────────────────────────────────────────
 
 /**
- * Renders page 1 of a PDF to a PNG buffer using pdf-to-img (pdfjs-dist).
- * Uses dynamic import to avoid loading native deps at module evaluation time.
- */
-async function renderPdfPage1(buffer: Buffer): Promise<Buffer> {
-  const { pdf } = await import("pdf-to-img");
-  const doc = await pdf(buffer, { scale: 2 });
-  const page = await doc.getPage(1);
-  return Buffer.from(page);
-}
-
-/**
  * Generates a WebP thumbnail from the raw file buffer.
- * Supports images (JPEG, PNG, GIF, WebP, HEIC) and PDFs (renders page 1).
- * Returns `null` for unsupported file types (Word, etc.).
+ * Returns `null` for non-image file types (PDF, Word) — the UI already
+ * renders styled icon placeholders for those.
  */
 export async function generateThumbnail(
   buffer: Buffer,
   mimeType: string,
 ): Promise<Buffer | null> {
-  let imageBuffer: Buffer;
+  if (!IMAGE_MIME_TYPES.has(mimeType)) return null;
 
-  if (mimeType === "application/pdf") {
-    imageBuffer = await renderPdfPage1(buffer);
-  } else if (IMAGE_MIME_TYPES.has(mimeType)) {
-    imageBuffer = buffer;
-  } else {
-    return null;
-  }
-
-  return sharp(imageBuffer)
+  return sharp(buffer)
     .rotate() // auto-orient based on EXIF
     .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
     .webp({ quality: THUMB_QUALITY })

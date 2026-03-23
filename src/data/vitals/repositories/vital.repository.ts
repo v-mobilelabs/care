@@ -22,30 +22,23 @@ export const vitalRepository = {
       ? Timestamp.fromDate(new Date(data.measuredAt))
       : now;
 
-    const doc: VitalDocument = {
+    const doc = stripUndefined({
       userId,
+      weightKg: data.weightKg,
+      heightCm: data.heightCm,
+      systolicBp: data.systolicBp,
+      diastolicBp: data.diastolicBp,
+      restingHr: data.restingHr,
+      spo2: data.spo2,
+      temperatureC: data.temperatureC,
+      respiratoryRate: data.respiratoryRate,
+      glucoseMgdl: data.glucoseMgdl,
       measuredAt,
       createdAt: now,
-    };
-
-    if (data.sex !== undefined) doc.sex = data.sex;
-    if (data.waistCm !== undefined) doc.waistCm = data.waistCm;
-    if (data.hipCm !== undefined) doc.hipCm = data.hipCm;
-    if (data.neckCm !== undefined) doc.neckCm = data.neckCm;
-    if (data.activityLevel !== undefined)
-      doc.activityLevel = data.activityLevel;
-    if (data.systolicBp !== undefined) doc.systolicBp = data.systolicBp;
-    if (data.diastolicBp !== undefined) doc.diastolicBp = data.diastolicBp;
-    if (data.restingHr !== undefined) doc.restingHr = data.restingHr;
-    if (data.spo2 !== undefined) doc.spo2 = data.spo2;
-    if (data.temperatureC !== undefined) doc.temperatureC = data.temperatureC;
-    if (data.respiratoryRate !== undefined)
-      doc.respiratoryRate = data.respiratoryRate;
-    if (data.glucoseMmol !== undefined) doc.glucoseMmol = data.glucoseMmol;
-    if (data.note !== undefined) doc.note = data.note;
+    }) as unknown as VitalDocument;
 
     const ref = vitalsCol(userId, dependentId).doc();
-    await ref.set(stripUndefined(doc));
+    await ref.set(doc);
     return toVitalDto(ref.id, doc);
   },
 

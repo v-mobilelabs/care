@@ -4,11 +4,9 @@ import {
     Badge,
     Box,
     Button,
-    Card,
     Container,
     Group,
     Loader,
-    ScrollArea,
     Skeleton,
     Stack,
     Text,
@@ -209,131 +207,123 @@ export function ConnectContent() {
     return (
         <Container pt="md">
             <InlineStyles />
-            <Card radius="xl" withBorder>
+            <Stack>
                 {/* ── Header ── */}
-                <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="md" withBorder>
-                    <Group justify="space-between" align="center">
-                        <Group gap="sm">
-                            <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                                <IconStethoscope size={20} />
-                            </ThemeIcon>
-                            <Box>
-                                <Title order={4} lh={1.2}>Connect to a Doctor</Title>
-                                <Text size="xs" c="dimmed">{doctorCountLabel}</Text>
-                            </Box>
-                        </Group>
-                        <UnstyledButton
-                            onClick={async () => { await refetch(); }}
-                            aria-label="Refresh"
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                width: 34,
-                                height: 34,
-                                borderRadius: "50%",
-                                background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
-                                transition: "background 150ms ease",
-                            }}
-                        >
-                            {isLoading ? (
-                                <Loader size={14} color="primary" />
-                            ) : (
-                                <IconRefresh size={16} color="var(--mantine-color-dimmed)" />
-                            )}
-                        </UnstyledButton>
+                <Group justify="space-between" align="center">
+                    <Group gap="sm">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                            <IconStethoscope size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>Connect to a Doctor</Title>
+                            <Text size="xs" c="dimmed">{doctorCountLabel}</Text>
+                        </Box>
                     </Group>
-                </Card.Section>
+                    <UnstyledButton
+                        onClick={async () => { await refetch(); }}
+                        aria-label="Refresh"
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 34,
+                            height: 34,
+                            borderRadius: "50%",
+                            background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
+                            transition: "background 150ms ease",
+                        }}
+                    >
+                        {isLoading ? (
+                            <Loader size={14} color="primary" />
+                        ) : (
+                            <IconRefresh size={16} color="var(--mantine-color-dimmed)" />
+                        )}
+                    </UnstyledButton>
+                </Group>
 
                 {/* ── Doctor list ── */}
-                <Card.Section p="md">
-                    <Box style={{ flex: 1, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }} scrollbarSize={4}>
-                            <Box maw={560} mx="auto">
-                                <Stack gap="md">
-                                    {availableDoctors.length > 0 && (
-                                        <Text
-                                            size="xs"
-                                            fw={600}
-                                            c="dimmed"
-                                            tt="uppercase"
-                                            style={{ letterSpacing: 0.5, paddingLeft: 4 }}
-                                        >
-                                            Available Doctors
-                                        </Text>
-                                    )}
+                <Box>
+                    <Stack gap="md">
+                        {availableDoctors.length > 0 && (
+                            <Text
+                                size="xs"
+                                fw={600}
+                                c="dimmed"
+                                tt="uppercase"
+                                style={{ letterSpacing: 0.5, paddingLeft: 4 }}
+                            >
+                                Available Doctors
+                            </Text>
+                        )}
 
-                                    {isLoading && (
-                                        <Stack gap="sm">
-                                            {[1, 2, 3].map((n) => (
-                                                <Skeleton key={n} height={82} radius={CARD_RADIUS} />
-                                            ))}
-                                        </Stack>
-                                    )}
+                        {isLoading && (
+                            <Stack gap="sm">
+                                {[1, 2, 3].map((n) => (
+                                    <Skeleton key={n} height={82} radius={CARD_RADIUS} />
+                                ))}
+                            </Stack>
+                        )}
 
-                                    {!isLoading && availableDoctors.length === 0 && (
-                                        <Box
-                                            py={60}
-                                            style={{
-                                                textAlign: "center",
-                                                borderRadius: CARD_RADIUS,
-                                                background: CARD_BG,
-                                                border: CARD_BORDER,
-                                            }}
-                                        >
-                                            <Box
-                                                mx="auto"
-                                                mb="md"
-                                                style={{
-                                                    width: 64,
-                                                    height: 64,
-                                                    borderRadius: "50%",
-                                                    background: "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.1))",
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                }}
-                                            >
-                                                <IconStethoscope size={28} color="var(--mantine-color-primary-5)" />
-                                            </Box>
-                                            <Text fw={600} size="sm" mb={4}>No doctors available</Text>
-                                            <Text size="xs" c="dimmed" maw={260} mx="auto" lh={1.6}>
-                                                No doctors are online right now. Pull to refresh or check back shortly.
-                                            </Text>
-                                            <Button
-                                                variant="light"
-                                                color="primary"
-                                                size="xs"
-                                                radius="xl"
-                                                mt="md"
-                                                leftSection={<IconRefresh size={14} />}
-                                                onClick={async () => { await refetch(); }}
-                                                loading={isLoading}
-                                            >
-                                                Refresh
-                                            </Button>
-                                        </Box>
-                                    )}
-
-                                    {availableDoctors.length > 0 && (
-                                        <Stack gap="sm">
-                                            {availableDoctors.map((doctor) => (
-                                                <DoctorRow
-                                                    key={doctor.uid}
-                                                    doctor={doctor}
-                                                    onConnect={handleConnect}
-                                                    connecting={initiate.isPending && connectingDoctorId === doctor.uid}
-                                                    disabled={!!connectingDoctorId}
-                                                />
-                                            ))}
-                                        </Stack>
-                                    )}
-                                </Stack>
+                        {!isLoading && availableDoctors.length === 0 && (
+                            <Box
+                                py={60}
+                                style={{
+                                    textAlign: "center",
+                                    borderRadius: CARD_RADIUS,
+                                    background: CARD_BG,
+                                    border: CARD_BORDER,
+                                }}
+                            >
+                                <Box
+                                    mx="auto"
+                                    mb="md"
+                                    style={{
+                                        width: 64,
+                                        height: 64,
+                                        borderRadius: "50%",
+                                        background: "light-dark(var(--mantine-color-primary-0), rgba(107,79,248,0.1))",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    <IconStethoscope size={28} color="var(--mantine-color-primary-5)" />
+                                </Box>
+                                <Text fw={600} size="sm" mb={4}>No doctors available</Text>
+                                <Text size="xs" c="dimmed" maw={260} mx="auto" lh={1.6}>
+                                    No doctors are online right now. Pull to refresh or check back shortly.
+                                </Text>
+                                <Button
+                                    variant="light"
+                                    color="primary"
+                                    size="xs"
+                                    radius="xl"
+                                    mt="md"
+                                    leftSection={<IconRefresh size={14} />}
+                                    onClick={async () => { await refetch(); }}
+                                    loading={isLoading}
+                                >
+                                    Refresh
+                                </Button>
                             </Box>
-                        </ScrollArea>
-                    </Box>
-                </Card.Section>
-            </Card>
+                        )}
+
+                        {availableDoctors.length > 0 && (
+                            <Stack gap="sm">
+                                {availableDoctors.map((doctor) => (
+                                    <DoctorRow
+                                        key={doctor.uid}
+                                        doctor={doctor}
+                                        onConnect={handleConnect}
+                                        connecting={initiate.isPending && connectingDoctorId === doctor.uid}
+                                        disabled={!!connectingDoctorId}
+                                    />
+                                ))}
+                            </Stack>
+                        )}
+                    </Stack>
+                </Box>
+            </Stack>
         </Container>
     );
 }

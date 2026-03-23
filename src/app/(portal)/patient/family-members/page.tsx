@@ -3,6 +3,7 @@ import { Hydrate } from "@/ui/hydrate";
 import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
+import { getCachedDependents } from "@/data/cached";
 import { FamilyMembersContent } from "./_content";
 import FamilyMembersLoading from "./loading";
 
@@ -13,10 +14,7 @@ async function FamilyMembersData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
     await queryClient.prefetchQuery({
         queryKey: chatKeys.dependents(),
-        queryFn: async () => {
-            const { ListDependentsUseCase } = await import("@/data/dependents");
-            return new ListDependentsUseCase().execute({ ownerId: userId });
-        },
+        queryFn: () => getCachedDependents(userId),
     });
     return (
         <Hydrate client={queryClient}>

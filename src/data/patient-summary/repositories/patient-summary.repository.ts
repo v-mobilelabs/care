@@ -10,8 +10,12 @@ import {
   type PatientSummaryDto,
 } from "../models/patient-summary.model";
 
+// ── Path helpers ──────────────────────────────────────────────────────────────
+
 const summariesCol = (userId: string, dependentId?: string) =>
   scopedCol(dependentId ?? userId, "patient-summaries");
+
+// ── Repository ────────────────────────────────────────────────────────────────
 
 export const patientSummaryRepository = {
   async create(

@@ -1,5 +1,6 @@
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firebase/admin";
+import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import {
   toPatientDto,
   type PatientDocument,
@@ -45,8 +46,15 @@ export const patientRepository = {
       data.consentedAt = Timestamp.fromDate(new Date(input.consentedAt));
     }
 
-    await ref.set(data, { merge: true });
+    await ref.set(stripUndefined(data), { merge: true });
     const snap = await ref.get();
     return toPatientDto(snap.data() as PatientDocument);
+  },
+
+  async withdrawConsent(userId: string): Promise<void> {
+    await patientDoc(userId).update({
+      consentedAt: FieldValue.delete(),
+      updatedAt: Timestamp.now(),
+    });
   },
 };

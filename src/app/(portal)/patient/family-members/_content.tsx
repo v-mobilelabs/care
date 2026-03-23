@@ -7,8 +7,10 @@ import {
     Box,
     Button,
     Card,
+    Container,
     Group,
-    ScrollArea,
+    Loader,
+    Pagination,
     SimpleGrid,
     Skeleton,
     Stack,
@@ -41,6 +43,8 @@ import {
     type DependentRecord,
 } from "@/app/(portal)/patient/_query";
 import { DependentForm } from "@/ui/ai/profile/shared";
+
+const PAGE_SIZE = 10;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,9 +79,10 @@ interface MemberCardProps {
     dep: DependentRecord;
     onEdit: (dep: DependentRecord) => void;
     onDelete: (dep: DependentRecord) => void;
+    isOptimistic?: boolean;
 }
 
-function MemberCard({ dep, onEdit, onDelete }: Readonly<MemberCardProps>) {
+function MemberCard({ dep, onEdit, onDelete, isOptimistic = false }: Readonly<MemberCardProps>) {
     const [hovered, setHovered] = useState(false);
 
     const initials = [dep.firstName[0], dep.lastName?.[0]]
@@ -100,8 +105,25 @@ function MemberCard({ dep, onEdit, onDelete }: Readonly<MemberCardProps>) {
                 transition: "box-shadow 180ms ease, transform 180ms ease",
                 boxShadow: hovered ? "var(--mantine-shadow-md)" : undefined,
                 transform: hovered ? "translateY(-2px)" : undefined,
+                position: isOptimistic ? "relative" as const : undefined,
             }}
         >
+            {isOptimistic && (
+                <Box
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 1,
+                        borderRadius: "var(--mantine-radius-lg)",
+                        background: "light-dark(rgba(255,255,255,0.6), rgba(30,32,40,0.6))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    <Loader size="sm" />
+                </Box>
+            )}
             <Stack gap="md">
                 {/* Avatar + name + hover actions */}
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
@@ -200,6 +222,11 @@ export function FamilyMembersContent() {
     const createDependent = useCreateDependentMutation();
     const updateDependent = useUpdateDependentMutation();
     const deleteDependent = useDeleteDependentMutation();
+    const [page, setPage] = useState(1);
+
+    const totalPages = Math.max(1, Math.ceil(dependents.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = dependents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     function openModal(existing?: DependentRecord) {
         const isEdit = !!existing;
@@ -253,29 +280,30 @@ export function FamilyMembersContent() {
             ),
             labels: { confirm: "Remove", cancel: "Cancel" },
             confirmProps: { color: "red" },
-            onConfirm: () => deleteDependent.mutate(dep.id),
+            onConfirm: () => {
+                deleteDependent.mutate(dep.id, {
+                    onError: () =>
+                        notifications.show({
+                            title: "Delete failed",
+                            message: `Could not remove ${dep.firstName}. Please try again.`,
+                            color: colors.danger,
+                        }),
+                });
+            },
         });
     }
 
     return (
-        <Box style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-            {/* Page header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
+        <Container pt="md">
+            <Stack>
+                {/* Page header */}
                 <Group justify="space-between" align="center">
                     <Group gap="sm">
-                        <ThemeIcon size={34} radius="md" color="primary" variant="light">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
                             <IconUsers size={18} />
                         </ThemeIcon>
                         <Box>
-                            <Title order={5} lh={1.2}>Family Members</Title>
+                            <Title order={4} lh={1.2}>Family Members</Title>
                             <Text size="xs" c="dimmed">
                                 {memberCountLabel(isLoading, dependents.length)}
                             </Text>
@@ -285,56 +313,65 @@ export function FamilyMembersContent() {
                         Add member
                     </Button>
                 </Group>
-            </Box>
 
-            {/* Content */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={900} mx="auto">
-                        {(() => {
-                            if (isLoading) {
-                                return (
-                                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                                        {["sk-a", "sk-b", "sk-c"].map((k) => (
-                                            <Skeleton key={k} height={148} radius="lg" />
-                                        ))}
-                                    </SimpleGrid>
-                                );
-                            }
-                            if (dependents.length === 0) {
-                                return (
-                                    <Stack align="center" py={80} gap="lg">
-                                        <ThemeIcon size={80} radius="xl" color="primary" variant="light">
-                                            <IconUserPlus size={40} />
-                                        </ThemeIcon>
-                                        <Stack align="center" gap={6}>
-                                            <Text fw={700} size="lg">No family members yet</Text>
-                                            <Text size="sm" c="dimmed" ta="center" maw={340}>
-                                                Add a family member to manage their health profile, medications, and records — all in one place.
-                                            </Text>
-                                        </Stack>
-                                        <Button leftSection={<IconPlus size={14} />} onClick={() => openModal()}>
-                                            Add family member
-                                        </Button>
-                                    </Stack>
-                                );
-                            }
+                {/* Content */}
+                <Box>
+                    {(() => {
+                        if (isLoading) {
                             return (
                                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                                    {dependents.map((dep) => (
+                                    {["sk-a", "sk-b", "sk-c"].map((k) => (
+                                        <Skeleton key={k} height={148} radius="md" />
+                                    ))}
+                                </SimpleGrid>
+                            );
+                        }
+                        if (dependents.length === 0) {
+                            return (
+                                <Stack align="center" py={80} gap="lg">
+                                    <ThemeIcon size={80} radius="xl" color="primary" variant="light">
+                                        <IconUserPlus size={40} />
+                                    </ThemeIcon>
+                                    <Stack align="center" gap={6}>
+                                        <Text fw={700} size="lg">No family members yet</Text>
+                                        <Text size="sm" c="dimmed" ta="center" maw={340}>
+                                            Add a family member to manage their health profile, medications, and records — all in one place.
+                                        </Text>
+                                    </Stack>
+                                    <Button leftSection={<IconPlus size={14} />} onClick={() => openModal()}>
+                                        Add family member
+                                    </Button>
+                                </Stack>
+                            );
+                        }
+                        return (
+                            <Stack gap="md">
+                                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                                    {paginated.map((dep) => (
                                         <MemberCard
                                             key={dep.id}
                                             dep={dep}
                                             onEdit={openModal}
                                             onDelete={confirmDelete}
+                                            isOptimistic={dep.id.startsWith("__optimistic__")}
                                         />
                                     ))}
                                 </SimpleGrid>
-                            );
-                        })()}
-                    </Box>
-                </ScrollArea>
-            </Box>
-        </Box>
+                                {totalPages > 1 && (
+                                    <Group justify="center" mt="md">
+                                        <Pagination
+                                            size="sm"
+                                            total={totalPages}
+                                            value={safePage}
+                                            onChange={setPage}
+                                        />
+                                    </Group>
+                                )}
+                            </Stack>
+                        );
+                    })()}
+                </Box>
+            </Stack>
+        </Container>
     );
 }

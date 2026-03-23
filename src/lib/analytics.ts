@@ -50,6 +50,9 @@ export type AnalyticsEvent =
   | { name: "assessment_completed"; params?: { assessment_id?: string } }
   | { name: "soap_note_viewed"; params?: { note_id?: string } }
   | { name: "lab_report_viewed"; params?: { record_id?: string } }
+  | { name: "lab_report_uploaded"; params?: { record_id?: string } }
+  | { name: "lab_report_deleted"; params?: { record_id?: string } }
+  | { name: "lab_report_re_extracted"; params?: { record_id?: string } }
   | { name: "vital_recorded"; params?: { vital_type?: string } }
 
   // Doctors

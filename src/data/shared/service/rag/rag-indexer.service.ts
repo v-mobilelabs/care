@@ -82,11 +82,10 @@ export class RAGIndexerService {
       vital.respiratoryRate
         ? `Respiratory Rate: ${vital.respiratoryRate} bpm`
         : "",
-      vital.glucoseMmol ? `Blood Glucose: ${vital.glucoseMmol} mmol/L` : "",
-      vital.waistCm ? `Waist: ${vital.waistCm} cm` : "",
-      vital.hipCm ? `Hip: ${vital.hipCm} cm` : "",
-      vital.neckCm ? `Neck: ${vital.neckCm} cm` : "",
-      vital.note ? `Notes: ${vital.note}` : "",
+      vital.glucoseMgdl ? `Blood Glucose: ${vital.glucoseMgdl} mg/dL` : "",
+      vital.weightKg ? `Weight: ${vital.weightKg} kg` : "",
+      vital.heightCm ? `Height: ${vital.heightCm} cm` : "",
+      vital.bmi ? `BMI: ${vital.bmi}` : "",
     ]
       .filter(Boolean)
       .join("\n");

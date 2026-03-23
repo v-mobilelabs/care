@@ -24,7 +24,14 @@ export const ExtractedMedicationSchema = z.object({
   frequency: z
     .string()
     .optional()
-    .describe("Dosing frequency e.g. twice daily"),
+    .describe(
+      "Dosing frequency as a human-readable string. " +
+      "Convert shorthand patterns: 1-0-1 = Twice daily (morning and night), " +
+      "1-1-1 = Three times daily, 1-0-0 = Once daily (morning), " +
+      "0-0-1 = Once daily (night), 1-1-1-1 = Four times daily, " +
+      "0-1-0 = Once daily (afternoon), SOS/PRN = As needed. " +
+      "Always output the plain-English equivalent, not the numeric shorthand."
+    ),
   duration: z.string().optional().describe("Treatment duration e.g. 7 days"),
   instructions: z
     .string()

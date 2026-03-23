@@ -18,11 +18,9 @@ import {
     IconShieldLock,
     IconTrash,
 } from "@tabler/icons-react";
-import { getAuth, deleteUser } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { firebaseApp } from "@/lib/firebase/client";
 import { signOut } from "@/lib/auth/sign-out";
 import { CONSENT_KEY } from "@/ui/ai/components/consent-gate";
 
@@ -97,6 +95,7 @@ export function ConsentSection() {
     }
 
     async function handleWithdrawConsent() {
+        await fetch("/api/patients/me/consent", { method: "DELETE" });
         localStorage.removeItem(CONSENT_KEY);
         await signOut();
         startRouting(() => { router.replace("/auth/login"); });
@@ -118,7 +117,7 @@ export function ConsentSection() {
 
     return (
         <Card withBorder radius="lg">
-            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))" }}>
+            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" }}>
                 <Group gap="sm" align="center" p="md">
                     <ThemeIcon size={36} radius="md" variant="light" color="blue">
                         <IconShieldCheck size={20} />
@@ -160,20 +159,18 @@ export function DangerSection() {
     const [deleting, setDeleting] = useState(false);
     const [, startRouting] = useTransition();
 
-    async function handleWithdrawConsent() {
+    async function handleSignOut() {
         localStorage.removeItem(CONSENT_KEY);
         await signOut();
         startRouting(() => { router.replace("/auth/login"); });
     }
 
     async function handleDeleteAccount() {
-        const auth = getAuth(firebaseApp);
-        const currentUser = auth.currentUser;
-        if (!currentUser) return;
         setDeleting(true);
         try {
-            await deleteUser(currentUser);
-            await fetch("/api/auth/session", { method: "DELETE" });
+            const res = await fetch("/api/auth/account", { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed");
+            localStorage.removeItem(CONSENT_KEY);
             startRouting(() => { router.replace("/auth/login"); });
         } catch {
             notifications.show({
@@ -203,7 +200,7 @@ export function DangerSection() {
 
     return (
         <Card withBorder radius="lg" style={{ borderColor: "var(--mantine-color-red-4)" }}>
-            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-red-0), var(--mantine-color-dark-6))" }}>
+            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-red-0), var(--mantine-color-dark-8))" }}>
                 <Group gap="sm" align="center" p="md">
                     <ThemeIcon size={36} radius="md" variant="light" color="red">
                         <IconTrash size={20} />
@@ -217,7 +214,7 @@ export function DangerSection() {
                         title="Sign out"
                         description="Sign out of your account on this device."
                         action={
-                            <Button variant="light" color="gray" leftSection={<IconLogout size={16} />} onClick={() => void handleWithdrawConsent()}>
+                            <Button variant="light" color="gray" leftSection={<IconLogout size={16} />} onClick={() => void handleSignOut()}>
                                 Sign out
                             </Button>
                         }

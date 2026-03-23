@@ -5,10 +5,10 @@ import type { PatientInviteDto } from "@/data/doctor-patients";
 export function Invites({
     children,
     render,
-}: {
+}: Readonly<{
     children?: (invites: PatientInviteDto[]) => React.ReactNode;
     render?: (invites: PatientInviteDto[]) => React.ReactNode;
-}) {
+}>) {
     const { data: invites = [], isLoading, isError } = useInvitesQuery();
     if (isLoading) return null;
     if (isError) return null;

@@ -4,7 +4,6 @@ import { rtdb, db } from "@/lib/firebase/admin";
 import type { AttendeeJoinInfo } from "../models/meet.model";
 import { ApiError } from "@/lib/api/with-context";
 import { doctorPatientRepository } from "@/data/doctor-patients";
-import { encounterRepository } from "@/data/encounters";
 import { recomputeQueuePositions } from "./recompute-queue";
 
 export class AcceptCallUseCase {
@@ -15,10 +14,7 @@ export class AcceptCallUseCase {
    * Call `deferredWork()` on the returned result to run non-critical background
    * tasks (consent invite, encounter creation, DM setup, queue recompute).
    */
-  async execute(params: {
-    requestId: string;
-    doctorId: string;
-  }): Promise<{
+  async execute(params: { requestId: string; doctorId: string }): Promise<{
     joinInfo: AttendeeJoinInfo;
     deferredWork: () => Promise<void>;
   }> {
@@ -126,18 +122,6 @@ export class AcceptCallUseCase {
             .ref(`in-call-consent/${request.patientId}/${requestId}`)
             .set({ doctorId, status: "pending" });
         }
-
-        // Encounter creation
-        await encounterRepository.create({
-          patientId: request.patientId,
-          patientName: request.patientName,
-          patientPhotoUrl: request.patientPhotoUrl,
-          doctorId,
-          doctorName: request.doctorName,
-          doctorPhotoUrl,
-          requestId,
-          chimeMeetingId: meetingId,
-        });
 
         // DM conversation setup
         const dmInfoSnap = await rtdb.ref(`dm/${conversationId}/info`).get();

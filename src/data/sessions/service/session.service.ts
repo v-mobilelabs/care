@@ -1,12 +1,14 @@
 import { sessionRepository } from "../repositories/session.repository";
 import { messageRepository } from "../repositories/message.repository";
-import { fileRepository } from "../repositories/file.repository";
-import type { SessionDto } from "../models/session.model";
+import { fileRepository } from "@/data/files";
 import type {
+  SessionDto,
+  PaginatedSessions,
   CreateSessionInput,
   UpdateSessionInput,
   SessionRefInput,
   ListSessionsInput,
+  ListSessionsPaginatedInput,
 } from "../models/session.model";
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -42,6 +44,17 @@ export class SessionService {
 
   async list(input: ListSessionsInput): Promise<SessionDto[]> {
     return sessionRepository.list(input.userId, input.profileId, input.limit);
+  }
+
+  async listPaginated(
+    input: ListSessionsPaginatedInput,
+  ): Promise<PaginatedSessions> {
+    return sessionRepository.listPaginated(
+      input.userId,
+      input.profileId,
+      input.limit,
+      input.cursor,
+    );
   }
 
   async update(input: UpdateSessionInput): Promise<SessionDto | null> {

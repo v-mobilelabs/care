@@ -2,7 +2,6 @@ import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { bucket } from "@/lib/firebase/admin";
 import { fileRepository } from "@/data/sessions/repositories/file.repository";
-import { insuranceRepository } from "@/data/insurance/repositories/insurance.repository";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -57,14 +56,6 @@ export class GetFileSignedUrlUseCase extends UseCase<
       input.fileId,
     );
     if (crossProfile) return crossProfile.storagePath;
-
-    // 3. Insurance documents
-    const insurance = await insuranceRepository.findByIdRaw(
-      input.userId,
-      input.fileId,
-      input.dependentId,
-    );
-    if (insurance?.documentStoragePath) return insurance.documentStoragePath;
 
     return null;
   }

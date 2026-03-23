@@ -254,22 +254,18 @@ export interface PatientSummaryInput {
   recommendations: string[];
 }
 
-// ── LogVitals input ─────────────────────────────────────────────────────
+// ── LogVitals input (kept for backward compat with existing tool cards) ─────
 
 export interface LogVitalsInput {
-  sex?: "male" | "female";
-  waistCm?: number;
-  hipCm?: number;
-  neckCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  weightKg?: number;
+  heightCm?: number;
   systolicBp?: number;
   diastolicBp?: number;
   restingHr?: number;
   spo2?: number;
   temperatureC?: number;
   respiratoryRate?: number;
-  glucoseMmol?: number;
-  note?: string;
+  glucoseMgdl?: number;
   measuredAt?: string;
 }
 

@@ -78,8 +78,9 @@ function extractTextFromParts(
  * Replaces file/image parts with storable URL references from attachmentUrls.
  * Non-file parts are passed through unchanged.
  *
- * The client MUST upload files first and send the resulting signed URLs in
- * `attachmentUrls`. URLs are consumed in the order they appear.
+ * File parts that already carry an HTTP(S) URL (uploaded by the client before
+ * sending) are preserved directly — no attachmentUrls lookup needed.
+ * Legacy flow: base64/blob file parts are matched to `attachmentUrls` by order.
  */
 function buildStorableParts(
   parts: ReadonlyArray<Record<string, unknown>>,
@@ -89,6 +90,12 @@ function buildStorableParts(
   return parts.map((p) => {
     const t = p.type as string;
     if (t !== "file" && t !== "image") return p;
+
+    // File part already has an HTTP URL (uploaded before sendMessage) — keep it.
+    const existingUrl = p.url as string | undefined;
+    if (existingUrl && existingUrl.startsWith("http")) {
+      return { type: "file", url: existingUrl, mediaType: (p.mediaType as string) || "application/octet-stream" };
+    }
 
     const attach = attachmentUrls?.[attachIdx++];
     if (attach) {

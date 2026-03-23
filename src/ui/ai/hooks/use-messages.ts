@@ -1,17 +1,15 @@
 "use client";
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  isToolUIPart,
-  lastAssistantMessageIsCompleteWithToolCalls,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-} from "ai";
+import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { addToMap, extractToolInput } from "@/ui/ai/types";
+import { addToMap, extractToolInput, isToolPart } from "@/ui/ai/types";
 import type { AskQuestionInput, ConditionInput } from "@/ui/ai/types";
 import { progressPartSchema } from "@/ui/ai/types/progress";
+import { usagePartSchema } from "@/ui/ai/types/usage";
+import type { UsageData } from "@/ui/ai/types/usage";
+import { errorPartSchema } from "@/ui/ai/types/error";
 import { getWelcomeMessage } from "@/ui/ai/session";
 import {
   useMessagesQuery,
@@ -27,6 +25,23 @@ import type { MessageRecord } from "@/ui/ai/query";
 import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
 import { useCurrentProfile } from "@/lib/auth/use-current-profile";
 
+/**
+ * Check if all tool calls in the last assistant message have outputs provided.
+ * Replaces SDK's lastAssistantMessageIsCompleteWithToolCalls which internally
+ * uses isToolUIPart and fails on DB-deserialized messages.
+ */
+function isLastMessageToolOutputsComplete(messages: UIMessage[]): boolean {
+  const lastMsg = messages.at(-1);
+  if (!lastMsg || lastMsg.role !== "assistant") return false;
+  let hasToolParts = false;
+  for (const part of lastMsg.parts) {
+    if (!isToolPart(part)) continue;
+    hasToolParts = true;
+    if (part.state !== "output-available") return false;
+  }
+  return hasToolParts;
+}
+
 // ── useMessages ───────────────────────────────────────────────────────────────
 // Encapsulates all message-related state and logic for a chat session:
 //   • useChat (messages / sendMessage / status)
@@ -37,6 +52,7 @@ import { useCurrentProfile } from "@/lib/auth/use-current-profile";
 //   • handleAnswer for tool Q&A
 //   • pendingFreeTextId computation
 
+// eslint-disable-next-line max-lines-per-function
 export function useMessages(sessionId: string) {
   // Pending attachments state for file uploads
   const [pendingAttachments, setPendingAttachments] = useState<
@@ -45,8 +61,14 @@ export function useMessages(sessionId: string) {
   const { activeDependentId } = useActiveProfile();
   const { data: profile } = useCurrentProfile();
   // Dynamic loading hints received from the gateway via response header.
-  const loadingHintsRef = useRef<string[]>([]);
   const [loadingHints, setLoadingHints] = useState<string[]>([]);
+  // Which specialist agent is handling the current request (live — current stream only).
+  const [agentType, setAgentType] = useState<string | undefined>();
+  // Ref that holds the agent for the current stream so it can be tagged on
+  // the last assistant message when the stream finishes (status → "ready").
+  const pendingAgentTypeRef = useRef<string | undefined>(undefined);
+  // Live token usage received via the stream (before DB persistence).
+  const [liveUsage, setLiveUsage] = useState<UsageData | null>(null);
   // ── DB message hydration ──────────────────────────────────────────────────
   const {
     data: dbData,
@@ -66,18 +88,25 @@ export function useMessages(sessionId: string) {
   const hasHydrated = useRef(false);
   const [isHydratedState, setIsHydratedState] = useState(false);
   const hydratedCountRef = useRef(0);
+  // Gate that prevents sendAutomaticallyWhen from firing during hydration.
+  // Only set to true right before an explicit addToolOutput/addToolApprovalResponse call.
+  const toolOutputPendingRef = useRef(false);
 
   // Reset hydration flag and local state when session changes.
   useEffect(() => {
     hasHydrated.current = false;
     setIsHydratedState(false);
     hydratedCountRef.current = 0;
+    toolOutputPendingRef.current = false;
     setAnsweredIds(new Map<string, string>());
+    setLiveUsage(null);
+    setAgentType(undefined);
+    pendingAgentTypeRef.current = undefined;
     // Immediately show the welcome message so there's no flash of the old
     // session's content while the DB query for the new session is in-flight.
     setMessages(getWelcomeMessage(profile?.name?.split(" ")[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, profile]);
+  }, [sessionId]);
 
   const [answeredIds, setAnsweredIds] = useState<ReadonlyMap<string, string>>(
     () => new Map<string, string>(),
@@ -88,6 +117,14 @@ export function useMessages(sessionId: string) {
   const [phraseFading, setPhraseFading] = useState(false);
 
   // ── AI SDK chat ───────────────────────────────────────────────────────────
+  // The `id` changes whenever sessionId or dependent changes, which forces
+  // the Chat instance (and its transport) to be recreated with the fresh
+  // body/headers. Without this, the transport would keep the stale sessionId
+  // from the first render and all messages would be sent to the wrong session.
+  const chatId = activeDependentId
+    ? `${sessionId}:${activeDependentId}`
+    : sessionId;
+
   const {
     messages,
     setMessages,
@@ -99,27 +136,53 @@ export function useMessages(sessionId: string) {
     error,
     regenerate,
   } = useChat({
+    id: chatId,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { sessionId },
       headers: activeDependentId ? { "x-dependent-id": activeDependentId } : {},
-      prepareSendMessagesRequest: ({ messages, body, ...rest }) => ({
-        ...rest,
-        body: {
-          ...body,
-          // Only send the last message (AI SDK server-managed persistence pattern)
-          messages: messages.slice(-1),
-        },
-      }),
+      // Server-managed persistence — only send the last message.
+      // Server loads full conversation history from Firestore.
+      // Strip step-start boundaries before sending. These are structural UI
+      // markers for multi-step rendering and should not round-trip.
+      prepareSendMessagesRequest({ messages: allMessages, body }) {
+        const lastMsg = allMessages[allMessages.length - 1];
+        return {
+          body: {
+            ...body,
+            message: {
+              ...lastMsg,
+              parts: lastMsg.parts.filter((p) => p.type !== "step-start"),
+            },
+          },
+        };
+      },
     }),
-    dataPartSchemas: { progress: progressPartSchema },
+    // eslint-disable-next-line max-lines-per-function
     onData: (part) => {
+      if (part.type === "data-usage") {
+        const parsed = usagePartSchema.safeParse(part.data);
+        if (parsed.success) setLiveUsage(parsed.data);
+        return;
+      }
+      if (part.type === "data-error") {
+        const parsed = errorPartSchema.safeParse(part.data);
+        if (parsed.success) {
+          console.warn(
+            `[Chat] Server reported error: ${parsed.data.code} — ${parsed.data.message}`,
+          );
+        }
+        return;
+      }
       if (part.type !== "data-progress") return;
       const parsed = progressPartSchema.safeParse(part.data);
       if (!parsed.success) return;
-      const { stage, loadingHints: hints } = parsed.data;
+      const { stage, loadingHints: hints, agentType: agent } = parsed.data;
+      if (agent) {
+        setAgentType(agent);
+        pendingAgentTypeRef.current = agent;
+      }
       if (hints && hints.length > 0) {
-        loadingHintsRef.current = hints;
         setLoadingHints([stage, ...hints]);
       } else {
         setLoadingHints((prev) =>
@@ -129,9 +192,12 @@ export function useMessages(sessionId: string) {
       setPhraseIdx(0);
     },
     messages: getWelcomeMessage(profile?.name?.split(" ")[0]),
-    sendAutomaticallyWhen: (args: { messages: UIMessage[] }) =>
-      lastAssistantMessageIsCompleteWithToolCalls(args) ||
-      lastAssistantMessageIsCompleteWithApprovalResponses(args),
+    sendAutomaticallyWhen: ({ messages: msgs }) => {
+      // Only allow auto-send when the user explicitly provided tool output
+      // (not during hydration of old DB messages with completed tool parts).
+      if (!toolOutputPendingRef.current) return false;
+      return isLastMessageToolOutputsComplete(msgs);
+    },
   });
 
   const isLoading = status === "streaming" || status === "submitted";
@@ -153,6 +219,7 @@ export function useMessages(sessionId: string) {
         setMessages(getWelcomeMessage(profile?.name?.split(" ")[0]));
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbLoaded, dbMessages, setMessages]);
 
   // ── Prepend older pages when the user loads more ──────────────────────────
@@ -171,6 +238,7 @@ export function useMessages(sessionId: string) {
   }, [dbMessages.length]);
 
   // ── Optimistic cache sync + sidebar/credits invalidation ────────────────────
+  // eslint-disable-next-line max-lines-per-function
   useEffect(() => {
     // Build lookups so we preserve original createdAt and usage from DB records
     // instead of overwriting every message with "now" (which kills date separators)
@@ -181,8 +249,15 @@ export function useMessages(sessionId: string) {
     const dbUsage = new Map(
       (dbMessages ?? []).filter((r) => r.usage).map((r) => [r.id, r.usage!]),
     );
+    const dbAgentTypes = new Map(
+      (dbMessages ?? [])
+        .filter((r) => r.agentType)
+        .map((r) => [r.id, r.agentType!]),
+    );
 
     if (status === "ready" && hasHydrated.current) {
+      // Clear live usage — DB will have the persisted data after refetch.
+      setLiveUsage(null);
       // Sync the complete conversation (including streamed AI response) to
       // the TQ messages cache so switching sessions is instant.
       setMessagesCache(
@@ -194,6 +269,9 @@ export function useMessages(sessionId: string) {
               sessionId,
               dbTimestamps.get(m.id),
               dbUsage.get(m.id),
+              m.role === "assistant"
+                ? (dbAgentTypes.get(m.id) ?? pendingAgentTypeRef.current)
+                : undefined,
             ),
           ),
       );
@@ -204,6 +282,9 @@ export function useMessages(sessionId: string) {
     // Optimistically cache the user's message and update sidebar as soon
     // as the request is submitted — before the AI starts streaming.
     if (status === "submitted") {
+      // The send happened — reset the gate so hydration of the response
+      // doesn't accidentally re-trigger auto-send.
+      toolOutputPendingRef.current = false;
       setMessagesCache(
         messages
           .filter((m) => m.id !== "welcome")
@@ -213,6 +294,7 @@ export function useMessages(sessionId: string) {
               sessionId,
               dbTimestamps.get(m.id),
               dbUsage.get(m.id),
+              m.role === "assistant" ? dbAgentTypes.get(m.id) : undefined,
             ),
           ),
       );
@@ -226,7 +308,6 @@ export function useMessages(sessionId: string) {
   useEffect(() => {
     if (!isLoading) {
       setPhraseIdx(0);
-      loadingHintsRef.current = [];
       setLoadingHints([]);
       return;
     }
@@ -285,6 +366,7 @@ export function useMessages(sessionId: string) {
   }
 
   // ── Q&A helpers ───────────────────────────────────────────────────────────
+  // eslint-disable-next-line max-lines-per-function
   function handleAnswer(toolCallId: string, answer: string) {
     setAnsweredIds((prev) => addToMap(prev, toolCallId, answer));
 
@@ -294,12 +376,11 @@ export function useMessages(sessionId: string) {
       for (const msg of messages) {
         if (msg.role !== "assistant") continue;
         for (const part of msg.parts) {
-          if (!isToolUIPart(part)) continue;
-          const tcId =
-            (part as unknown as { toolCallId?: string }).toolCallId ?? "";
+          if (!isToolPart(part)) continue;
+          const tcId = part.toolCallId ?? "";
           if (tcId !== toolCallId) continue;
           const q = extractToolInput<AskQuestionInput>(part, "askQuestion");
-          if (q && q.question.toLowerCase().includes("health record")) {
+          if (q?.question.toLowerCase().includes("health record")) {
             // Found the Health Records question — find the most recent condition.
             const condition = findMostRecentCondition(messages);
             if (condition) {
@@ -319,6 +400,7 @@ export function useMessages(sessionId: string) {
       }
     }
 
+    toolOutputPendingRef.current = true;
     addToolOutput({ tool: "askQuestion", toolCallId, output: answer });
   }
 
@@ -349,11 +431,36 @@ export function useMessages(sessionId: string) {
     return map;
   })();
 
+  // ── Message agent type map ────────────────────────────────────────────
+  // Build a msgId→agentType map so every assistant message knows its agent.
+  // DB records carry the persisted value; the last live message gets the
+  // current stream's agent type overlaid so it shows immediately (before DB save).
+  const messageAgentTypes = (() => {
+    const map = new Map<string, string>();
+    if (dbMessages) {
+      for (const r of dbMessages) {
+        if (r.agentType) map.set(r.id, r.agentType);
+      }
+    }
+    // Overlay the live agent type onto the last assistant message so it
+    // appears during streaming (before the DB record is written and refetched).
+    if (agentType) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          map.set(messages[i].id, agentType);
+          break;
+        }
+      }
+    }
+    return map as ReadonlyMap<string, string>;
+  })();
+
   return {
     // Chat core
     messages,
     messageTimestamps,
     messageUsage,
+    liveUsage,
     sendMessage,
     stop,
     status,
@@ -370,6 +477,10 @@ export function useMessages(sessionId: string) {
     phraseIdx,
     phraseFading,
     loadingHints,
+    // Agent type from gateway routing (live — current stream only)
+    agentType,
+    // Per-message agent type map (DB-persisted + live overlay)
+    messageAgentTypes,
     // Inline edit
     editingId,
     editingText,
@@ -380,23 +491,38 @@ export function useMessages(sessionId: string) {
     handleEditKeyDown,
     // Q&A
     handleAnswer,
-    // Tool approval
-    addToolApprovalResponse,
+    // Tool approval — wrapped to set the auto-send gate
+    addToolApprovalResponse: (
+      ...args: Parameters<typeof addToolApprovalResponse>
+    ) => {
+      toolOutputPendingRef.current = true;
+      return addToolApprovalResponse(...args);
+    },
     // Pending attachments for file uploads
     pendingAttachments,
     setPendingAttachments,
-    // Pending free-text question — when the AI asks a free_text question via
-    // askQuestion, the user should answer via the input bar (not a separate textarea).
+    // Pending free-text question — when the AI asks a question that requires
+    // typed input (free_text, or any unrecognised type), the user answers via
+    // the input bar rather than inline question-card buttons.
     pendingFreeText: (() => {
+      // Question types that have their own inline answer UI inside the card.
+      // Everything else (including "free_text" and any unknown type) uses the
+      // input bar, so we must unlock it when such a question is pending.
+      const inlineAnswerTypes = [
+        "yes_no",
+        "single_choice",
+        "multi_choice",
+        "scale",
+      ];
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         if (m.role !== "assistant") continue;
         for (const p of m.parts) {
-          if (!isToolUIPart(p) || p.state !== "input-available") continue;
+          if (!isToolPart(p) || p.state !== "input-available") continue;
           const q = extractToolInput<AskQuestionInput>(p, "askQuestion");
-          if (q?.type === "free_text") {
+          if (q && !(inlineAnswerTypes as string[]).includes(q.type)) {
             return {
-              toolCallId: (p as unknown as { toolCallId: string }).toolCallId,
+              toolCallId: p.toolCallId!,
               question: q.question,
             };
           }
@@ -404,21 +530,30 @@ export function useMessages(sessionId: string) {
       }
       return null;
     })(),
-    // Pending non-free-text tool calls — true when the LAST assistant message
+    // Pending non-input-bar tool calls — true when the LAST assistant message
     // has unresolved tool invocations that the user must resolve inline
-    // (excludes free_text questions which go through the input bar).
+    // (i.e. question types that render their own answer UI: yes/no, chips, scale).
     // Only checks the most recent assistant message so that once the AI sends
     // a new text-only reply (e.g. farewell), the input bar re-enables.
     hasPendingToolCall: (() => {
+      const inlineAnswerTypes = [
+        "yes_no",
+        "single_choice",
+        "multi_choice",
+        "scale",
+      ];
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         if (m.role !== "assistant") continue;
         return m.parts.some((p) => {
-          if (!isToolUIPart(p)) return false;
+          if (!isToolPart(p)) return false;
           if (p.state === "approval-requested") return true;
           if (p.state !== "input-available") return false;
           const q = extractToolInput<AskQuestionInput>(p, "askQuestion");
-          return !q || q?.type !== "free_text";
+          // Non-askQuestion tool calls always block (e.g. approval flows).
+          if (!q) return true;
+          // Only block for question types that render inline answer UI.
+          return (inlineAnswerTypes as string[]).includes(q.type);
         });
       }
       return false;
@@ -432,6 +567,7 @@ export function useMessages(sessionId: string) {
 // ── DB → UIMessage converter ──────────────────────────────────────────────────
 
 /** Extract answered askQuestion tool calls from hydrated messages. */
+// eslint-disable-next-line max-lines-per-function
 function extractAnsweredIds(msgs: UIMessage[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const msg of msgs) {
@@ -445,7 +581,7 @@ function extractAnsweredIds(msgs: UIMessage[]): Map<string, string> {
       };
       if (
         p.type === "tool-askQuestion" &&
-        p.state === "result" &&
+        (p.state === "result" || p.state === "output-available") &&
         p.toolCallId &&
         typeof p.output === "string"
       ) {
@@ -462,7 +598,7 @@ function findMostRecentCondition(msgs: UIMessage[]): ConditionInput | null {
     const msg = msgs[i];
     if (msg.role !== "assistant") continue;
     for (const part of msg.parts) {
-      if (!isToolUIPart(part)) continue;
+      if (!isToolPart(part)) continue;
       const condition = extractToolInput<ConditionInput>(
         part,
         "recordCondition",
@@ -473,29 +609,15 @@ function findMostRecentCondition(msgs: UIMessage[]): ConditionInput | null {
   return null;
 }
 function dbToUIMessage(record: MessageRecord): UIMessage {
-  // Content is stored as JSON-serialised parts array. Parse and restore
-  // directly — tool-invocation parts with state="result" are non-interactive
-  // so tool cards render in their completed (read-only) state. file parts
-  // restore images. Fallback to a plain text part for legacy plain strings.
+  // Content is stored as JSON-serialised parts array and normalized server-side
+  // in the sessions model mapper. Parse directly here; fallback to plain text
+  // for legacy non-JSON strings.
   let parts: UIMessage["parts"];
 
   try {
     const parsed = JSON.parse(record.content) as Array<Record<string, unknown>>;
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Normalise legacy parts saved as `type:"tool-invocation"` + `toolName` + `result`
-      // to the current SDK-compatible shape `type:"tool-{toolName}"` + `input` + `output`.
-      parts = parsed.map((p) => {
-        if (p.type === "tool-invocation" && typeof p.toolName === "string") {
-          return {
-            type: `tool-${p.toolName}`,
-            toolCallId: p.toolCallId ?? "",
-            state: "result",
-            input: p.args ?? p.input ?? null,
-            output: p.result ?? p.output ?? null,
-          };
-        }
-        return p;
-      }) as UIMessage["parts"];
+      parts = parsed as UIMessage["parts"];
     } else {
       parts = [{ type: "text", text: record.content }];
     }
@@ -512,6 +634,7 @@ function uiToMessageRecord(
   sessionId: string,
   createdAt?: string,
   usage?: MessageRecord["usage"],
+  agentType?: string,
 ): MessageRecord {
   return {
     id: msg.id,
@@ -520,5 +643,6 @@ function uiToMessageRecord(
     content: JSON.stringify(msg.parts),
     createdAt: createdAt ?? new Date().toISOString(),
     ...(usage && { usage }),
+    ...(agentType && { agentType }),
   };
 }

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   UpdateMedicationUseCase,
   DeleteMedicationUseCase,
 } from "@/data/medications";
+import { CacheTags } from "@/data/cached";
 
 // PATCH /api/medications/[medicationId] — update a medication
 export const PATCH = WithContext<{ medicationId: string }>(
@@ -14,6 +16,7 @@ export const PATCH = WithContext<{ medicationId: string }>(
       userId: user.uid,
       medicationId,
     });
+    revalidateTag(CacheTags.medications(user.uid), "minutes");
     return NextResponse.json(medication);
   },
 );
@@ -25,6 +28,7 @@ export const DELETE = WithContext<{ medicationId: string }>(
       userId: user.uid,
       medicationId,
     });
+    revalidateTag(CacheTags.medications(user.uid), "minutes");
     return NextResponse.json({ ok: true });
   },
 );

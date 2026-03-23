@@ -9,7 +9,7 @@
     "lint": "eslint",
     "ai:devtool": "npx @ai-sdk/devtools",
     "seed:nutrition": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-nutrition.ts",
-    "seed:guidelines": "NODE_ENV=development npx tsx --env-file=.env.local src/data/guidelines/seed/seed-guidelines.ts",
+    "seed:kb": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-knowledge-base.ts",
     "setup:vector-indexes": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/create-vector-indexes.ts"
   },
   "dependencies": {
@@ -39,6 +39,9 @@
     "@opentelemetry/api-logs": "^0.212.0",
     "@opentelemetry/instrumentation": "^0.212.0",
     "@opentelemetry/sdk-logs": "^0.212.0",
+    "@remotion/player": "^4.0.438",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
     "@tabler/icons-react": "^3.37.1",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-query-devtools": "^5.91.3",
@@ -65,7 +68,9 @@
     "react-google-recaptcha-v3": "^1.11.0",
     "recharts": "^3.7.0",
     "reflect-metadata": "^0.2.2",
+    "remotion": "^4.0.438",
     "sharp": "^0.34.5",
+    "streamdown": "^2.5.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

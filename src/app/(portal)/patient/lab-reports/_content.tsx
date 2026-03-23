@@ -3,371 +3,132 @@ import {
     ActionIcon,
     Badge,
     Box,
-    Button,
     Card,
-    Collapse,
     Container,
-    Divider,
     FileButton,
     Group,
-    Image,
-    Modal,
-    ScrollArea,
+    Pagination,
+    RingProgress,
+    SegmentedControl,
+    SimpleGrid,
     Skeleton,
     Stack,
     Text,
+    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
+    UnstyledButton,
 } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconAlertCircle,
-    IconArrowDown,
-    IconArrowUp,
-    IconBuilding,
+    IconCalendarEvent,
     IconCheck,
-    IconCircleCheck,
-    IconDownload,
     IconDroplet,
-    IconEye,
-    IconMapPin,
-    IconRefresh,
-    IconStethoscope,
+    IconFlask,
+    IconSearch,
+    IconSortAscending,
+    IconSortDescending,
     IconTrash,
     IconUpload,
 } from "@tabler/icons-react";
-import { type ReactNode, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import {
     useLabReportsQuery,
     useUploadLabReportMutation,
     useDeleteLabReportMutation,
-    useReExtractLabReportMutation,
     type LabReportRecord,
-    type BiomarkerStatus,
-    type BiomarkerRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { DateText } from "@/ui/DateText";
+import { trackEvent } from "@/lib/analytics";
 
-// ── Biomarker helpers ─────────────────────────────────────────────────────────
+const PAGE_SIZE = 10;
 
-const STATUS_COLOR: Record<BiomarkerStatus, string> = {
-    normal: colors.success,
-    low: colors.warning,
-    high: colors.warning,
-    critical: colors.danger,
-};
-
-const STATUS_ICON: Record<BiomarkerStatus, ReactNode> = {
-    normal: <IconCircleCheck size={12} />,
-    low: <IconArrowDown size={12} />,
-    high: <IconArrowUp size={12} />,
-    critical: <IconAlertCircle size={12} />,
-};
-
-// ── Biomarker row ─────────────────────────────────────────────────────────────
-
-function BiomarkerRow({ b }: Readonly<{ b: BiomarkerRecord }>) {
-    return (
-        <Group
-            justify="space-between"
-            gap="xs"
-            py={4}
-            style={{
-                borderBottom:
-                    "0.5px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))",
-            }}
-        >
-            <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text size="sm" fw={500} truncate>
-                    {b.name}
-                </Text>
-                {b.referenceRange && (
-                    <Text size="xs" c="dimmed">
-                        Ref: {b.referenceRange}
-                    </Text>
-                )}
-            </Box>
-            <Group gap={6} wrap="nowrap" align="center">
-                <Text size="sm" fw={600} c={STATUS_COLOR[b.status]}>
-                    {b.value} {b.unit}
-                </Text>
-                <Badge
-                    size="xs"
-                    variant="light"
-                    color={(() => {
-                        if (b.status === "normal") return "teal";
-                        if (b.status === "critical") return "red";
-                        return "yellow";
-                    })()}
-                    leftSection={STATUS_ICON[b.status]}
-                >
-                    {b.status}
-                </Badge>
-            </Group>
-        </Group>
-    );
-}
-
-// ── Source file modal ─────────────────────────────────────────────────────────
-
-function SourceModal({
-    record,
-    opened,
-    onClose,
-}: Readonly<{
-    record: LabReportRecord;
-    opened: boolean;
-    onClose: () => void;
-}>) {
-    const fileUrl = record.fileUrl ?? `/api/files/${record.fileId}`;
-    const isImage = fileUrl.match(/\.(jpe?g|png|webp|gif)/i) !== null;
-
-    return (
-        <Modal
-            opened={opened}
-            onClose={onClose}
-            title={
-                <Text fw={600} size="sm" truncate="end" maw={320}>
-                    {record.testName} — Source
-                </Text>
-            }
-            size="xl"
-            centered
-            radius="lg"
-        >
-            <Stack gap="sm">
-                {isImage ? (
-                    <Image
-                        src={fileUrl}
-                        alt={record.testName}
-                        radius="md"
-                        style={{
-                            maxHeight: "70vh",
-                            objectFit: "contain",
-                            width: "100%",
-                        }}
-                    />
-                ) : (
-                    <Box
-                        component="iframe"
-                        src={fileUrl}
-                        style={{
-                            width: "100%",
-                            height: "70vh",
-                            border: "none",
-                            borderRadius: 8,
-                        }}
-                        title={record.testName}
-                    />
-                )}
-                <Group justify="flex-end">
-                    <Button
-                        size="xs"
-                        variant="light"
-                        color="primary"
-                        component="a"
-                        href={fileUrl}
-                        download
-                        leftSection={<IconDownload size={14} />}
-                    >
-                        Download
-                    </Button>
-                </Group>
-            </Stack>
-        </Modal>
-    );
-}
-
-// ── Lab report card ───────────────────────────────────────────────────────────
+// ── Compact lab report card ───────────────────────────────────────────────────
 
 function LabReportCard({
     record,
     onDelete,
-    onReExtract,
     isPendingDelete,
-    isPendingReExtract,
 }: Readonly<{
     record: LabReportRecord;
     onDelete: () => void;
-    onReExtract: () => void;
     isPendingDelete: boolean;
-    isPendingReExtract: boolean;
 }>) {
-    const [expanded, { toggle }] = useDisclosure(false);
-    const [sourceOpen, { open: openSource, close: closeSource }] =
-        useDisclosure(false);
-    const abnormalCount = record.biomarkers.filter(
-        (b) => b.status !== "normal",
-    ).length;
-    const criticalCount = record.biomarkers.filter(
-        (b) => b.status === "critical",
-    ).length;
-
-    const hasMetadata =
-        record.labName || record.orderedBy || record.labAddress;
+    const router = useRouter();
+    const abnormalCount = record.biomarkers.filter((b) => b.status !== "normal").length;
+    const criticalCount = record.biomarkers.filter((b) => b.status === "critical").length;
 
     return (
-        <Card radius="lg" withBorder p="md">
-            <Group gap="xs" align="center">
-                <ThemeIcon size={28} radius="md" variant="light" color="primary">
-                    <IconDroplet size={15} />
-                </ThemeIcon>
-                <Text
-                    fw={600}
-                    size="sm"
-                    lh={1.3}
-                    style={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+        <Card
+            radius="md"
+            style={{
+                opacity: isPendingDelete ? 0.4 : 1,
+                transition: "opacity 150ms ease",
+            }}
+        >
+            <Card.Section>
+                <UnstyledButton
+                    onClick={() => {
+                        trackEvent({ name: "lab_report_viewed", params: { record_id: record.id } });
+                        router.push(`/patient/lab-reports/${record.id}`);
                     }}
+                    style={{ display: "block", width: "100%" }}
+                    p="md"
                 >
-                    {record.testName}
-                </Text>
-                <Group gap={4}>
-                    <Tooltip label="View source">
-                        <ActionIcon
-                            variant="subtle"
-                            size="sm"
-                            color="gray"
-                            onClick={openSource}
-                        >
-                            <IconEye size={14} />
-                        </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label="Re-extract with AI">
-                        <ActionIcon
-                            variant="subtle"
-                            size="sm"
-                            color="gray"
-                            loading={isPendingReExtract}
-                            onClick={onReExtract}
-                        >
-                            <IconRefresh size={14} />
-                        </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label="Delete">
-                        <ActionIcon
-                            variant="subtle"
-                            size="sm"
-                            color="red"
-                            loading={isPendingDelete}
-                            onClick={onDelete}
-                        >
-                            <IconTrash size={14} />
-                        </ActionIcon>
-                    </Tooltip>
+                    <Group gap="xs" align="center" wrap="nowrap">
+                        <ThemeIcon size={28} radius="md" variant="light" color="primary" style={{ flexShrink: 0 }}>
+                            <IconDroplet size={15} />
+                        </ThemeIcon>
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                            <Text fw={600} size="sm" truncate="end" lh={1.3}>
+                                {record.testName}
+                            </Text>
+                        </Box>
+                    </Group>
+                    <Group gap={6} mt="xs" wrap="wrap">
+                        <Badge variant="light" size="xs" color="gray">
+                            {record.biomarkers.length} parameters
+                        </Badge>
+                        {abnormalCount > 0 && (
+                            <Badge variant="light" size="xs" color="yellow">
+                                {abnormalCount} abnormal
+                            </Badge>
+                        )}
+                        {criticalCount > 0 && (
+                            <Badge variant="filled" size="xs" color="red">
+                                {criticalCount} critical
+                            </Badge>
+                        )}
+                    </Group>
+                </UnstyledButton>
+            </Card.Section>
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" withBorder px="sm">
+                <Group justify="space-between">
+                    <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>
+                        <DateText date={record.testDate ?? record.createdAt} />
+                    </Text>
+                    <Group gap={2} py={6} justify="flex-end">
+                        <Tooltip label="Delete" withArrow>
+                            <ActionIcon
+                                size={24}
+                                variant="subtle"
+                                color="red"
+                                loading={isPendingDelete}
+                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                aria-label="Delete lab report"
+                            >
+                                <IconTrash size={13} />
+                            </ActionIcon>
+                        </Tooltip>
+                    </Group>
                 </Group>
-            </Group>
-
-            {/* Date */}
-            <Group gap="xs" mt={6} wrap="wrap">
-                {record.testDate && (
-                    <Text size="xs" c="dimmed">
-                        <DateText date={record.testDate} />
-                    </Text>
-                )}
-            </Group>
-
-            {/* Metadata: lab, doctor, address */}
-            {hasMetadata && (
-                <Stack gap={4} mt={8}>
-                    {record.labName && (
-                        <Group gap={6} wrap="nowrap">
-                            <IconBuilding
-                                size={13}
-                                style={{ flexShrink: 0, opacity: 0.5 }}
-                            />
-                            <Text size="xs" c="dimmed" truncate>
-                                {record.labName}
-                            </Text>
-                        </Group>
-                    )}
-                    {record.orderedBy && (
-                        <Group gap={6} wrap="nowrap">
-                            <IconStethoscope
-                                size={13}
-                                style={{ flexShrink: 0, opacity: 0.5 }}
-                            />
-                            <Text size="xs" c="dimmed" truncate>
-                                Dr. {record.orderedBy}
-                            </Text>
-                        </Group>
-                    )}
-                    {record.labAddress && (
-                        <Group gap={6} wrap="nowrap">
-                            <IconMapPin
-                                size={13}
-                                style={{ flexShrink: 0, opacity: 0.5 }}
-                            />
-                            <Text size="xs" c="dimmed" truncate>
-                                {record.labAddress}
-                            </Text>
-                        </Group>
-                    )}
-                </Stack>
-            )}
-
-            {/* Notes */}
-            {record.notes && (
-                <Text size="xs" c="dimmed" mt={6} style={{ fontStyle: "italic" }}>
-                    {record.notes}
-                </Text>
-            )}
-
-            {/* Badges */}
-            <Group gap={6} mt={8} wrap="wrap">
-                <Badge variant="light" size="xs" color="gray">
-                    {record.biomarkers.length} parameters
-                </Badge>
-                {abnormalCount > 0 && (
-                    <Badge variant="light" size="xs" color="yellow">
-                        {abnormalCount} abnormal
-                    </Badge>
-                )}
-                {criticalCount > 0 && (
-                    <Badge variant="filled" size="xs" color="red">
-                        {criticalCount} critical
-                    </Badge>
-                )}
-            </Group>
-
-            {/* Biomarkers expandable */}
-            {record.biomarkers.length > 0 && (
-                <>
-                    <Divider mt="sm" />
-                    <Text
-                        size="xs"
-                        fw={500}
-                        c="primary"
-                        style={{ cursor: "pointer" }}
-                        mt="xs"
-                        onClick={toggle}
-                    >
-                        {expanded ? "Hide" : "Show"} {record.biomarkers.length}{" "}
-                        results {expanded ? "▲" : "▼"}
-                    </Text>
-                    <Collapse in={expanded}>
-                        <Stack gap={0} mt="xs">
-                            {record.biomarkers.map((b, i) => (
-                                <BiomarkerRow key={`${b.name}-${i}`} b={b} />
-                            ))}
-                        </Stack>
-                    </Collapse>
-                </>
-            )}
-
-            <SourceModal
-                record={record}
-                opened={sourceOpen}
-                onClose={closeSource}
-            />
+            </Card.Section>
         </Card>
     );
 }
@@ -378,14 +139,57 @@ export function LabReportsContent() {
     const { data: records = [], isLoading } = useLabReportsQuery();
     const upload = useUploadLabReportMutation();
     const deleteRecord = useDeleteLabReportMutation();
-    const reExtract = useReExtractLabReportMutation();
     const resetRef = useRef<() => void>(null);
+    const [page, setPage] = useState(1);
+    const [search, setSearch] = useState("");
+    const [debouncedSearch] = useDebouncedValue(search, 300);
+    const [filterStatus, setFilterStatus] = useState<"all" | "normal" | "abnormal" | "critical">("all");
+    const [sortField, setSortField] = useState<"date" | "name">("date");
+    const [sortAsc, setSortAsc] = useState(false);
+
+    const filtered = records.filter((r) => {
+        if (filterStatus === "critical" && !r.biomarkers.some((b) => b.status === "critical")) return false;
+        if (filterStatus === "abnormal" && !r.biomarkers.some((b) => b.status !== "normal")) return false;
+        if (filterStatus === "normal" && r.biomarkers.some((b) => b.status !== "normal")) return false;
+        if (debouncedSearch) {
+            const q = debouncedSearch.toLowerCase();
+            const searchable = [r.testName, r.labName ?? "", r.orderedBy ?? ""].join(" ").toLowerCase();
+            if (!searchable.includes(q)) return false;
+        }
+        return true;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+        const av = sortField === "name" ? a.testName : (a.testDate ?? a.createdAt);
+        const bv = sortField === "name" ? b.testName : (b.testDate ?? b.createdAt);
+        const cmp = av.localeCompare(bv);
+        return sortAsc ? cmp : -cmp;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+    const stats = (() => {
+        if (records.length === 0) return null;
+        const allBiomarkers = records.flatMap((r) => r.biomarkers);
+        const abnormal = allBiomarkers.filter((b) => b.status !== "normal").length;
+        const critical = allBiomarkers.filter((b) => b.status === "critical").length;
+        const normalPct = allBiomarkers.length > 0
+            ? Math.round(((allBiomarkers.length - abnormal) / allBiomarkers.length) * 100)
+            : 100;
+        const sorted = [...records].sort((a, b) =>
+            (b.testDate ?? b.createdAt).localeCompare(a.testDate ?? a.createdAt),
+        );
+        return { total: records.length, abnormal, critical, normalPct, lastDate: sorted[0]?.testDate ?? sorted[0]?.createdAt };
+    })();
 
     function handleUpload(file: File | null) {
         if (!file) return;
         upload.mutate(file, {
-            onSuccess: () => {
+            onSuccess: (data) => {
                 resetRef.current?.();
+                trackEvent({ name: "lab_report_uploaded", params: { record_id: data.id } });
                 notifications.show({
                     message: "Lab report uploaded and analysed.",
                     color: colors.success,
@@ -414,155 +218,263 @@ export function LabReportsContent() {
             confirmProps: { color: "red" },
             onConfirm: () => {
                 deleteRecord.mutate(record.id, {
-                    onSuccess: () =>
+                    onSuccess: () => {
+                        trackEvent({ name: "lab_report_deleted", params: { record_id: record.id } });
                         notifications.show({
                             message: `${record.testName} deleted.`,
                             color: colors.success,
                             icon: <IconCheck size={16} />,
+                        });
+                    },
+                    onError: (err) =>
+                        notifications.show({
+                            title: "Delete failed",
+                            message: err.message,
+                            color: colors.danger,
                         }),
                 });
             },
         });
     }
 
-    function handleReExtract(record: LabReportRecord) {
-        reExtract.mutate(record.id, {
-            onSuccess: () =>
-                notifications.show({
-                    message: `${record.testName} re-analysed.`,
-                    color: colors.success,
-                    icon: <IconCheck size={16} />,
-                }),
-            onError: (err) =>
-                notifications.show({
-                    title: "Re-extraction failed",
-                    message: err.message,
-                    color: colors.danger,
-                }),
-        });
-    }
-
     return (
         <Container pt="md">
-            <Card radius="xl" withBorder>
-                <Card.Section
-                    bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))"
-                    px="md"
-                    py="md"
-                    withBorder
-                >
-                    <Group justify="space-between" align="center">
-                        <Group gap="sm">
-                            <ThemeIcon
-                                size={36}
-                                radius="md"
-                                color="primary"
+            <Stack>
+                {/* ── Header ──────────────────────────────────────── */}
+                <Group justify="space-between" align="center">
+                    <Group gap="sm">
+                        <ThemeIcon
+                            size={36}
+                            radius="md"
+                            color="primary"
+                            variant="light"
+                        >
+                            <IconDroplet size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>
+                                Lab Reports
+                            </Title>
+                            <Text size="xs" c="dimmed">
+                                Upload and view your blood test results
+                            </Text>
+                        </Box>
+                    </Group>
+                    <Group gap="xs">
+                        {!isLoading && records.length > 0 && (
+                            <Badge
                                 variant="light"
+                                color="gray"
+                                size="sm"
+                                radius="xl"
                             >
-                                <IconDroplet size={20} />
+                                {records.length}{" "}
+                                {records.length === 1 ? "report" : "reports"}
+                            </Badge>
+                        )}
+                        <FileButton
+                            resetRef={resetRef}
+                            onChange={handleUpload}
+                            accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        >
+                            {(props) => (
+                                <Tooltip label="Upload lab report">
+                                    <ActionIcon
+                                        {...props}
+                                        variant="light"
+                                        color="primary"
+                                        size="lg"
+                                        radius="xl"
+                                        loading={upload.isPending}
+                                    >
+                                        <IconUpload size={18} />
+                                    </ActionIcon>
+                                </Tooltip>
+                            )}
+                        </FileButton>
+                    </Group>
+                </Group>
+
+                {/* ── Stats bar ────────────────────────────────────── */}
+                {!isLoading && stats && (
+                    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+                        <Group gap="xs" wrap="nowrap">
+                            <RingProgress
+                                size={40}
+                                thickness={5}
+                                roundCaps
+                                sections={[{
+                                    value: stats.normalPct, color: (() => {
+                                        if (stats.normalPct >= 90) return colors.success;
+                                        if (stats.normalPct >= 60) return colors.warning;
+                                        return colors.danger;
+                                    })()
+                                }]}
+                                label={
+                                    <Text ta="center" fw={700} style={{ fontSize: 10 }} lh={1}>
+                                        {stats.normalPct}%
+                                    </Text>
+                                }
+                            />
+                            <Box>
+                                <Text size="xs" fw={600} lh={1.2}>Normal</Text>
+                                <Text size="xs" c="dimmed" lh={1.2}>biomarkers</Text>
+                            </Box>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                            <ThemeIcon size={28} radius="md" variant="light" color="primary">
+                                <IconFlask size={14} />
                             </ThemeIcon>
                             <Box>
-                                <Title order={4} lh={1.2}>
-                                    Lab Reports
-                                </Title>
-                                <Text size="xs" c="dimmed">
-                                    Upload and view your blood test results
+                                <Text size="xs" fw={600} lh={1.2}>{stats.total} reports</Text>
+                                <Text size="xs" c="dimmed" lh={1.2}>total</Text>
+                            </Box>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                            <ThemeIcon size={28} radius="md" variant="light" color={(() => {
+                                if (stats.critical > 0) return colors.danger;
+                                if (stats.abnormal > 0) return colors.warning;
+                                return colors.success;
+                            })()}>
+                                <IconAlertCircle size={14} />
+                            </ThemeIcon>
+                            <Box>
+                                <Text size="xs" fw={600} lh={1.2}>{stats.abnormal} abnormal</Text>
+                                <Text size="xs" c="dimmed" lh={1.2}>{stats.critical} critical</Text>
+                            </Box>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                            <ThemeIcon size={28} radius="md" variant="light" color="gray">
+                                <IconCalendarEvent size={14} />
+                            </ThemeIcon>
+                            <Box>
+                                <Text size="xs" fw={600} lh={1.2}>Last test</Text>
+                                <Text size="xs" c="dimmed" lh={1.2}>
+                                    <DateText date={stats.lastDate} />
                                 </Text>
                             </Box>
                         </Group>
-                        <Group gap="xs">
-                            {!isLoading && records.length > 0 && (
-                                <Badge
-                                    variant="light"
-                                    color="gray"
-                                    size="sm"
-                                    radius="xl"
-                                >
-                                    {records.length}{" "}
-                                    {records.length === 1 ? "report" : "reports"}
-                                </Badge>
-                            )}
-                            <FileButton
-                                resetRef={resetRef}
-                                onChange={handleUpload}
-                                accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    </SimpleGrid>
+                )}
+
+                {/* ── Filter bar ───────────────────────────────────── */}
+                {!isLoading && records.length > 0 && (
+                    <Stack gap="sm">
+                        <Group gap="sm">
+                            <TextInput
+                                placeholder="Search reports…"
+                                leftSection={<IconSearch size={15} />}
+                                size="sm"
+                                value={search}
+                                onChange={(e) => { setSearch(e.currentTarget.value); setPage(1); }}
+                                style={{ flex: 1 }}
+                            />
+                            <Box
+                                component="button"
+                                onClick={() => setSortAsc((p) => !p)}
+                                style={{
+                                    all: "unset",
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    fontSize: "var(--mantine-font-size-xs)",
+                                    color: "var(--mantine-color-dimmed)",
+                                }}
                             >
-                                {(props) => (
-                                    <Tooltip label="Upload lab report">
-                                        <ActionIcon
-                                            {...props}
-                                            variant="light"
-                                            color="primary"
-                                            size="lg"
-                                            radius="xl"
-                                            loading={upload.isPending}
-                                        >
-                                            <IconUpload size={18} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                )}
-                            </FileButton>
+                                {sortAsc ? <IconSortAscending size={14} /> : <IconSortDescending size={14} />}
+                                {sortAsc ? "Oldest" : "Newest"}
+                            </Box>
                         </Group>
-                    </Group>
-                </Card.Section>
-                <Card.Section p="md">
-                    <ScrollArea style={{ height: "100%" }}>
-                        <Box maw={800} mx="auto">
-                            {isLoading && (
-                                <Stack gap="md">
-                                    {[1, 2, 3].map((k) => (
-                                        <Skeleton key={k} height={120} radius="lg" />
-                                    ))}
-                                </Stack>
-                            )}
+                        <Group gap="sm" wrap="nowrap">
+                            <SegmentedControl
+                                size="xs"
+                                value={filterStatus}
+                                onChange={(v) => { setFilterStatus(v as typeof filterStatus); setPage(1); }}
+                                data={[
+                                    { value: "all", label: "All" },
+                                    { value: "normal", label: "Normal" },
+                                    { value: "abnormal", label: "Abnormal" },
+                                    { value: "critical", label: "Critical" },
+                                ]}
+                            />
+                            <SegmentedControl
+                                size="xs"
+                                value={sortField}
+                                onChange={(v) => { setSortField(v as typeof sortField); setPage(1); }}
+                                data={[
+                                    { value: "date", label: "Date" },
+                                    { value: "name", label: "Name" },
+                                ]}
+                            />
+                        </Group>
+                    </Stack>
+                )}
 
-                            {!isLoading && records.length === 0 && (
-                                <Box py={60} style={{ textAlign: "center" }}>
-                                    <ThemeIcon
-                                        size={48}
-                                        radius="xl"
-                                        variant="light"
-                                        color="gray"
-                                        mx="auto"
-                                        mb="md"
-                                    >
-                                        <IconDroplet size={24} />
-                                    </ThemeIcon>
-                                    <Text fw={500} size="lg">
-                                        No lab reports yet
-                                    </Text>
-                                    <Text size="sm" c="dimmed" maw={320} mx="auto" mt={4}>
-                                        Upload a blood test report (image, PDF, or
-                                        Word doc) and AI will extract the results
-                                        automatically.
-                                    </Text>
-                                </Box>
-                            )}
+                {/* ── Scrollable content ─────────────────────────── */}
+                <Box>
+                    {isLoading && (
+                        <Stack gap="md">
+                            {[1, 2, 3].map((k) => (
+                                <Skeleton key={k} height={120} radius="md" />
+                            ))}
+                        </Stack>
+                    )}
 
-                            {!isLoading && records.length > 0 && (
-                                <Stack gap="md">
-                                    {records.map((r) => (
-                                        <LabReportCard
-                                            key={r.id}
-                                            record={r}
-                                            onDelete={() => handleDelete(r)}
-                                            onReExtract={() => handleReExtract(r)}
-                                            isPendingDelete={
-                                                deleteRecord.isPending &&
-                                                deleteRecord.variables === r.id
-                                            }
-                                            isPendingReExtract={
-                                                reExtract.isPending &&
-                                                reExtract.variables === r.id
-                                            }
-                                        />
-                                    ))}
-                                </Stack>
-                            )}
+                    {!isLoading && records.length === 0 && (
+                        <Box py={60} style={{ textAlign: "center" }}>
+                            <ThemeIcon
+                                size={48}
+                                radius="xl"
+                                variant="light"
+                                color="gray"
+                                mx="auto"
+                                mb="md"
+                            >
+                                <IconDroplet size={24} />
+                            </ThemeIcon>
+                            <Text fw={500} size="lg">
+                                No lab reports yet
+                            </Text>
+                            <Text size="sm" c="dimmed" maw={320} mx="auto" mt={4}>
+                                Upload a blood test report (image, PDF, or
+                                Word doc) and AI will extract the results
+                                automatically.
+                            </Text>
                         </Box>
-                    </ScrollArea>
-                </Card.Section>
-            </Card>
+                    )}
+
+                    {!isLoading && records.length > 0 && sorted.length === 0 && (
+                        <Text ta="center" c="dimmed" py="xl">No reports match your search or filter.</Text>
+                    )}
+
+                    {!isLoading && sorted.length > 0 && (
+                        <Stack gap="md">
+                            {paginated.map((r) => (
+                                <LabReportCard
+                                    key={r.id}
+                                    record={r}
+                                    onDelete={() => handleDelete(r)}
+                                    isPendingDelete={
+                                        deleteRecord.isPending &&
+                                        deleteRecord.variables === r.id
+                                    }
+                                />
+                            ))}
+                            {totalPages > 1 && (
+                                <Group justify="center" mt="md">
+                                    <Pagination
+                                        size="sm"
+                                        total={totalPages}
+                                        value={safePage}
+                                        onChange={setPage}
+                                    />
+                                </Group>
+                            )}
+                        </Stack>
+                    )}
+                </Box>
+            </Stack>
         </Container>
     );
 }

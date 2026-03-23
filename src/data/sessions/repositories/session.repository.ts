@@ -5,9 +5,12 @@ import {
 } from "firebase-admin/firestore";
 import { db } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
-import type { SessionDocument } from "../models/session.model";
-import { toSessionDto } from "../models/session.model";
-import type { SessionDto } from "../models/session.model";
+import {
+  toSessionDto,
+  type SessionDocument,
+  type SessionDto,
+  type PaginatedSessions,
+} from "../models/session.model";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -103,6 +106,38 @@ export const sessionRepository = {
     );
   },
 
+  async listPaginated(
+    userId: string,
+    profileId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<PaginatedSessions> {
+    let query = sessionsCol(userId, profileId).orderBy("updatedAt", "desc");
+
+    if (cursor) {
+      query = query.startAfter(Timestamp.fromDate(new Date(cursor)));
+    }
+
+    const snap = await query.limit(limit + 1).get();
+    const docs = snap.docs as QueryDocumentSnapshot[];
+    const hasMore = docs.length > limit;
+    const page = hasMore ? docs.slice(0, limit) : docs;
+
+    const sessions = page.map((d) =>
+      toSessionDto(d.id, d.data() as SessionDocument),
+    );
+
+    const nextCursor = hasMore ? sessions.at(-1)!.updatedAt : null;
+
+    let totalCount: number | undefined;
+    if (!cursor) {
+      const countSnap = await sessionsCol(userId, profileId).count().get();
+      totalCount = countSnap.data().count;
+    }
+
+    return { sessions, nextCursor, totalCount };
+  },
+
   async update(
     userId: string,
     profileId: string,
@@ -128,6 +163,27 @@ export const sessionRepository = {
     });
   },
 
+  /** Atomically accumulate token usage on the session document. */
+  async incrementTotalUsage(
+    userId: string,
+    profileId: string,
+    sessionId: string,
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    },
+  ): Promise<void> {
+    await sessionDoc(userId, profileId, sessionId).update({
+      "totalUsage.promptTokens": FieldValue.increment(usage.promptTokens),
+      "totalUsage.completionTokens": FieldValue.increment(
+        usage.completionTokens,
+      ),
+      "totalUsage.totalTokens": FieldValue.increment(usage.totalTokens),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  },
+
   /** Persist the agent type that last handled this session. */
   async setLastAgentType(
     userId: string,
@@ -135,10 +191,13 @@ export const sessionRepository = {
     sessionId: string,
     agentType: string,
   ): Promise<void> {
-    await sessionDoc(userId, profileId, sessionId).update({
-      lastAgentType: agentType,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    // Use set+merge instead of update so this succeeds even when the session
+    // document hasn't been created yet (e.g. routeSpecialist runs during
+    // streaming, before the after() block creates the session document).
+    await sessionDoc(userId, profileId, sessionId).set(
+      { lastAgentType: agentType, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
   },
 
   async delete(

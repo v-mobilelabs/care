@@ -1210,7 +1210,7 @@ export function PatientHealthRecordsContent({ patientId }: Readonly<Props>) {
                                         <Tabs.Panel value="conditions"><RecordSkeletons /></Tabs.Panel>
                                         <Tabs.Panel value="soap-notes"><RecordSkeletons /></Tabs.Panel>
                                         <Tabs.Panel value="medications"><RecordSkeletons /></Tabs.Panel>
-                                        <Tabs.Panel value="blood-tests"><RecordSkeletons /></Tabs.Panel>
+                                        <Tabs.Panel value="lab-reports"><RecordSkeletons /></Tabs.Panel>
                                     </>
                                 )}
                                 {data && (

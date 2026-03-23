@@ -21,22 +21,29 @@ import type { InferAgentUIMessage } from "ai";
 import { createAgent } from "../base/agent";
 import { buildDietPlannerPrompt } from "./prompt";
 import { buildDietDynamicContext } from "./context";
-import { createSubmitDailyPlanTool } from "./tools/submit-diet-day.tool";
-import type { EnhancedDietDay } from "./tools/submit-diet-day.tool";
-
-export type { EnhancedDietDay };
+import {
+  createSubmitDailyPlanTool,
+  type EnhancedDietDay,
+} from "./tools/submit-diet-day.tool";
+import { askQuestionTool } from "@/data/shared/service/agents/global-tools/ask-question.tool";
+import { logVitalTool } from "@/data/shared/service/agents/global-tools/log-vital.tool";
+import { startAssessmentTool } from "@/data/shared/service/agents/global-tools/start-assessment.tool";
+export type { EnhancedDietDay } from "./tools/submit-diet-day.tool";
 
 /** Singleton — import this throughout the server-side application. */
 export const dietPlannerChatAgent = createAgent({
   id: "diet-planner",
   buildSystemPrompt: () => buildDietPlannerPrompt(),
   buildDynamicContext: (options) => buildDietDynamicContext(options),
+  temperature: 0.7,
   maxSteps: 15,
   buildTools: () => {
-    // Fresh collector array each request — the closure captures it.
     const collectedDays: EnhancedDietDay[] = [];
     return {
       submitDailyPlan: createSubmitDailyPlanTool(collectedDays),
+      askQuestion: askQuestionTool,
+      logVital: logVitalTool,
+      startAssessment: startAssessmentTool,
     };
   },
 });

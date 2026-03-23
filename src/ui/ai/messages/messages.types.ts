@@ -25,6 +25,10 @@ export interface MessagesProps {
   phraseFading: boolean;
   /** Dynamic loading hints from gateway for contextual loading messages. */
   loadingHints?: string[];
+  /** Current agent type from gateway routing — shown in the status indicator. */
+  agentType?: string;
+  /** Per-message agent type map (DB-persisted + live overlay). */
+  messageAgentTypes?: ReadonlyMap<string, string>;
   onAnswer: (toolCallId: string, answer: string) => void;
   onApproval: (opts: {
     id: string;

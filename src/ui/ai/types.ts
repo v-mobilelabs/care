@@ -14,23 +14,6 @@ export interface ConditionInput {
   symptoms: string[];
 }
 
-export interface MedicationItem {
-  name: string;
-  dosage: string;
-  form: string;
-  frequency: string;
-  duration: string;
-  instructions?: string;
-}
-
-export interface PrescriptionInput {
-  title: string;
-  condition: string;
-  medications: MedicationItem[];
-  notes?: string;
-  urgent?: boolean;
-}
-
 export type QuestionType =
   | "yes_no"
   | "single_choice"
@@ -56,54 +39,28 @@ export interface StartAssessmentInput {
   estimatedMinutes: string;
 }
 
-export interface NextStepsInput {
-  condition: string;
-  immediate: string[];
-  shortTerm: string[];
-  longTerm: string[];
-  redFlags: string[];
-}
-
-export interface DietFood {
-  item: string;
-  portion: string; // e.g. "1 cup (240 g)"
-  calories: number;
-}
-
-export interface DietMeal {
-  name: string; // "Breakfast", "Morning Snack", "Lunch", "Afternoon Snack", "Dinner"
-  time: string; // "7:00–8:00 AM"
-  foods: DietFood[];
-  totalCalories: number;
-}
-
-export interface DietDay {
-  day: string; // "Monday"
-  meals: DietMeal[];
-  totalCalories: number;
-}
-
-export interface DietPlanInput {
-  condition: string;
-  overview: string;
-  weeklyWeightLossEstimate: string; // e.g. "0.5–0.8 kg per week"
-  totalDailyCalories: number;
-  weeklyPlan: DietDay[];
-  recommended: { food: string; reason: string }[];
-  avoid: { food: string; reason: string }[];
-  tips: string[];
-}
-
-export interface SoapNoteInput {
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string[];
-  condition: string;
-  riskLevel: RiskLevel;
-}
-
 // ── Tool part helpers ─────────────────────────────────────────────────────────
+
+export interface ToolPart {
+  type: string;
+  toolCallId?: string;
+  state?: string;
+  output?: unknown;
+}
+
+/**
+ * Returns true if a message part is a tool part.
+ * Works on plain objects — unlike the SDK's isToolUIPart which requires
+ * internal SDK metadata that DB-deserialized parts don't have.
+ */
+export function isToolPart(
+  part: UIMessagePart<UIDataTypes, UITools>,
+): part is UIMessagePart<UIDataTypes, UITools> & ToolPart;
+export function isToolPart(part: unknown): part is ToolPart;
+export function isToolPart(part: unknown): boolean {
+  const p = part as ToolPart;
+  return typeof p.type === "string" && p.type.startsWith("tool-");
+}
 
 export function getToolPartState(
   part: UIMessagePart<UIDataTypes, UITools>,
@@ -140,15 +97,6 @@ export function extractToolInput<T>(
 }
 
 // ── Answer tracking helpers ───────────────────────────────────────────────────
-
-export function addToSet(
-  prev: ReadonlySet<string>,
-  id: string,
-): ReadonlySet<string> {
-  const next = new Set(prev);
-  next.add(id);
-  return next;
-}
 
 export function addToMap(
   prev: ReadonlyMap<string, string>,

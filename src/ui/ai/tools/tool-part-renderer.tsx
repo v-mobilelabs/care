@@ -1,15 +1,16 @@
 "use client";
 import { Group, Loader, Paper, Text, ThemeIcon } from "@mantine/core";
 import { IconExclamationCircle } from "@tabler/icons-react";
-import { isToolUIPart } from "ai";
 import type { UIMessagePart, UIDataTypes, UITools } from "ai";
-import { getToolPartName, getToolPartState, extractToolInput } from "@/ui/ai/types";
+import { isToolPart, getToolPartName, getToolPartState, extractToolInput } from "@/ui/ai/types";
 import type { AskQuestionInput, StartAssessmentInput } from "@/ui/ai/types";
+import { ActionCardCard } from "./action-card";
 import { AssessmentPrefaceCard } from "./assessment-preface-card";
 import { ApprovalCard } from "./approval-card";
 import { DietDayCard } from "./diet-day-card";
 import { PrescriptionCard } from "./prescription-card";
 import { QuestionCard } from "./question-card";
+import type { ActionCardInput } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import type { EnhancedDietDay } from "@/data/diet-plans/models/nutrition.model";
 import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
 
@@ -70,8 +71,14 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
     const toolName = getToolPartName(part);
     const toolCallId = (part as unknown as { toolCallId?: string }).toolCallId ?? "";
 
-    if (state === "output-error") return <ToolErrorCard toolName={toolName} />;
     if (state === "input-streaming") return <ToolStreamingCard toolName={toolName} />;
+
+    if (!isToolPart(part)) return null;
+
+    // Render display-only tools from their input data even when state is
+    // "output-error" — the input is fully available even if execute was aborted.
+    const actionCardData = extractToolInput<ActionCardInput>(part, "actionCard");
+    if (actionCardData) return <ActionCardCard data={actionCardData} />;
 
     const dietDay = extractToolInput<EnhancedDietDay>(part, "submitDailyPlan");
     if (dietDay?.meals && dietDay?.dailyTotals) return <DietDayCard data={dietDay} />;
@@ -79,7 +86,8 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
     const prescription = extractToolInput<SubmitPrescriptionInput>(part, "submitPrescription");
     if (prescription?.medications) return <PrescriptionCard data={prescription} />;
 
-    if (!isToolUIPart(part)) return null;
+    // For all other tools, surface the error card if execution failed.
+    if (state === "output-error") return <ToolErrorCard toolName={toolName} />;
 
     const assessmentPreface = extractToolInput<StartAssessmentInput>(part, "startAssessment");
     if (assessmentPreface) return <AssessmentPrefaceCard data={assessmentPreface} />;

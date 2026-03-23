@@ -4,7 +4,9 @@ import { bucket } from "@/lib/firebase/admin";
 import {
   fileService,
   type FileService,
-} from "@/data/sessions/service/file.service";
+  validateFileContentService,
+  type ValidateFileContentService,
+} from "@/data/files";
 import { labReportRepository } from "../repositories/lab-report.repository";
 import {
   LabReportExtractionSchema,
@@ -27,6 +29,7 @@ export class LabReportExtractionService {
   constructor(
     private readonly files: FileService = fileService,
     private readonly ai: AIService = aiService,
+    private readonly validator: ValidateFileContentService = validateFileContentService,
   ) {}
 
   async extract(input: ExtractLabReportInput): Promise<LabReportDto> {
@@ -49,6 +52,14 @@ export class LabReportExtractionService {
     const [bytes] = await bucket.file(file.storagePath).download();
     const base64 = bytes.toString("base64");
     const dataUri = `data:${file.mimeType};base64,${base64}`;
+
+    // 2b. Guardrail — verify the file is actually a lab report before extraction
+    await this.validator.assertType(
+      input.userId,
+      file.mimeType,
+      bytes as Buffer,
+      "lab_report",
+    );
 
     // 3. Build AI SDK content part (image vs PDF / Office document)
     const mediaPart = file.mimeType.startsWith("image/")

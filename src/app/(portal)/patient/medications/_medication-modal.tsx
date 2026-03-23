@@ -1,34 +1,42 @@
 "use client";
 import {
-    Autocomplete,
     Box,
     Button,
     Chip,
     Group,
-    Loader,
     Modal,
-    NumberInput,
     ScrollArea,
-    Select,
     Stack,
+    Switch,
     Text,
     TextInput,
     ThemeIcon,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
-import { IconCapsule, IconCheck } from "@tabler/icons-react";
+import {
+    IconCapsule,
+    IconCheck,
+    IconClock,
+    IconDroplet,
+    IconEye,
+    IconFlask,
+    IconMedicineSyrup,
+    IconNeedle,
+    IconPill,
+    IconPillFilled,
+    IconSpray,
+    IconSticker,
+    IconWind,
+} from "@tabler/icons-react";
 import { useState } from "react";
 
 import {
     useAddMedicationMutation,
     useUpdateMedicationMutation,
-    useDrugSearchQuery,
     type MedicationRecord,
     type MedicationStatus,
     type AddMedicationPayload,
-    type DrugRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 
@@ -43,30 +51,24 @@ const FREQ_PRESETS = [
     "As needed",
 ] as const;
 
-const FORM_OPTIONS = [
-    "Tablet", "Capsule", "Oral Solution", "Suspension",
-    "Injection", "Topical", "Patch", "Inhaler", "Eye Drops", "Syrup",
+const FORM_OPTIONS: ReadonlyArray<{ value: string; label: string; icon: React.ReactNode }> = [
+    { value: "Tablet", label: "Tablet", icon: <IconPill size={14} /> },
+    { value: "Capsule", label: "Capsule", icon: <IconPillFilled size={14} /> },
+    { value: "Syrup", label: "Syrup", icon: <IconMedicineSyrup size={14} /> },
+    { value: "Oral Solution", label: "Solution", icon: <IconFlask size={14} /> },
+    { value: "Suspension", label: "Suspension", icon: <IconDroplet size={14} /> },
+    { value: "Injection", label: "Injection", icon: <IconNeedle size={14} /> },
+    { value: "Topical", label: "Topical", icon: <IconSticker size={14} /> },
+    { value: "Patch", label: "Patch", icon: <IconSticker size={14} /> },
+    { value: "Inhaler", label: "Inhaler", icon: <IconWind size={14} /> },
+    { value: "Eye Drops", label: "Eye Drops", icon: <IconEye size={14} /> },
+    { value: "Spray", label: "Spray", icon: <IconSpray size={14} /> },
 ];
-
-/** Parses a stored duration string like "30 days", "2 weeks" back into parts. */
-function parseDuration(raw: string | undefined): { amount: number | ""; unit: string } {
-    if (!raw) return { amount: "", unit: "days" };
-    const m = /^(\d+)\s*(days?|weeks?|months?)$/i.exec(raw.trim());
-    if (!m) return { amount: "", unit: "days" };
-    const unit = (() => {
-        if (/^month/i.test(m[2])) return "months";
-        if (/^week/i.test(m[2])) return "weeks";
-        return "days";
-    })();
-    return { amount: Number.parseInt(m[1], 10), unit };
-}
 
 interface MedicationFormValues {
     name: string;
     dosage: string;
     form: string;
-    instructions: string;
-    condition: string;
     status: string;
 }
 
@@ -81,12 +83,6 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
     const updateMutation = useUpdateMedicationMutation();
     const isEdit = !!initial;
 
-    // ── Drug autocomplete state ──────────────────────────────────────────────
-    const [nameQuery, setNameQuery] = useState(initial?.name ?? "");
-    const [debouncedQuery] = useDebouncedValue(nameQuery, 350);
-    const { data: drugResults = [], isFetching: drugsLoading } = useDrugSearchQuery(debouncedQuery);
-    const [selectedDrug, setSelectedDrug] = useState<DrugRecord | null>(null);
-
     // ── Frequency state ──────────────────────────────────────────────────────
     const initFreq = initial?.frequency ?? "";
     const isPreset = FREQ_PRESETS.includes(initFreq as (typeof FREQ_PRESETS)[number]);
@@ -98,18 +94,11 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
     const [freqPreset, setFreqPreset] = useState<string>(initFreqPreset);
     const [freqCustom, setFreqCustom] = useState(isPreset ? "" : initFreq);
 
-    // ── Duration state ───────────────────────────────────────────────────────
-    const { amount: initAmount, unit: initUnit } = parseDuration(initial?.duration);
-    const [durationAmount, setDurationAmount] = useState<number | "">(initAmount);
-    const [durationUnit, setDurationUnit] = useState(initUnit);
-
     const form = useForm<MedicationFormValues>({
         initialValues: {
             name: initial?.name ?? "",
             dosage: initial?.dosage ?? "",
             form: initial?.form ?? "",
-            instructions: initial?.instructions ?? "",
-            condition: initial?.condition ?? "",
             status: initial?.status ?? "active",
         },
         validate: {
@@ -117,32 +106,9 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
         },
     });
 
-    // Drug autocomplete options — display names
-    const autocompleteData = drugResults.map((d) => d.name);
-
-    // Dosage options come from the selected drug's strengths
-    const dosageOptions = selectedDrug
-        ? selectedDrug.strengths.map((s) => ({ value: s.label, label: s.label }))
-        : [];
-
-    function handleDrugSelect(name: string) {
-        const drug = drugResults.find((d) => d.name === name) ?? null;
-        setSelectedDrug(drug);
-        form.setFieldValue("name", name);
-        setNameQuery(name);
-        if (drug) {
-            // Auto-fill form field from drug data
-            if (drug.defaultForm) form.setFieldValue("form", drug.defaultForm);
-            // Clear dosage so user picks from the populated dropdown
-            form.setFieldValue("dosage", "");
-        }
-    }
-
     function handleClose() {
         onClose();
         form.reset();
-        setNameQuery(initial?.name ?? "");
-        setSelectedDrug(null);
         const resetPreset = (() => {
             if (isPreset) return initFreq;
             if (initFreq) return "custom";
@@ -150,8 +116,6 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
         })();
         setFreqPreset(resetPreset);
         setFreqCustom(isPreset ? "" : initFreq);
-        setDurationAmount(initAmount);
-        setDurationUnit(initUnit);
     }
 
     function handleSubmit(values: MedicationFormValues) {
@@ -159,16 +123,11 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
             ? freqCustom.trim() || undefined
             : freqPreset || undefined;
 
-        const duration = durationAmount === "" ? undefined : `${durationAmount} ${durationUnit}`;
-
         const payload: AddMedicationPayload = {
             name: values.name.trim(),
             dosage: values.dosage.trim() || undefined,
             form: values.form.trim() || undefined,
             frequency,
-            duration,
-            instructions: values.instructions.trim() || undefined,
-            condition: values.condition.trim() || undefined,
             status: values.status as MedicationStatus,
         };
 
@@ -224,51 +183,49 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
             <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap="md">
 
-                    {/* ── Name (autocomplete) ───────────────────────────── */}
-                    <Autocomplete
+                    {/* ── Name ─────────────────────────────────────────── */}
+                    <TextInput
                         label="Medication name"
-                        placeholder="Search drug name…"
+                        placeholder="Enter medication name"
+                        size="sm"
                         required
-                        data={autocompleteData}
-                        value={nameQuery}
-                        onChange={(val) => {
-                            setNameQuery(val);
-                            form.setFieldValue("name", val);
-                            // Clear drug selection if user edits manually
-                            if (selectedDrug && val !== selectedDrug.name) setSelectedDrug(null);
-                        }}
-                        onOptionSubmit={handleDrugSelect}
-                        rightSection={drugsLoading ? <Loader size={14} /> : null}
-                        error={form.errors.name}
-                        maxDropdownHeight={220}
-                        comboboxProps={{ shadow: "md", radius: "md" }}
+                        leftSection={<IconPill size={16} />}
+                        {...form.getInputProps("name")}
                     />
 
-                    {/* ── Dosage + Form ─────────────────────────────────── */}
-                    <Group gap="sm" grow>
-                        {dosageOptions.length > 0 ? (
-                            <Select
-                                label="Dosage / Strength"
-                                placeholder="Select strength"
-                                data={dosageOptions}
-                                clearable
-                                {...form.getInputProps("dosage")}
-                            />
-                        ) : (
-                            <TextInput
-                                label="Dosage"
-                                placeholder="e.g. 500 mg"
-                                {...form.getInputProps("dosage")}
-                            />
-                        )}
-                        <Select
-                            label="Form"
-                            placeholder="Select form"
-                            data={FORM_OPTIONS}
-                            clearable
-                            {...form.getInputProps("form")}
-                        />
-                    </Group>
+                    {/* ── Dosage ────────────────────────────────────────── */}
+                    <TextInput
+                        label="Dosage"
+                        placeholder="e.g. 500 mg"
+                        size="sm"
+                        leftSection={<IconDroplet size={16} />}
+                        {...form.getInputProps("dosage")}
+                    />
+
+                    {/* ── Form (chip-based) ─────────────────────────────── */}
+                    <Box>
+                        <Text size="sm" fw={500} mb={8}>Form</Text>
+                        <Chip.Group
+                            multiple={false}
+                            value={form.values.form}
+                            onChange={(v) => form.setFieldValue("form", v as string)}
+                        >
+                            <Group gap={6} wrap="wrap">
+                                {FORM_OPTIONS.map((f) => (
+                                    <Chip
+                                        key={f.value}
+                                        value={f.value}
+                                        size="sm"
+                                        radius="md"
+                                        variant="light"
+                                        color="violet"
+                                    >
+                                        {f.label}
+                                    </Chip>
+                                ))}
+                            </Group>
+                        </Chip.Group>
+                    </Box>
 
                     {/* ── Frequency (chip presets + optional custom) ────── */}
                     <Box>
@@ -292,86 +249,27 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
                         {freqPreset === "custom" && (
                             <TextInput
                                 mt="xs"
+                                size="sm"
                                 placeholder="e.g. every 8 hours, with meals"
+                                leftSection={<IconClock size={16} />}
                                 value={freqCustom}
                                 onChange={(e) => setFreqCustom(e.currentTarget.value)}
                             />
                         )}
                     </Box>
 
-                    {/* ── Duration (number + unit + quick presets) ──────── */}
-                    <Box>
-                        <Text size="sm" fw={500} mb={8}>Duration</Text>
-                        <Group gap="sm" align="flex-end">
-                            <NumberInput
-                                placeholder="Amount"
-                                min={1}
-                                max={999}
-                                value={durationAmount}
-                                onChange={(v) => setDurationAmount(v === "" ? "" : Number(v))}
-                                style={{ flex: 1 }}
-                                hideControls={false}
-                                allowNegative={false}
-                                allowDecimal={false}
-                            />
-                            <Select
-                                data={[
-                                    { value: "days", label: "Days" },
-                                    { value: "weeks", label: "Weeks" },
-                                    { value: "months", label: "Months" },
-                                ]}
-                                value={durationUnit}
-                                onChange={(v) => setDurationUnit(v ?? "days")}
-                                style={{ width: 110 }}
-                            />
-                        </Group>
-                        <Group gap={6} mt={8} wrap="wrap">
-                            {(
-                                [
-                                    { label: "7 days", amount: 7, unit: "days" },
-                                    { label: "14 days", amount: 14, unit: "days" },
-                                    { label: "1 month", amount: 1, unit: "months" },
-                                    { label: "3 months", amount: 3, unit: "months" },
-                                    { label: "6 months", amount: 6, unit: "months" },
-                                ] as const
-                            ).map(({ label, amount, unit }) => (
-                                <Button
-                                    key={label}
-                                    size="compact-xs"
-                                    variant={durationAmount === amount && durationUnit === unit ? "filled" : "default"}
-                                    color={durationAmount === amount && durationUnit === unit ? "violet" : undefined}
-                                    radius="xl"
-                                    onClick={() => { setDurationAmount(amount); setDurationUnit(unit); }}
-                                >
-                                    {label}
-                                </Button>
-                            ))}
-                        </Group>
-                    </Box>
-
-                    {/* ── Condition + Instructions ──────────────────────── */}
-                    <TextInput
-                        label="Condition it treats"
-                        placeholder="e.g. Type 2 Diabetes"
-                        {...form.getInputProps("condition")}
-                    />
-                    <TextInput
-                        label="Instructions"
-                        placeholder="e.g. Take with food"
-                        {...form.getInputProps("instructions")}
-                    />
-
                     {/* ── Status ────────────────────────────────────────── */}
-                    <Select
-                        label="Status"
-                        data={[
-                            { value: "active", label: "Active" },
-                            { value: "paused", label: "Paused" },
-                            { value: "completed", label: "Completed" },
-                            { value: "discontinued", label: "Discontinued" },
-                        ]}
-                        {...form.getInputProps("status")}
-                    />
+                    {(form.values.status === "active" || form.values.status === "paused") && (
+                        <Group justify="space-between">
+                            <Text size="sm" fw={500}>Active</Text>
+                            <Switch
+                                size="md"
+                                color={colors.success}
+                                checked={form.values.status === "active"}
+                                onChange={(e) => form.setFieldValue("status", e.currentTarget.checked ? "active" : "paused")}
+                            />
+                        </Group>
+                    )}
 
                     <Group justify="flex-end" mt="xs">
                         <Button variant="default" onClick={handleClose} disabled={isPending}>
@@ -383,6 +281,6 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
                     </Group>
                 </Stack>
             </form>
-        </Modal>
+        </Modal >
     );
 }

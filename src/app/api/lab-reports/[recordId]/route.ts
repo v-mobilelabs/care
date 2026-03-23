@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { DeleteFileUseCase } from "@/data/sessions";
+import { DeleteFileUseCase } from "@/data/files";
 import {
   GetLabReportUseCase,
   DeleteLabReportUseCase,

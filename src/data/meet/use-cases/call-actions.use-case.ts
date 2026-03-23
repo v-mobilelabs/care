@@ -3,7 +3,6 @@ import { meetRepository } from "../repositories/meet.repository";
 import { rtdb } from "@/lib/firebase/admin";
 import { deleteChimeMeeting } from "@/lib/meet/chime";
 import { ApiError } from "@/lib/api/with-context";
-import { encounterRepository } from "@/data/encounters";
 import { recomputeQueuePositions } from "./recompute-queue";
 
 export class RejectCallUseCase {
@@ -86,9 +85,6 @@ export class EndCallUseCase {
     ]);
 
     // Deferred post-response work — neither blocks the caller.
-    after(() =>
-      encounterRepository.completeByRequestId(requestId).catch(console.error),
-    );
     after(() => recomputeQueuePositions(request.doctorId).catch(console.error));
   }
 }

@@ -5,16 +5,10 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 export interface VitalDocument {
   userId: string;
-  /** Biological sex — used for body-fat and WHR calculations */
-  sex?: "male" | "female";
-  /** Waist circumference in cm */
-  waistCm?: number;
-  /** Hip circumference in cm — WHR and female body-fat formula */
-  hipCm?: number;
-  /** Neck circumference in cm — used in Navy body-fat formula */
-  neckCm?: number;
-  /** Physical activity level */
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  /** Body weight in kg */
+  weightKg?: number;
+  /** Height in cm */
+  heightCm?: number;
   /** Systolic blood pressure in mmHg */
   systolicBp?: number;
   /** Diastolic blood pressure in mmHg */
@@ -27,10 +21,8 @@ export interface VitalDocument {
   temperatureC?: number;
   /** Respiratory rate in breaths/min */
   respiratoryRate?: number;
-  /** Blood glucose (random/casual) in mmol/L */
-  glucoseMmol?: number;
-  /** Optional note / context (e.g. "after exercise", "fasting") */
-  note?: string;
+  /** Blood glucose (random/casual) in mg/dL */
+  glucoseMgdl?: number;
   /** ISO-8601 date-time of the measurement (defaults to server time) */
   measuredAt: Timestamp;
   createdAt: Timestamp;
@@ -41,26 +33,32 @@ export interface VitalDocument {
 export interface VitalDto {
   id: string;
   userId: string;
-  sex?: "male" | "female";
-  waistCm?: number;
-  hipCm?: number;
-  neckCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  weightKg?: number;
+  heightCm?: number;
   systolicBp?: number;
   diastolicBp?: number;
   restingHr?: number;
   spo2?: number;
   temperatureC?: number;
   respiratoryRate?: number;
-  glucoseMmol?: number;
-  note?: string;
-  /** Derived: blood pressure classification (JNC-8 / ACC-AHA 2017) */
+  glucoseMgdl?: number;
+  /** Derived: BMI = weight(kg) / height(m)² */
+  bmi?: number;
+  /** Derived: blood pressure classification (ACC/AHA 2017) */
   bpCategory?: BpCategory;
+  /** Derived: heart rate classification */
+  hrCategory?: HrCategory;
+  /** Derived: SpO2 classification */
+  spo2Category?: Spo2Category;
+  /** Derived: temperature classification */
+  tempCategory?: TempCategory;
+  /** Derived: glucose classification (mg/dL random) */
+  glucoseCategory?: GlucoseCategory;
   measuredAt: string; // ISO-8601
   createdAt: string; // ISO-8601
 }
 
-// ── Blood-pressure classification ────────────────────────────────────────────
+// ── Blood-pressure classification (ACC/AHA 2017) ─────────────────────────────
 
 export type BpCategory =
   | "normal"
@@ -77,31 +75,97 @@ export function classifyBp(systolic: number, diastolic: number): BpCategory {
   return "normal";
 }
 
+// ── Heart-rate classification (resting, adults) ──────────────────────────────
+
+export type HrCategory = "low" | "normal" | "high";
+
+export function classifyHr(bpm: number): HrCategory {
+  if (bpm < 60) return "low";
+  if (bpm > 100) return "high";
+  return "normal";
+}
+
+// ── SpO2 classification ──────────────────────────────────────────────────────
+
+export type Spo2Category = "normal" | "low" | "critical";
+
+export function classifySpo2(pct: number): Spo2Category {
+  if (pct < 90) return "critical";
+  if (pct < 95) return "low";
+  return "normal";
+}
+
+// ── Temperature classification (°C) ─────────────────────────────────────────
+
+export type TempCategory =
+  | "low"
+  | "normal"
+  | "elevated"
+  | "fever"
+  | "high_fever";
+
+export function classifyTemp(c: number): TempCategory {
+  if (c < 36.1) return "low";
+  if (c <= 37.2) return "normal";
+  if (c <= 38.0) return "elevated";
+  if (c <= 39.4) return "fever";
+  return "high_fever";
+}
+
+// ── Blood-glucose classification (mg/dL, random / casual) ───────────────────
+
+export type GlucoseCategory = "low" | "normal" | "elevated" | "high";
+
+export function classifyGlucose(mgdl: number): GlucoseCategory {
+  if (mgdl < 70) return "low";
+  if (mgdl <= 140) return "normal";
+  if (mgdl <= 200) return "elevated";
+  return "high";
+}
+
+// ── BMI helper ──────────────────────────────────────────────────────────────
+
+export function calcBmi(weightKg: number, heightCm: number): number {
+  const heightM = heightCm / 100;
+  return Math.round((weightKg / (heightM * heightM)) * 10) / 10;
+}
+
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 export function toVitalDto(id: string, doc: VitalDocument): VitalDto {
   const dto: VitalDto = {
     id,
     userId: doc.userId,
-    sex: doc.sex,
-    waistCm: doc.waistCm,
-    hipCm: doc.hipCm,
-    neckCm: doc.neckCm,
-    activityLevel: doc.activityLevel,
+    weightKg: doc.weightKg,
+    heightCm: doc.heightCm,
     systolicBp: doc.systolicBp,
     diastolicBp: doc.diastolicBp,
     restingHr: doc.restingHr,
     spo2: doc.spo2,
     temperatureC: doc.temperatureC,
     respiratoryRate: doc.respiratoryRate,
-    glucoseMmol: doc.glucoseMmol,
-    note: doc.note,
+    glucoseMgdl: doc.glucoseMgdl,
     measuredAt: doc.measuredAt.toDate().toISOString(),
     createdAt: doc.createdAt.toDate().toISOString(),
   };
 
+  if (doc.weightKg !== undefined && doc.heightCm !== undefined) {
+    dto.bmi = calcBmi(doc.weightKg, doc.heightCm);
+  }
   if (doc.systolicBp !== undefined && doc.diastolicBp !== undefined) {
     dto.bpCategory = classifyBp(doc.systolicBp, doc.diastolicBp);
+  }
+  if (doc.restingHr !== undefined) {
+    dto.hrCategory = classifyHr(doc.restingHr);
+  }
+  if (doc.spo2 !== undefined) {
+    dto.spo2Category = classifySpo2(doc.spo2);
+  }
+  if (doc.temperatureC !== undefined) {
+    dto.tempCategory = classifyTemp(doc.temperatureC);
+  }
+  if (doc.glucoseMgdl !== undefined) {
+    dto.glucoseCategory = classifyGlucose(doc.glucoseMgdl);
   }
 
   return dto;
@@ -111,21 +175,15 @@ export function toVitalDto(id: string, doc: VitalDocument): VitalDto {
 
 export const CreateVitalSchema = z.object({
   userId: z.string().min(1),
-  sex: z.enum(["male", "female"]).optional(),
-  waistCm: z.number().positive().optional(),
-  hipCm: z.number().positive().optional(),
-  neckCm: z.number().positive().optional(),
-  activityLevel: z
-    .enum(["sedentary", "light", "moderate", "active", "very_active"])
-    .optional(),
+  weightKg: z.number().min(1).max(500).optional(),
+  heightCm: z.number().min(30).max(300).optional(),
   systolicBp: z.number().int().min(50).max(300).optional(),
   diastolicBp: z.number().int().min(20).max(200).optional(),
   restingHr: z.number().int().min(20).max(300).optional(),
   spo2: z.number().min(50).max(100).optional(),
   temperatureC: z.number().min(30).max(45).optional(),
   respiratoryRate: z.number().int().min(4).max(60).optional(),
-  glucoseMmol: z.number().min(1).max(50).optional(),
-  note: z.string().max(500).optional(),
+  glucoseMgdl: z.number().min(10).max(800).optional(),
   /** ISO-8601 string; defaults to now when omitted */
   measuredAt: z.iso.datetime().optional(),
 });

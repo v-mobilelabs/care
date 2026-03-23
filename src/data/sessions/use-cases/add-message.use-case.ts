@@ -27,6 +27,8 @@ const AddMessageUseCaseSchema = z.object({
       totalTokens: z.number().int().nonnegative(),
     })
     .optional(),
+  /** The specialist agent that produced this message (assistant messages only) */
+  agentType: z.string().optional(),
 });
 
 export type AddMessageUseCaseInput = z.infer<typeof AddMessageUseCaseSchema>;
@@ -75,6 +77,7 @@ export class AddMessageUseCase extends UseCase<
       role: input.role,
       content: input.content,
       ...(input.usage && { usage: input.usage }),
+      ...(input.agentType && { agentType: input.agentType }),
     });
   }
 }

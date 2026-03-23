@@ -2,6 +2,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   createAgentUIStream,
+  createIdGenerator,
   consumeStream,
 } from "ai";
 import { after } from "next/server";
@@ -11,23 +12,196 @@ import {
   AddMessageUseCase,
   PrepareChatUseCase,
   SetSessionAgentUseCase,
+  messageRepository,
 } from "@/data/sessions";
+import { CreateAssessmentUseCase } from "@/data/assessments";
 import { CacheTags } from "@/data/cached";
 import {
   extractAndSaveMemories,
   extractTextFromParts,
 } from "@/data/memory/service/extract-memories";
 import { CreditsExhaustedError, GuardrailError } from "@/lib/errors";
+import { contextCacheService } from "@/data/shared/service/context-cache.service";
+
+type ToolPartLike = {
+  type?: string;
+  state?: string;
+  toolCallId?: string;
+  input?: Record<string, unknown>;
+  args?: Record<string, unknown>;
+  output?: unknown;
+};
+
+type StartAssessmentPayload = {
+  runId?: string;
+  title: string;
+  condition?: string;
+  guideline?: string;
+  estimatedQuestions?: number;
+  estimatedMinutes?: string;
+};
+
+type AskQuestionInputPayload = {
+  question?: string;
+  type?: string;
+  options?: string[];
+};
+
+type ExtractedQaPair = {
+  question: string;
+  questionType: string;
+  options?: string[];
+  answer: string;
+};
+
+function toToolPart(part: unknown): ToolPartLike | null {
+  if (!part || typeof part !== "object") return null;
+  return part as ToolPartLike;
+}
+
+function getOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function getOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+function getOptionalOptions(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const options = value.filter(
+    (option): option is string => typeof option === "string",
+  );
+  return options.length > 0 ? options : undefined;
+}
+
+function normalizeStartPayload(part: ToolPartLike): StartAssessmentPayload {
+  const payload = part.input ?? part.args ?? {};
+  const titleValue = getOptionalString(payload.title)?.trim();
+  const title =
+    titleValue && titleValue.length > 0 ? titleValue : "Clinical Assessment";
+  const condition = getOptionalString(payload.condition);
+  const guideline = getOptionalString(payload.guideline);
+  const estimatedQuestions = getOptionalNumber(payload.estimatedQuestions);
+  const estimatedMinutes = getOptionalString(payload.estimatedMinutes);
+
+  return {
+    runId: part.toolCallId,
+    title,
+    ...(condition ? { condition } : {}),
+    ...(guideline ? { guideline } : {}),
+    ...(estimatedQuestions ? { estimatedQuestions } : {}),
+    ...(estimatedMinutes ? { estimatedMinutes } : {}),
+  };
+}
+
+function extractStarts(parts: unknown[]): StartAssessmentPayload[] {
+  const starts: StartAssessmentPayload[] = [];
+  for (const raw of parts) {
+    const p = toToolPart(raw);
+    if (p?.type !== "tool-startAssessment") continue;
+    if (p.state === "input-streaming") continue;
+    starts.push(normalizeStartPayload(p));
+  }
+  return starts;
+}
+
+function toAnsweredQaPair(part: ToolPartLike | null): ExtractedQaPair | null {
+  if (part?.type !== "tool-askQuestion") return null;
+  if (part.state !== "output-available" && part.state !== "result") return null;
+  if (typeof part.output !== "string" || part.output.trim().length === 0)
+    return null;
+
+  const input = (part.input ?? part.args ?? {}) as AskQuestionInputPayload;
+  if (!input.question || !input.type) return null;
+
+  const options = getOptionalOptions(input.options);
+  return {
+    question: input.question,
+    questionType: input.type,
+    ...(options ? { options } : {}),
+    answer: part.output,
+  };
+}
+
+function extractAnsweredQaPairs(parts: unknown[]) {
+  const out: ExtractedQaPair[] = [];
+
+  for (const raw of parts) {
+    const pair = toAnsweredQaPair(toToolPart(raw));
+    if (pair) out.push(pair);
+  }
+
+  return out;
+}
+
+// eslint-disable-next-line max-lines-per-function
+async function syncAssessmentsFromAssistantParts(args: {
+  userId: string;
+  sessionId: string;
+  dependentId?: string;
+  parts: unknown[];
+}) {
+  const starts = extractStarts(args.parts);
+  const qa = extractAnsweredQaPairs(args.parts);
+  if (starts.length === 0 && qa.length === 0) return;
+
+  let activeRunId: string | undefined;
+  let latestTitle = "Clinical Assessment";
+  let latestCondition: string | undefined;
+  let latestGuideline: string | undefined;
+  let latestEstimatedQuestions: number | undefined;
+  let latestEstimatedMinutes: string | undefined;
+
+  for (const start of starts) {
+    latestTitle = start.title;
+    latestCondition = start.condition;
+    latestGuideline = start.guideline;
+    latestEstimatedQuestions = start.estimatedQuestions;
+    latestEstimatedMinutes = start.estimatedMinutes;
+    const saved = await new CreateAssessmentUseCase(args.dependentId).execute({
+      userId: args.userId,
+      sessionId: args.sessionId,
+      ...(start.runId ? { runId: start.runId } : {}),
+      title: start.title,
+      condition: start.condition,
+      guideline: start.guideline,
+      estimatedQuestions: start.estimatedQuestions,
+      estimatedMinutes: start.estimatedMinutes,
+      status: "active",
+      startedAt: new Date().toISOString(),
+      qa: [],
+    });
+    activeRunId = saved.runId ?? start.runId;
+  }
+
+  if (qa.length > 0) {
+    await new CreateAssessmentUseCase(args.dependentId).execute({
+      userId: args.userId,
+      sessionId: args.sessionId,
+      ...(activeRunId ? { runId: activeRunId } : {}),
+      title: latestTitle,
+      condition: latestCondition,
+      guideline: latestGuideline,
+      estimatedQuestions: latestEstimatedQuestions,
+      estimatedMinutes: latestEstimatedMinutes,
+      status: "active",
+      qa,
+    });
+  }
+}
 
 // Increased from 60s to 180s to support complex tool executions like dietPlanTool
 // which generates 35+ detailed meal entries with nutrition data
 export const maxDuration = 180;
 
 export const POST = WithContext(
+  // eslint-disable-next-line max-lines-per-function
   async ({ user, dependentId, profileId, req }) => {
     console.log("[Chat API] Request started");
 
     const body = await req.json();
+    const isUserTurn = body?.message?.role === "user";
 
     // ── Prepare: validate, route, sanitize ─────────────────────────────────
     const {
@@ -39,6 +213,7 @@ export const POST = WithContext(
       loadingHints,
       sessionId,
       ctx,
+      toolOutputMerge,
     } = await new PrepareChatUseCase().execute({
       userId: user.uid,
       profileId,
@@ -50,32 +225,38 @@ export const POST = WithContext(
     let persistPayload: {
       responseParts: unknown[];
       userContent: string;
+      /** Firestore doc ID of the continued assistant message (tool-output auto-send). */
+      continuationMessageId?: string;
     } | null = null;
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    let zeroOutputSteps = 0;
 
     // Schedule Firestore persistence via after() — the response is sent immediately
     // without blocking on DB writes. Next.js after() keeps the serverless function
     // alive until the task finishes, so writes are guaranteed to complete.
+    // eslint-disable-next-line max-lines-per-function
     after(async () => {
-      // Always save the user message — even if the client disconnected before
-      // the AI produced any output. This ensures the conversation history in
-      // Firestore stays consistent with what the client has already shown.
-      try {
-        await new AddMessageUseCase().execute({
-          userId: user.uid,
-          profileId,
-          sessionId,
-          title: ctx.title,
-          role: "user",
-          content:
-            ctx.storableParts.length > 0
-              ? JSON.stringify(ctx.storableParts)
-              : ctx.userQuery,
-        });
-      } catch (saveError) {
-        console.error("[Chat API] Failed to save user message:", saveError);
+      // Persist user message only for real user turns. Auto-submit cycles
+      // (tool outputs / approvals) send assistant messages and must not create
+      // duplicate user entries.
+      if (isUserTurn) {
+        try {
+          await new AddMessageUseCase().execute({
+            userId: user.uid,
+            profileId,
+            sessionId,
+            title: ctx.title,
+            role: "user",
+            content:
+              ctx.storableParts.length > 0
+                ? JSON.stringify(ctx.storableParts)
+                : ctx.userQuery,
+          });
+        } catch (saveError) {
+          console.error("[Chat API] Failed to save user message:", saveError);
+        }
       }
 
       // Only save the assistant message if we captured a response (onFinish
@@ -100,16 +281,40 @@ export const POST = WithContext(
         );
       }
       try {
-        console.log("[Chat API] Saving assistant message to Firestore...");
-        await new AddMessageUseCase().execute({
-          userId: user.uid,
-          profileId,
-          sessionId,
-          role: "assistant",
-          content: JSON.stringify(persistPayload.responseParts),
-          ...(capturedUsage && { usage: capturedUsage }),
-        });
+        if (persistPayload.continuationMessageId) {
+          // Tool-output auto-send: update the existing assistant message
+          // with the complete parts (old + new) from the SDK continuation.
+          console.log(
+            "[Chat API] Updating existing assistant message (continuation)...",
+          );
+          await messageRepository.updateContent(
+            user.uid,
+            profileId,
+            sessionId,
+            persistPayload.continuationMessageId,
+            JSON.stringify(persistPayload.responseParts),
+            capturedUsage,
+          );
+        } else {
+          console.log("[Chat API] Saving assistant message to Firestore...");
+          await new AddMessageUseCase().execute({
+            userId: user.uid,
+            profileId,
+            sessionId,
+            role: "assistant",
+            content: JSON.stringify(persistPayload.responseParts),
+            ...(capturedUsage && { usage: capturedUsage }),
+            agentType,
+          });
+        }
         console.log("[Chat API] Assistant message saved successfully");
+
+        await syncAssessmentsFromAssistantParts({
+          userId: user.uid,
+          sessionId,
+          dependentId,
+          parts: persistPayload.responseParts,
+        });
       } catch (saveError) {
         console.error(
           "[Chat API] Failed to save assistant message:",
@@ -117,17 +322,24 @@ export const POST = WithContext(
         );
       }
 
-      // Bust the server-side usage cache so the next SSR render shows updated credits.
+      // Bust server-side caches so the next SSR render reflects mutations.
       revalidateTag(CacheTags.usage(user.uid), "seconds");
+      revalidateTag(CacheTags.sessions(user.uid), "seconds");
+      revalidateTag(CacheTags.assessments(user.uid), "minutes");
+      revalidateTag(CacheTags.medications(user.uid), "minutes");
 
       // Persist the agent type on the session for cross-worker routing affinity.
       try {
-        await new SetSessionAgentUseCase().execute({
-          userId: user.uid,
-          profileId,
-          sessionId,
-          agentType,
-        });
+        // Triage can handoff to a specialist during the tool loop.
+        // Do not overwrite that handoff at the end of the request.
+        if (agentType !== "triageNurse") {
+          await new SetSessionAgentUseCase().execute({
+            userId: user.uid,
+            profileId,
+            sessionId,
+            agentType,
+          });
+        }
       } catch (agentErr) {
         console.error(
           "[Chat API] Failed to persist session agent type:",
@@ -155,26 +367,10 @@ export const POST = WithContext(
     }) {
       if (stepResult.usage) {
         totalInputTokens += stepResult.usage.inputTokens ?? 0;
-        totalOutputTokens += stepResult.usage.outputTokens ?? 0;
+        const stepOutput = stepResult.usage.outputTokens ?? 0;
+        totalOutputTokens += stepOutput;
+        if (stepOutput === 0) zeroOutputSteps++;
       }
-    }
-
-    function handleFinish({
-      responseMessage,
-      finishReason,
-    }: {
-      responseMessage: { parts?: unknown[] };
-      finishReason?: string;
-    }) {
-      console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
-      if (!responseMessage.parts?.length) return;
-      persistPayload = {
-        responseParts: responseMessage.parts,
-        userContent:
-          ctx.storableParts.length > 0
-            ? JSON.stringify(ctx.storableParts)
-            : ctx.userQuery,
-      };
     }
 
     function handleStreamError(error: unknown): string {
@@ -192,23 +388,100 @@ export const POST = WithContext(
       return "An error occurred while generating the response.";
     }
 
+    const generateMessageId = createIdGenerator({ prefix: "msg", size: 16 });
+
     const stream = createUIMessageStream({
+      // eslint-disable-next-line max-lines-per-function
       execute: async ({ writer }) => {
         writer.write({
           type: "data-progress",
-          data: { stage: "Preparing your response…", loadingHints },
+          data: { stage: "Preparing your response…", loadingHints, agentType },
+          transient: true,
         });
+
+        // Write a start part with a server-generated message ID for user turns.
+        // For tool-output auto-sends (non-user turns) we skip this so the
+        // client SDK's continuation behavior works — it keeps the existing
+        // assistant message ID and replaces (not pushes) the message.
+        if (isUserTurn) {
+          writer.write({
+            type: "start",
+            messageId: generateMessageId(),
+          });
+        }
 
         const agentStream = await createAgentUIStream({
           agent,
           uiMessages: sanitizedMessages,
           options,
           abortSignal: req.signal,
+          sendStart: false,
           originalMessages: messages as Parameters<
             typeof createAgentUIStream
           >[0]["originalMessages"],
+          generateMessageId,
           onStepFinish: handleStepFinish,
-          onFinish: handleFinish,
+          // eslint-disable-next-line max-lines-per-function
+          onFinish: ({ responseMessage, finishReason }) => {
+            console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
+            // Only persist if the response has meaningful content — step-start
+            // parts are always present even when the model returns 0 tokens.
+            const hasMeaningfulContent = responseMessage.parts?.some(
+              (p: { type: string; text?: string }) =>
+                (p.type === "text" &&
+                  typeof p.text === "string" &&
+                  p.text.trim().length > 0) ||
+                p.type.startsWith("tool-"),
+            );
+            if (hasMeaningfulContent) {
+              const storableParts = responseMessage.parts.filter(
+                (p: { type: string }) => p.type !== "step-start",
+              );
+              persistPayload = {
+                responseParts: storableParts,
+                userContent:
+                  ctx.storableParts.length > 0
+                    ? JSON.stringify(ctx.storableParts)
+                    : ctx.userQuery,
+                // When the server used continuation (tool-output auto-send),
+                // responseMessage.id is the Firestore doc ID of the existing
+                // assistant message. We update it in-place instead of adding.
+                continuationMessageId:
+                  !isUserTurn && toolOutputMerge
+                    ? toolOutputMerge.messageId
+                    : undefined,
+              };
+            } else {
+              console.warn(
+                `[Chat API] Empty model response (0 meaningful parts). finishReason: ${finishReason}, ` +
+                  `totalOutput: ${totalOutputTokens}, zeroOutputSteps: ${zeroOutputSteps}`,
+              );
+              // Invalidate the context cache for this agent — a stale cache may
+              // have caused the model to produce no output.
+              contextCacheService.invalidate(agentType);
+              // Signal the client so it can show a retry prompt.
+              writer.write({
+                type: "data-error",
+                data: {
+                  code: "empty_response",
+                  message:
+                    "The AI returned an empty response. Please try again.",
+                },
+                transient: true,
+              });
+            }
+            // Send token usage to the client as a custom stream part.
+            if (totalInputTokens > 0 || totalOutputTokens > 0) {
+              writer.write({
+                type: "data-usage",
+                data: {
+                  inputTokens: totalInputTokens,
+                  outputTokens: totalOutputTokens,
+                },
+                transient: true,
+              });
+            }
+          },
         });
 
         writer.merge(agentStream);

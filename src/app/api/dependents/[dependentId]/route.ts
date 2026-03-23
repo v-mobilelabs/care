@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   UpdateDependentUseCase,
   DeleteDependentUseCase,
 } from "@/data/dependents";
+import { CacheTags } from "@/data/cached";
 
 // PUT /api/dependents/[dependentId] — update a dependent profile
 export const PUT = WithContext<{ dependentId: string }>(
@@ -14,6 +16,7 @@ export const PUT = WithContext<{ dependentId: string }>(
       ownerId: user.uid,
       dependentId,
     });
+    revalidateTag(CacheTags.dependents(user.uid), "minutes");
     return NextResponse.json(dependent);
   },
 );
@@ -25,6 +28,7 @@ export const DELETE = WithContext<{ dependentId: string }>(
       ownerId: user.uid,
       dependentId,
     });
+    revalidateTag(CacheTags.dependents(user.uid), "minutes");
     return NextResponse.json({ ok: true });
   },
 );

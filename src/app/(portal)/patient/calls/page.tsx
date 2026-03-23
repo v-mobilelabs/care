@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Hydrate } from "@/ui/hydrate";
 import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
+import { chatKeys } from "@/app/(portal)/patient/_keys";
 import { CallsContent } from "./_content";
 import CallsLoading from "./loading";
 
@@ -11,7 +12,7 @@ export const metadata = { title: "Call History" };
 async function CallsData({ userId, kind }: Readonly<{ userId: string; kind: "patient" | "doctor" }>) {
     const queryClient = getQueryClient();
     await queryClient.prefetchQuery({
-        queryKey: ["meet", "history"] as const,
+        queryKey: chatKeys.callHistory(),
         queryFn: async () => {
             const { ListCallHistoryUseCase } = await import("@/data/meet");
             return new ListCallHistoryUseCase().execute({ userId, kind });

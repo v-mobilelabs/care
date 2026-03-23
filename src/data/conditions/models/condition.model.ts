@@ -5,17 +5,17 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 export interface ConditionDocument {
   userId: string;
-  /** The chat session where this condition was detected */
+  /** The chat session that detected this condition */
   sessionId?: string;
   name: string;
-  /** Lowercase name used for duplicate detection queries */
-  nameLower?: string;
+  /** ICD-10 diagnostic code */
   icd10?: string;
-  severity: "mild" | "moderate" | "severe" | "critical";
-  status: "suspected" | "probable" | "confirmed";
-  description: string;
-  symptoms: string[];
+  severity: "mild" | "moderate" | "severe";
+  status: "active" | "resolved" | "chronic" | "suspected";
+  description?: string;
+  symptoms?: string[];
   createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 // ── DTO — outbound ────────────────────────────────────────────────────────────
@@ -26,11 +26,12 @@ export interface ConditionDto {
   sessionId?: string;
   name: string;
   icd10?: string;
-  severity: "mild" | "moderate" | "severe" | "critical";
-  status: "suspected" | "probable" | "confirmed";
-  description: string;
-  symptoms: string[];
+  severity: "mild" | "moderate" | "severe";
+  status: "active" | "resolved" | "chronic" | "suspected";
+  description?: string;
+  symptoms?: string[];
   createdAt: string; // ISO-8601
+  updatedAt: string; // ISO-8601
 }
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ export function toConditionDto(
     description: doc.description,
     symptoms: doc.symptoms,
     createdAt: doc.createdAt.toDate().toISOString(),
+    updatedAt: doc.updatedAt.toDate().toISOString(),
   };
 }
 
@@ -57,13 +59,16 @@ export function toConditionDto(
 
 export const CreateConditionSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().optional(),
   sessionId: z.string().optional(),
   name: z.string().min(1),
   icd10: z.string().optional(),
-  severity: z.enum(["mild", "moderate", "severe", "critical"]),
-  status: z.enum(["suspected", "probable", "confirmed"]),
-  description: z.string().min(1),
-  symptoms: z.array(z.string()),
+  severity: z.enum(["mild", "moderate", "severe"]).default("mild"),
+  status: z
+    .enum(["active", "resolved", "chronic", "suspected"])
+    .default("active"),
+  description: z.string().optional(),
+  symptoms: z.array(z.string()).optional(),
 });
 
 export type CreateConditionInput = z.infer<typeof CreateConditionSchema>;
@@ -72,7 +77,7 @@ export type CreateConditionInput = z.infer<typeof CreateConditionSchema>;
 
 export const ListConditionsSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  limit: z.number().int().min(1).max(100).optional().default(50),
+  limit: z.number().int().min(1).max(200).optional().default(100),
 });
 
 export type ListConditionsInput = z.infer<typeof ListConditionsSchema>;

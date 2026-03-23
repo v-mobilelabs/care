@@ -1,5 +1,8 @@
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { GetFileSignedUrlUseCase } from "@/data/sessions";
+import { revalidateTag } from "next/cache";
+import { NextResponse } from "next/server";
+import { GetFileSignedUrlUseCase, DeleteFileUseCase } from "@/data/files";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/files/[fileId] — redirect to a fresh signed download URL
 export const GET = WithContext<{ fileId: string }>(
@@ -55,5 +58,18 @@ export const POST = WithContext<{ fileId: string }>(
         },
       },
     );
+  },
+);
+
+// DELETE /api/files/[fileId] — delete a file
+export const DELETE = WithContext<{ fileId: string }>(
+  async ({ user, profileId }, { fileId }) => {
+    await new DeleteFileUseCase().execute({
+      userId: user.uid,
+      profileId,
+      fileId,
+    });
+    revalidateTag(CacheTags.files(user.uid), "minutes");
+    return NextResponse.json({ ok: true });
   },
 );

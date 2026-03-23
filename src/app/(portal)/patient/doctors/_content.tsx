@@ -3,11 +3,9 @@ import {
     Badge,
     Box,
     Button,
-    Card,
     Container,
     Divider,
     Group,
-    ScrollArea,
     Skeleton,
     Stack,
     Text,
@@ -70,114 +68,103 @@ function RenderContent({
     }
     return (
         <>
-            <Card radius="xl" withBorder padding={0}>
+            <Stack>
                 {/* ── Header ── */}
-                <Card.Section
-                    withBorder
-                    inheritPadding
-                    px="md"
-                    py="md"
-                    bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))"
-                >
-                    <Group justify="space-between" align="center">
-                        <Group gap="sm">
-                            <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                                <IconStethoscope size={20} />
-                            </ThemeIcon>
-                            <Box>
-                                <Title order={4} lh={1.2}>My Doctors</Title>
-                                <Group gap="xs" align="center">
-                                    <Text size="xs" c="dimmed">{doctorCountLabel()}</Text>
-                                    {onlineCount > 0 && (
-                                        <Badge size="xs" variant="dot" color={colors.success}>
-                                            {onlineCount} online
-                                        </Badge>
-                                    )}
-                                </Group>
-                            </Box>
-                        </Group>
-                        <Button
-                            variant="light"
-                            size="sm"
-                            leftSection={<IconUserCheck size={16} />}
-                            rightSection={
-                                pendingInvites.length > 0 ? (
-                                    <Badge size="xs" color="yellow" variant="filled" circle>
-                                        {pendingInvites.length}
+                <Group justify="space-between" align="center">
+                    <Group gap="sm">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                            <IconStethoscope size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>My Doctors</Title>
+                            <Group gap="xs" align="center">
+                                <Text size="xs" c="dimmed">{doctorCountLabel()}</Text>
+                                {onlineCount > 0 && (
+                                    <Badge size="xs" variant="dot" color={colors.success}>
+                                        {onlineCount} online
                                     </Badge>
-                                ) : null
-                            }
-                            onClick={() => setInviteModalOpen(true)}
-                        >
-                            Invites
-                        </Button>
-                    </Group>
-                </Card.Section>
-                {/* ── Doctors list ── */}
-                <Card.Section style={{ flex: 1, overflow: "hidden" }}>
-                    <ScrollArea style={{ height: "100%" }}>
-                        <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
-                            {doctorsLoading && (
-                                <Stack gap="md">
-                                    {["a", "b", "c"].map((k) => (
-                                        <Skeleton key={k} height={120} radius="lg" />
-                                    ))}
-                                </Stack>
-                            )}
-                            {!doctorsLoading && totalCount === 0 && (
-                                <Box py={80} style={{ textAlign: "center" }}>
-                                    <ThemeIcon
-                                        size={64}
-                                        radius="xl"
-                                        color="primary"
-                                        variant="light"
-                                        mx="auto"
-                                        mb="md"
-                                    >
-                                        <IconStethoscope size={32} />
-                                    </ThemeIcon>
-                                    <Text fw={600} size="sm" mb={6}>No doctors yet</Text>
-                                    <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
-                                        Your healthcare providers will appear here once a doctor
-                                        connects with you or invites you to share your records.
-                                    </Text>
-                                </Box>
-                            )}
-                            {!doctorsLoading && doctors.length > 0 && (
-                                <Stack gap="md">
-                                    {doctors.map((doctor) => (
-                                        <DoctorCard
-                                            key={doctor.id}
-                                            doctor={doctor}
-                                            onDelete={() => handleDelete(doctor)}
-                                        />
-                                    ))}
-                                </Stack>
-                            )}
-                            {!doctorsLoading && connectedInvites.length > 0 && (
-                                <Stack gap="md" mt={doctors.length > 0 ? "md" : 0}>
-                                    {doctors.length > 0 && (
-                                        <Group gap={6} mt={4}>
-                                            <Divider style={{ flex: 1 }} />
-                                            <Text size="xs" c="dimmed" fw={500}>
-                                                Connected via invite
-                                            </Text>
-                                            <Divider style={{ flex: 1 }} />
-                                        </Group>
-                                    )}
-                                    {connectedInvites.map((invite) => (
-                                        <ConnectedDoctorCard
-                                            key={invite.doctorId}
-                                            invite={invite}
-                                            onRevoke={confirmRevoke}
-                                        />
-                                    ))}
-                                </Stack>
-                            )}
+                                )}
+                            </Group>
                         </Box>
-                    </ScrollArea>
-                </Card.Section>
-            </Card>
+                    </Group>
+                    <Button
+                        variant="light"
+                        size="sm"
+                        leftSection={<IconUserCheck size={16} />}
+                        rightSection={
+                            pendingInvites.length > 0 ? (
+                                <Badge size="xs" color="yellow" variant="filled" circle>
+                                    {pendingInvites.length}
+                                </Badge>
+                            ) : null
+                        }
+                        onClick={() => setInviteModalOpen(true)}
+                    >
+                        Invites
+                    </Button>
+                </Group>
+
+                {/* ── Doctors list ── */}
+                <Box>
+                    {doctorsLoading && (
+                        <Stack gap="md">
+                            {["a", "b", "c"].map((k) => (
+                                <Skeleton key={k} height={120} radius="md" />
+                            ))}
+                        </Stack>
+                    )}
+                    {!doctorsLoading && totalCount === 0 && (
+                        <Box py={80} style={{ textAlign: "center" }}>
+                            <ThemeIcon
+                                size={64}
+                                radius="xl"
+                                color="primary"
+                                variant="light"
+                                mx="auto"
+                                mb="md"
+                            >
+                                <IconStethoscope size={32} />
+                            </ThemeIcon>
+                            <Text fw={600} size="sm" mb={6}>No doctors yet</Text>
+                            <Text size="sm" c="dimmed" maw={300} mx="auto" lh={1.6}>
+                                Your healthcare providers will appear here once a doctor
+                                connects with you or invites you to share your records.
+                            </Text>
+                        </Box>
+                    )}
+                    {!doctorsLoading && doctors.length > 0 && (
+                        <Stack gap="md">
+                            {doctors.map((doctor) => (
+                                <DoctorCard
+                                    key={doctor.id}
+                                    doctor={doctor}
+                                    onDelete={() => handleDelete(doctor)}
+                                />
+                            ))}
+                        </Stack>
+                    )}
+                    {!doctorsLoading && connectedInvites.length > 0 && (
+                        <Stack gap="md" mt={doctors.length > 0 ? "md" : 0}>
+                            {doctors.length > 0 && (
+                                <Group gap={6} mt={4}>
+                                    <Divider style={{ flex: 1 }} />
+                                    <Text size="xs" c="dimmed" fw={500}>
+                                        Connected via invite
+                                    </Text>
+                                    <Divider style={{ flex: 1 }} />
+                                </Group>
+                            )}
+                            {connectedInvites.map((invite) => (
+                                <ConnectedDoctorCard
+                                    key={invite.doctorId}
+                                    invite={invite}
+                                    onRevoke={confirmRevoke}
+                                />
+                            ))}
+                        </Stack>
+                    )}
+                </Box>
+            </Stack>
             <InviteModal
                 opened={inviteModalOpen}
                 onClose={() => setInviteModalOpen(false)}

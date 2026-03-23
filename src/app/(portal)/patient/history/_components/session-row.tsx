@@ -13,7 +13,9 @@ export function SessionRow({ session, isPendingDelete, onDelete }: Readonly<{
         <Paper
             component={Link}
             href={`/patient/assistant?id=${session.id}`}
-            withBorder
+            withBorder={false}
+            shadow="0"
+            bg="light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-9))"
             radius="md"
             px="md"
             py="sm"

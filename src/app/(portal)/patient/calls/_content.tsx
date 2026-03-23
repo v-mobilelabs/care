@@ -1,13 +1,16 @@
 "use client";
+import { useState } from "react";
 import {
     Avatar,
     Badge,
     Box,
     Button,
     Collapse,
+    Container,
     Divider,
     Group,
     Loader,
+    Pagination,
     Paper,
     ScrollArea,
     Skeleton,
@@ -30,11 +33,12 @@ import {
     IconChevronUp,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import Link, { useLinkStatus } from "@/ui/link";
 import { useCallHistory } from "./_query";
 import type { CallRequestDto, CallRequestStatus } from "@/data/meet";
 import { colors } from "@/ui/tokens";
+
+const PAGE_SIZE = 10;
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
@@ -244,26 +248,17 @@ function CallCard({ call }: Readonly<{ call: CallRequestDto }>) {
 export function CallsContent() {
     const { data: calls, isLoading, error } = useCallHistory();
     const router = useRouter();
+    const [page, setPage] = useState(1);
+
+    const allCalls = calls ?? [];
+    const totalPages = Math.max(1, Math.ceil(allCalls.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = allCalls.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     return (
-        <Box
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                overflow: "hidden",
-            }}
-        >
-            {/* Header */}
-            <Box
-                px={{ base: "md", sm: "xl" }}
-                py="md"
-                style={{
-                    flexShrink: 0,
-                    borderBottom: "1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5))",
-                    background: "light-dark(white, var(--mantine-color-dark-8))",
-                }}
-            >
+        <Container pt="md">
+            <Stack>
+                {/* Header */}
                 <Group gap="sm">
                     <ThemeIcon size={36} radius="md" color="primary" variant="light">
                         <IconVideo size={20} />
@@ -275,96 +270,102 @@ export function CallsContent() {
                         </Text>
                     </Box>
                 </Group>
-            </Box>
 
-            {/* Scrollable content */}
-            <Box style={{ flex: 1, overflow: "hidden" }}>
-                <ScrollArea style={{ height: "100%" }}>
-                    <Box px={{ base: "md", sm: "xl" }} py="lg" maw={800} mx="auto">
-                        {(() => {
-                            if (isLoading) {
-                                return (
-                                    <Stack gap="sm">
-                                        {["a", "b", "c"].map((k) => (
-                                            <Skeleton key={k} height={80} radius="lg" />
-                                        ))}
-                                    </Stack>
-                                );
-                            }
-
-                            if (error) {
-                                return (
-                                    <Paper withBorder radius="lg" p="xl">
-                                        <Stack align="center" gap="md" py="md">
-                                            <ThemeIcon size={52} radius="xl" color="red" variant="light">
-                                                <IconPhoneX size={26} />
-                                            </ThemeIcon>
-                                            <Stack gap={4} align="center">
-                                                <Text fw={700} size="sm">Failed to load call history</Text>
-                                                <Text size="xs" c="dimmed">Something went wrong. Please try again.</Text>
-                                            </Stack>
-                                            <Button
-                                                size="xs"
-                                                variant="light"
-                                                color="primary"
-                                                onClick={() => router.refresh()}
-                                            >
-                                                Try again
-                                            </Button>
-                                        </Stack>
-                                    </Paper>
-                                );
-                            }
-
-                            if (!calls || calls.length === 0) {
-                                return (
-                                    <Paper
-                                        withBorder
-                                        radius="lg"
-                                        p="xl"
-                                        style={{
-                                            background: "light-dark(var(--mantine-color-primary-0), rgba(99,102,241,0.06))",
-                                        }}
-                                    >
-                                        <Stack align="center" gap="md" py="xl">
-                                            <ThemeIcon size={64} radius="xl" color="primary" variant="light">
-                                                <IconVideo size={32} />
-                                            </ThemeIcon>
-                                            <Stack gap={6} align="center">
-                                                <Title order={4}>No calls yet</Title>
-                                                <Text size="sm" c="dimmed" ta="center" maw={320}>
-                                                    Your video consultation history with doctors will appear here.
-                                                </Text>
-                                            </Stack>
-                                            <Button
-                                                variant="light"
-                                                color="primary"
-                                                size="sm"
-                                                leftSection={<IconVideo size={16} />}
-                                                component={Link}
-                                                href="/patient/connect"
-                                            >
-                                                See a Doctor
-                                            </Button>
-                                        </Stack>
-                                    </Paper>
-                                );
-                            }
-
+                {/* Content */}
+                <Box>
+                    {(() => {
+                        if (isLoading) {
                             return (
                                 <Stack gap="sm">
-                                    <Text size="xs" c="dimmed" fw={500}>
-                                        {calls.length} consultation{calls.length === 1 ? "" : "s"}
-                                    </Text>
-                                    {calls.map((call) => (
-                                        <CallCard key={call.id} call={call} />
+                                    {["a", "b", "c"].map((k) => (
+                                        <Skeleton key={k} height={80} radius="md" />
                                     ))}
                                 </Stack>
                             );
-                        })()}
-                    </Box>
-                </ScrollArea>
-            </Box>
-        </Box>
+                        }
+
+                        if (error) {
+                            return (
+                                <Paper withBorder radius="md" p="xl">
+                                    <Stack align="center" gap="md" py="md">
+                                        <ThemeIcon size={52} radius="xl" color="red" variant="light">
+                                            <IconPhoneX size={26} />
+                                        </ThemeIcon>
+                                        <Stack gap={4} align="center">
+                                            <Text fw={700} size="sm">Failed to load call history</Text>
+                                            <Text size="xs" c="dimmed">Something went wrong. Please try again.</Text>
+                                        </Stack>
+                                        <Button
+                                            size="xs"
+                                            variant="light"
+                                            color="primary"
+                                            onClick={() => router.refresh()}
+                                        >
+                                            Try again
+                                        </Button>
+                                    </Stack>
+                                </Paper>
+                            );
+                        }
+
+                        if (allCalls.length === 0) {
+                            return (
+                                <Paper
+                                    withBorder
+                                    radius="md"
+                                    p="xl"
+                                    style={{
+                                        background: "light-dark(var(--mantine-color-primary-0), rgba(99,102,241,0.06))",
+                                    }}
+                                >
+                                    <Stack align="center" gap="md" py="xl">
+                                        <ThemeIcon size={64} radius="xl" color="primary" variant="light">
+                                            <IconVideo size={32} />
+                                        </ThemeIcon>
+                                        <Stack gap={6} align="center">
+                                            <Title order={4}>No calls yet</Title>
+                                            <Text size="sm" c="dimmed" ta="center" maw={320}>
+                                                Your video consultation history with doctors will appear here.
+                                            </Text>
+                                        </Stack>
+                                        <Button
+                                            variant="light"
+                                            color="primary"
+                                            size="sm"
+                                            leftSection={<IconVideo size={16} />}
+                                            component={Link}
+                                            href="/patient/connect"
+                                        >
+                                            See a Doctor
+                                        </Button>
+                                    </Stack>
+                                </Paper>
+                            );
+                        }
+
+                        return (
+                            <Stack gap="sm">
+                                <Text size="xs" c="dimmed" fw={500}>
+                                    {allCalls.length} consultation{allCalls.length === 1 ? "" : "s"}
+                                </Text>
+                                {paginated.map((call) => (
+                                    <CallCard key={call.id} call={call} />
+                                ))}
+                                {totalPages > 1 && (
+                                    <Group justify="center" mt="md">
+                                        <Pagination
+                                            size="sm"
+                                            total={totalPages}
+                                            value={safePage}
+                                            onChange={setPage}
+                                        />
+                                    </Group>
+                                )}
+                            </Stack>
+                        );
+                    })()}
+                </Box>
+            </Stack>
+        </Container>
     );
 }

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   CreatePatientSummaryUseCase,
   ListPatientSummariesUseCase,
 } from "@/data/patient-summary";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/patient-summary — list all summaries for the authenticated user
 export const GET = WithContext(async ({ user, dependentId }) => {
@@ -20,5 +22,6 @@ export const POST = WithContext(async ({ user, req, dependentId }) => {
     ...(body as object),
     userId: user.uid,
   });
+  revalidateTag(CacheTags.patientSummaries(user.uid), "minutes");
   return NextResponse.json(summary, { status: 201 });
 });

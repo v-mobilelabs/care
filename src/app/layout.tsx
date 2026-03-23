@@ -4,6 +4,7 @@ import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core';
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { GetProfileUseCase } from "@/data/profile";
 import { BaseProvider } from "@/ui/providers/base-provider";
+import "streamdown/styles.css";
 import "./globals.css";
 
 const roboto = Roboto({

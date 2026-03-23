@@ -92,7 +92,7 @@ export function ChatHeader() {
                             <Menu.Item leftSection={<IconUser size={16} />} onClick={() => router.push("/profile")}>Profile</Menu.Item>
                             <Menu.Item leftSection={<IconUsersGroup size={16} />} onClick={() => router.push("/chat/family-members")}>Family</Menu.Item>
                             <Menu.Divider />
-                            <Menu.Item leftSection={<IconGauge size={16} />} onClick={() => router.push("/chat/usage")}>Usage</Menu.Item>
+                            <Menu.Item leftSection={<IconGauge size={16} />} onClick={() => router.push("/patient/usage")}>Usage</Menu.Item>
                             <Menu.Divider />
                             <Menu.Item leftSection={<IconLogout size={16} />} color="red" onClick={() => void handleSignOut()}>
                                 Sign out

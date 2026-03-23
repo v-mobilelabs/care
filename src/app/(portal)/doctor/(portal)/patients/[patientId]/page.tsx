@@ -38,8 +38,6 @@ async function PatientData({
         queryKey: ["doctor-patient-health-records", patientId] as const,
         queryFn: async () => {
             const { doctorPatientRepository } = await import("@/data/doctor-patients");
-            const { ListConditionsUseCase } = await import("@/data/conditions");
-            const { ListSoapNotesUseCase } = await import("@/data/soap-notes");
             const { ListMedicationsUseCase } = await import("@/data/medications");
             const { ListAssessmentsUseCase } = await import("@/data/assessments");
             const { ListLabReportsUseCase } = await import("@/data/lab-reports");
@@ -49,14 +47,8 @@ async function PatientData({
             const link = await doctorPatientRepository.get(userId, patientId);
             if (!link?.status || link.status !== "accepted") return null;
 
-            const [conditions, soapNotes, medications, assessments, labReports, profile, patient] =
+            const [medications, assessments, labReports, profile, patient] =
                 await Promise.all([
-                    new ListConditionsUseCase().execute(
-                        { userId: patientId },
-                    ),
-                    new ListSoapNotesUseCase().execute(
-                        { userId: patientId },
-                    ),
                     new ListMedicationsUseCase().execute(
                         { userId: patientId },
                     ),
@@ -84,8 +76,6 @@ async function PatientData({
                         foodPreferences: patient.foodPreferences,
                     }
                     : null,
-                conditions,
-                soapNotes,
                 medications,
                 assessments,
                 labReports,

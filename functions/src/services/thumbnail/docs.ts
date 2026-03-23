@@ -1,7 +1,13 @@
 import sharp from "sharp";
-import { createCanvas } from "canvas";
+import { createCanvas, DOMMatrix, Image } from "canvas";
 import * as mammoth from "mammoth";
 import ExcelJS from "exceljs";
+
+// Polyfill browser globals that pdfjs-dist expects in Node.js.
+// Without these, pdfjs's internal `new Image()` creates plain objects
+// that node-canvas's `drawImage` rejects with "Image or Canvas expected".
+(globalThis as any).DOMMatrix = DOMMatrix;
+(globalThis as any).Image = Image;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -46,15 +52,40 @@ export async function generate(buffer: Buffer, type: string): Promise<Buffer> {
   throw new Error(`Unsupported document type: ${type}`);
 }
 
+// ── Node.js canvas factory for pdfjs-dist ─────────────────────────────────────
+
+class NodeCanvasFactory {
+  create(width: number, height: number) {
+    const canvas = createCanvas(width, height);
+    return { canvas, context: canvas.getContext("2d") };
+  }
+  reset(
+    canvasAndContext: { canvas: ReturnType<typeof createCanvas> },
+    width: number,
+    height: number,
+  ) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+  destroy(canvasAndContext: { canvas: ReturnType<typeof createCanvas> }) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+  }
+}
+
 // ── PDF ───────────────────────────────────────────────────────────────────────
 
 async function generatePdfThumbnail(buffer: Buffer): Promise<Buffer> {
   // pdfjs-dist requires a dynamic import for the Node.js (legacy) build
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
+  const canvasFactory = new NodeCanvasFactory();
   const data = new Uint8Array(buffer);
-  const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true })
-    .promise;
+  const doc = await pdfjsLib.getDocument({
+    data,
+    useSystemFonts: true,
+    canvasFactory,
+  } as any).promise;
   const page = await doc.getPage(1);
 
   // Scale page to fit THUMB_WIDTH
@@ -62,15 +93,16 @@ async function generatePdfThumbnail(buffer: Buffer): Promise<Buffer> {
   const scale = THUMB_WIDTH / unscaledViewport.width;
   const viewport = page.getViewport({ scale });
 
-  const canvas = createCanvas(viewport.width, viewport.height);
-  const ctx = canvas.getContext("2d");
+  const { canvas, context } = canvasFactory.create(
+    viewport.width,
+    viewport.height,
+  );
 
-  // pdfjs render expects a CanvasRenderingContext2D-compatible object
+  // Use canvasFactory-provided canvas and context so pdfjs skips HTMLCanvasElement checks
   await page.render({
-    canvasContext: ctx as unknown as CanvasRenderingContext2D,
-    canvas: canvas as unknown as HTMLCanvasElement,
+    canvasContext: context,
     viewport,
-  }).promise;
+  } as any).promise;
 
   const pngBuffer = canvas.toBuffer("image/png");
   return sharp(pngBuffer).webp({ quality: THUMB_QUALITY }).toBuffer();

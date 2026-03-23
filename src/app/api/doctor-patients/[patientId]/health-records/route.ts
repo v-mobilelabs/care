@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { GetDoctorPatientUseCase } from "@/data/doctor-patients";
-import { ListConditionsUseCase } from "@/data/conditions";
-import { ListSoapNotesUseCase } from "@/data/soap-notes";
 import { ListMedicationsUseCase } from "@/data/medications";
 import { ListAssessmentsUseCase } from "@/data/assessments";
 import { ListLabReportsUseCase } from "@/data/lab-reports";
@@ -29,23 +27,14 @@ export const GET = WithContext(
     }
 
     // ── Fetch all health data in parallel ─────────────────────────────────
-    const [
-      conditions,
-      soapNotes,
-      medications,
-      assessments,
-      labReports,
-      profile,
-      patient,
-    ] = await Promise.all([
-      new ListConditionsUseCase().execute({ userId: patientId }),
-      new ListSoapNotesUseCase().execute({ userId: patientId }),
-      new ListMedicationsUseCase().execute({ userId: patientId }),
-      new ListAssessmentsUseCase().execute({ userId: patientId }),
-      new ListLabReportsUseCase().execute({ userId: patientId }),
-      new GetProfileUseCase().execute({ userId: patientId }),
-      new GetPatientUseCase().execute({ userId: patientId }),
-    ]);
+    const [medications, assessments, labReports, profile, patient] =
+      await Promise.all([
+        new ListMedicationsUseCase().execute({ userId: patientId }),
+        new ListAssessmentsUseCase().execute({ userId: patientId }),
+        new ListLabReportsUseCase().execute({ userId: patientId }),
+        new GetProfileUseCase().execute({ userId: patientId }),
+        new GetPatientUseCase().execute({ userId: patientId }),
+      ]);
 
     return NextResponse.json({
       patientId,
@@ -61,8 +50,6 @@ export const GET = WithContext(
             foodPreferences: patient.foodPreferences,
           }
         : null,
-      conditions,
-      soapNotes,
       medications,
       assessments,
       labReports,

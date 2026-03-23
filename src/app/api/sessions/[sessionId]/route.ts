@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   GetSessionUseCase,
   UpdateSessionUseCase,
   DeleteSessionUseCase,
 } from "@/data/sessions";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/sessions/[sessionId]
 export const GET = WithContext<{ sessionId: string }>(
@@ -30,6 +32,7 @@ export const PATCH = WithContext<{ sessionId: string }>(
       ...body,
     });
     if (!session) throw ApiError.notFound("Session not found.");
+    revalidateTag(CacheTags.sessions(user.uid), "seconds");
     return NextResponse.json(session);
   },
 );
@@ -42,6 +45,7 @@ export const DELETE = WithContext<{ sessionId: string }>(
       profileId,
       sessionId,
     });
+    revalidateTag(CacheTags.sessions(user.uid), "seconds");
     return NextResponse.json({ ok: true });
   },
 );

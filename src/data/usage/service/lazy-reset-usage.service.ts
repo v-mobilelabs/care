@@ -37,4 +37,12 @@ export class UsageService {
     await this.repo.setUsage(profile, updated);
     return updated;
   }
+
+  /** Decrement one credit and return the remaining count. Throws nothing — caller checks < 0. */
+  async consumeCredit(profile: string): Promise<number> {
+    const usage = await this.getUsage(profile);
+    const remaining = usage.credits - 1;
+    await this.repo.setUsage(profile, { ...usage, credits: remaining });
+    return remaining;
+  }
 }

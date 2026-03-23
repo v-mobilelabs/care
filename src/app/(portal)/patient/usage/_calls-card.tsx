@@ -1,16 +1,16 @@
 "use client";
-import { useState } from "react";
 import { Badge, Box, Card, Group, Progress, RingProgress, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconCalendarClock, IconVideo } from "@tabler/icons-react";
 
 import { useCallMetricsQuery } from "@/app/(portal)/patient/_query";
+import { useHoverCard } from "./_use-hover-card";
 import { formatResetDate, StatRow, usageBarColor, UsageCardError, UsageCardSkeleton } from "./_shared";
 
 const MONTHLY_CALL_LIMIT = 1000;
 
 export function CallsCard() {
     const { data: metrics, isLoading, isError } = useCallMetricsQuery();
-    const [hovered, setHovered] = useState(false);
+    const { hoverProps, hoverStyle } = useHoverCard("var(--mantine-color-warning-4)");
 
     if (isLoading) return <UsageCardSkeleton />;
     if (isError || !metrics) return <UsageCardError title="Doctor Calls" subtitle="Video calls this month" />;
@@ -23,17 +23,11 @@ export function CallsCard() {
     return (
         <Card
             radius="md"
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-                transition: "box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease",
-                boxShadow: hovered ? "0 6px 24px light-dark(rgba(0,0,0,0.09), rgba(0,0,0,0.40))" : undefined,
-                transform: hovered ? "translateY(-2px)" : undefined,
-                borderColor: hovered ? "var(--mantine-color-warning-4)" : undefined,
-            }}
+            {...hoverProps}
+            style={hoverStyle}
         >
             {/* Header */}
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="sm" withBorder>
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" px="md" py="sm" withBorder>
                 <Group justify="space-between" align="center" wrap="nowrap">
                     <Group gap="xs">
                         <ThemeIcon size={30} radius="md" color="warning" variant="light">
@@ -89,7 +83,7 @@ export function CallsCard() {
             </Card.Section>
 
             {/* Footer */}
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5))" px="md" py="xs">
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" px="md" py="xs">
                 <Group gap={5}>
                     <IconCalendarClock size={12} color="var(--mantine-color-dimmed)" />
                     <Text size="xs" c="dimmed">

@@ -3,7 +3,7 @@ import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
-import { ListAssessmentsUseCase } from "@/data/assessments";
+import { getCachedAssessments } from "@/data/cached";
 import { AssessmentsContent } from "./_content";
 import AssessmentsLoading from "./loading";
 
@@ -12,8 +12,7 @@ async function AssessmentsData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
     await queryClient.prefetchQuery({
         queryKey: [...chatKeys.assessments(), undefined],
-        queryFn: () =>
-            new ListAssessmentsUseCase().execute({ userId }),
+        queryFn: () => getCachedAssessments(userId),
     });
     return (
         <Hydrate client={queryClient}>

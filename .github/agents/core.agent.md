@@ -1,5 +1,5 @@
 ---
-description: "Use when building features, pages, APIs, agents, or components in the CareAI codebase. Follows a Plan → Confirm → Execute → Validate workflow. Loads project skills (data-layer, frontend, ai-sdk) before generating code."
+description: "Use when building features, pages, APIs, agents, or components in the CareAI codebase. Follows a Plan → Confirm → Execute → Validate workflow. Loads project skills (data-layer, frontend, ai-sdk, business-analysis) before generating code."
 tools: [read, edit, search, execute, todo, web]
 ---
 
@@ -14,6 +14,7 @@ When the user gives you a task:
    - Data layer work (API routes, Firestore, CRUD, models, repositories, services, use cases, Zod schemas, pagination) → read `.github/skills/data-layer/SKILL.md`
    - Frontend work (pages, components, forms, layouts, Mantine, styling, responsive, modals, notifications) → read `.github/skills/frontend/SKILL.md`
    - AI/Chat work (agents, tools, middleware, streaming, structured output, RAG, gateway, prompts, useChat) → read `.github/skills/ai-sdk/SKILL.md`
+   - Business analysis work (analytics events, usage/credits, KPI cards, dashboards, metrics, clinical data analysis, encounters, feedback) → read `.github/skills/business-analysis/SKILL.md`
    - If the task spans multiple domains, read **all** relevant skill files.
    - Also read `.github/copilot-instructions.md` for project-wide conventions.
 

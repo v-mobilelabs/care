@@ -30,6 +30,9 @@ export function useAutoScroll(
   const prevLastMessageIdRef = useRef(lastMessageId);
   const wasPrependRef = useRef(false);
 
+  // Whether the user is near the bottom — used to decide if we should auto-scroll.
+  const stickToBottomRef = useRef(true);
+
   // ── Native scroll listener (reliable for programmatic + user scrolls) ────
   useEffect(() => {
     const el = viewportRef.current;
@@ -39,6 +42,7 @@ export function useAutoScroll(
       const distanceFromBottom =
         el.scrollHeight - el.scrollTop - el.clientHeight;
       setShowScrollBtn(distanceFromBottom > SCROLL_THRESHOLD);
+      stickToBottomRef.current = distanceFromBottom <= SCROLL_THRESHOLD;
     }
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
@@ -65,6 +69,23 @@ export function useAutoScroll(
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messageCount, isLoading, preparingLabel]);
+
+  // ── Keep pinned to bottom during streaming ────────────────────────────────
+  // During streaming the assistant message content grows but messageCount
+  // stays the same, so the above effect won't fire. Poll at 80ms and
+  // scroll to bottom if the user hasn't scrolled away.
+  useEffect(() => {
+    if (!isLoading) return;
+    const el = viewportRef.current;
+    if (!el || !stickToBottomRef.current) return;
+
+    const id = setInterval(() => {
+      if (stickToBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 80);
+    return () => clearInterval(id);
+  }, [isLoading]);
 
   // ── Detect prepend before auto-scroll (useLayoutEffect runs first) ─────
   const prevScrollHeightRef = useRef(0);

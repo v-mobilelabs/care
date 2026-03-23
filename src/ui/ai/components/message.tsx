@@ -36,8 +36,11 @@ import {
 } from "@tabler/icons-react";
 import type { UIMessagePart, UIDataTypes, UITools, ChatStatus } from "ai";
 import { useOptimistic, useTransition, useState, useRef, useLayoutEffect } from "react";
-import { MarkdownContent } from "@/ui/ai/components/markdown";
+import { Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
 import { useChatContext } from "@/ui/ai/context/chat-context";
+import { getAgentLabel } from "@/ui/ai/types/agent-labels";
 import { useTTS } from "@/ui/ai/hooks/use-tts";
 
 // ── Speak button (Gemini-style TTS) ──────────────────────────────────────────
@@ -102,17 +105,20 @@ function ReportModalContent({ onSubmit }: Readonly<{ onSubmit: (text: string) =>
 
 // ── Feedback bar (like / dislike / report) ────────────────────────────────────
 
+type Reaction = "like" | "dislike" | null;
+type FeedbackType = "like" | "dislike" | "report";
+
 function FeedbackBar({ msgId }: Readonly<{ msgId: string }>) {
     const { sessionId } = useChatContext();
-    const [committedReaction, setCommittedReaction] = useState<"like" | "dislike" | null>(null);
+    const [committedReaction, setCommittedReaction] = useState<Reaction>(null);
     const [optimisticReaction, addOptimisticReaction] = useOptimistic(
         committedReaction,
-        (_current: "like" | "dislike" | null, next: "like" | "dislike" | null) => next,
+        (_current: Reaction, next: Reaction) => next,
     );
     const [reported, setReported] = useState(false);
     const [, startTransition] = useTransition();
 
-    async function submitFeedback(type: "like" | "dislike" | "report", text?: string) {
+    async function submitFeedback(type: FeedbackType, text?: string) {
         await fetch("/api/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -360,6 +366,8 @@ function TokenUsageBadge({ usage }: Readonly<{ usage: { promptTokens: number; co
 
 // ── Text message ──────────────────────────────────────────────────────────────
 
+type TokenUsage = { promptTokens: number; completionTokens: number; totalTokens: number };
+
 interface TextMessageProps {
     text: string;
     isUser: boolean;
@@ -376,13 +384,158 @@ interface TextMessageProps {
     editingText: string;
     isLoading: boolean;
     /** Token usage for this message (assistant messages only). */
-    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    usage?: TokenUsage;
+    /** Specialist agent that produced this message (assistant messages only). */
+    agentType?: string;
     onEditStart: (msgId: string, text: string) => void;
     onEditChange: (text: string) => void;
     onEditKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>, msgId: string) => void;
     onEditCancel: () => void;
     onEditSubmit: (msgId: string) => void;
 }
+
+// ── Extracted sub-components (reduce cognitive complexity) ────────────────────
+
+function EditingBox({ msgId, editingText, isLoading, onEditChange, onEditKeyDown, onEditCancel, onEditSubmit }: Readonly<{
+    msgId: string;
+    editingText: string;
+    isLoading: boolean;
+    onEditChange: (text: string) => void;
+    onEditKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>, msgId: string) => void;
+    onEditCancel: () => void;
+    onEditSubmit: (msgId: string) => void;
+}>) {
+    return (
+        <Box maw={600} w="100%">
+            <Textarea
+                size="sm"
+                autosize
+                minRows={1}
+                maxRows={8}
+                value={editingText}
+                onChange={(e) => onEditChange(e.currentTarget.value)}
+                onKeyDown={(e) => onEditKeyDown(e, msgId)}
+                radius="md"
+                autoFocus
+                styles={{ input: { paddingTop: 10, paddingBottom: 10 } }}
+            />
+            <Group gap="xs" justify="flex-end" mt={6}>
+                <ActionIcon size={32} variant="subtle" color="gray" aria-label="Cancel edit" onClick={onEditCancel}>
+                    <IconX size={16} />
+                </ActionIcon>
+                <ActionIcon
+                    size={32}
+                    variant="filled"
+                    color="primary"
+                    aria-label="Submit edit"
+                    disabled={!editingText.trim() || isLoading}
+                    onClick={() => onEditSubmit(msgId)}
+                >
+                    <IconCheck size={16} />
+                </ActionIcon>
+            </Group>
+        </Box>
+    );
+}
+
+function UserBubble({ text, textRef, expanded, clamped, hovered, isLoading, msgId, onEditStart, onExpand }: Readonly<{
+    text: string;
+    textRef: React.RefObject<HTMLDivElement | null>;
+    expanded: boolean;
+    clamped: boolean;
+    hovered: boolean;
+    isLoading: boolean;
+    msgId: string;
+    onEditStart: (msgId: string, text: string) => void;
+    onExpand: () => void;
+}>) {
+    return (
+        <Group gap={2} mt={4} justify="flex-end" style={{ minHeight: 28 }}>
+            <ActionIcon
+                size={28}
+                variant="subtle"
+                color="gray"
+                style={{ opacity: hovered ? 0.7 : 0, transition: "opacity 150ms", flexShrink: 0 }}
+                onClick={() => onEditStart(msgId, text)}
+                aria-label="Edit message"
+                tabIndex={hovered ? 0 : -1}
+                disabled={isLoading}
+            >
+                <IconPencil size={15} />
+            </ActionIcon>
+            <Box
+                px="md"
+                py="xs"
+                style={{
+                    borderRadius: "var(--mantine-radius-lg)",
+                    background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    width: "fit-content",
+                    maxWidth: 600,
+                    marginLeft: "auto",
+                }}
+            >
+                <Text
+                    ref={textRef}
+                    size="sm"
+                    style={expanded ? undefined : {
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                    }}
+                >
+                    {text}
+                </Text>
+                {clamped && (
+                    <Text
+                        component="button"
+                        size="xs"
+                        c="dimmed"
+                        mt={4}
+                        onClick={onExpand}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            textDecoration: "none",
+                            display: "block",
+                            marginLeft: "auto",
+                        }}
+                    >
+                        {expanded ? "Show less" : "Show more"}
+                    </Text>
+                )}
+            </Box>
+        </Group>
+    );
+}
+
+function AssistantBubble({ text, isLoading, msgId, usage }: Readonly<{
+    text: string;
+    isLoading: boolean;
+    msgId: string;
+    usage?: TokenUsage;
+}>) {
+    return (
+        <>
+            <Group gap={2} mt={4} justify="flex-start" style={{ minHeight: 28 }}>
+                <Box style={{ wordBreak: "break-word" }}>
+                    <Streamdown plugins={{ code, math }} isAnimating={isLoading}>{text}</Streamdown>
+                </Box>
+            </Group>
+            <Group gap="sm">
+                <SpeakButton msgId={msgId} text={text} />
+                <FeedbackBar msgId={msgId} />
+                {usage && <TokenUsageBadge usage={usage} />}
+            </Group>
+        </>
+    );
+}
+
+// ── Main TextMessage component ────────────────────────────────────────────────
 
 export function TextMessage({
     text,
@@ -394,6 +547,7 @@ export function TextMessage({
     editingText,
     isLoading,
     usage,
+    agentType,
     onEditStart,
     onEditChange,
     onEditKeyDown,
@@ -406,7 +560,6 @@ export function TextMessage({
     const [clamped, setClamped] = useState(false);
     const textRef = useRef<HTMLDivElement>(null);
 
-    // Detect whether the user message overflows 3 lines (only measure when collapsed)
     useLayoutEffect(() => {
         const el = textRef.current;
         if (!el || !isUser || expanded) return;
@@ -417,7 +570,6 @@ export function TextMessage({
 
     return (
         <Stack gap={4} align={isUser ? "flex-end" : "flex-start"}>
-            {/* Avatar + name row */}
             <Group gap={8} style={{ flexDirection: isUser ? "row-reverse" : "row" }}>
                 <Avatar
                     size={28}
@@ -430,120 +582,40 @@ export function TextMessage({
                         ? (userInitials ?? <IconUser size={14} />)
                         : <IconHeartbeat size={14} />}
                 </Avatar>
-                <Text size="sm" c="dimmed" fw={600}>{isUser ? "You" : "CareAI"}</Text>
+                <Text size="sm" c="dimmed" fw={600}>{isUser ? "You" : `CareAI${getAgentLabel(agentType) ? ` · ${getAgentLabel(agentType)}` : ""}`}</Text>
             </Group>
 
-            {/* Message body */}
             <Box pl={isUser ? 0 : 36} pr={isUser ? 36 : 0}>
                 {isEditing ? (
-                    <Box maw={600} w="100%">
-                        <Textarea
-                            size="sm"
-                            autosize
-                            minRows={1}
-                            maxRows={8}
-                            value={editingText}
-                            onChange={(e) => onEditChange(e.currentTarget.value)}
-                            onKeyDown={(e) => onEditKeyDown(e, msgId)}
-                            radius="md"
-                            autoFocus
-                            styles={{ input: { paddingTop: 10, paddingBottom: 10 } }}
-                        />
-                        <Group gap="xs" justify="flex-end" mt={6}>
-                            <ActionIcon size={32} variant="subtle" color="gray" aria-label="Cancel edit" onClick={onEditCancel}>
-                                <IconX size={16} />
-                            </ActionIcon>
-                            <ActionIcon
-                                size={32}
-                                variant="filled"
-                                color="primary"
-                                aria-label="Submit edit"
-                                disabled={!editingText.trim() || isLoading}
-                                onClick={() => onEditSubmit(msgId)}
-                            >
-                                <IconCheck size={16} />
-                            </ActionIcon>
-                        </Group>
-                    </Box>
+                    <EditingBox
+                        msgId={msgId}
+                        editingText={editingText}
+                        isLoading={isLoading}
+                        onEditChange={onEditChange}
+                        onEditKeyDown={onEditKeyDown}
+                        onEditCancel={onEditCancel}
+                        onEditSubmit={onEditSubmit}
+                    />
                 ) : (
                     <Box
                         onMouseEnter={() => setHovered(true)}
                         onMouseLeave={() => setHovered(false)}
                     >
-                        {/* Action row: edit (user) or feedback + token (assistant) */}
-                        <Group gap={2} mt={4} justify={isUser ? "flex-end" : "flex-start"} style={{ minHeight: 28 }}>
-                            {isUser && (
-                                <ActionIcon
-                                    size={28}
-                                    variant="subtle"
-                                    color="gray"
-                                    style={{ opacity: hovered ? 0.7 : 0, transition: "opacity 150ms", flexShrink: 0 }}
-                                    onClick={() => onEditStart(msgId, text)}
-                                    aria-label="Edit message"
-                                    tabIndex={hovered ? 0 : -1}
-                                    disabled={isLoading}
-                                >
-                                    <IconPencil size={15} />
-                                </ActionIcon>
-                            )}
-                            {isUser ? (
-                                <Box
-                                    px="md"
-                                    py="xs"
-                                    style={{
-                                        borderRadius: "var(--mantine-radius-lg)",
-                                        background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))",
-                                        whiteSpace: "pre-wrap",
-                                        wordBreak: "break-word",
-                                        width: "fit-content",
-                                        maxWidth: 600,
-                                        marginLeft: "auto",
-                                    }}
-                                >
-                                    <Text
-                                        ref={textRef}
-                                        size="sm"
-                                        style={expanded ? undefined : {
-                                            display: "-webkit-box",
-                                            WebkitLineClamp: 3,
-                                            WebkitBoxOrient: "vertical",
-                                            overflow: "hidden",
-                                        }}
-                                    >
-                                        {text}
-                                    </Text>
-                                    {clamped && (
-                                        <Text
-                                            component="button"
-                                            size="xs"
-                                            c="dimmed"
-                                            mt={4}
-                                            onClick={() => setExpanded((v) => !v)}
-                                            style={{
-                                                background: "none",
-                                                border: "none",
-                                                padding: 0,
-                                                cursor: "pointer",
-                                                textDecoration: "none",
-                                                display: "block",
-                                                marginLeft: "auto",
-                                            }}
-                                        >
-                                            {expanded ? "Show less" : "Show more"}
-                                        </Text>
-                                    )}
-                                </Box>
-                            ) : (
-                                <Box style={{ wordBreak: "break-word" }}>
-                                    <MarkdownContent text={text} />
-                                </Box>
-                            )}
-                        </Group>
-                        {!isUser && (<Group gap="sm">
-                            <SpeakButton msgId={msgId} text={text} />
-                            <FeedbackBar msgId={msgId} />
-                            {usage && <TokenUsageBadge usage={usage} />}
-                        </Group>)}
+                        {isUser ? (
+                            <UserBubble
+                                text={text}
+                                textRef={textRef}
+                                expanded={expanded}
+                                clamped={clamped}
+                                hovered={hovered}
+                                isLoading={isLoading}
+                                msgId={msgId}
+                                onEditStart={onEditStart}
+                                onExpand={() => setExpanded((v) => !v)}
+                            />
+                        ) : (
+                            <AssistantBubble text={text} isLoading={isLoading} msgId={msgId} usage={usage} />
+                        )}
                     </Box>
                 )}
             </Box>
@@ -564,13 +636,16 @@ interface StatusIndicatorProps {
     phraseFading: boolean;
     /** Dynamic hints from the gateway, used as cycling phrases. */
     loadingHints?: string[];
+    /** Current agent type — shown as a specialist label next to "CareAI". */
+    agentType?: string;
     /** Fixed label to display instead of the cycling phrases (e.g. during upload). */
     overrideLabel?: string;
 }
 
-export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, overrideLabel }: Readonly<StatusIndicatorProps>) {
+export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, agentType, overrideLabel }: Readonly<StatusIndicatorProps>) {
     const phrases = loadingHints && loadingHints.length > 0 ? loadingHints : FALLBACK_PHRASES;
     const label = overrideLabel ?? phrases[phraseIdx % phrases.length];
+    const agentLabel = getAgentLabel(agentType);
     return (
         <Stack gap={4} align="flex-start" style={{ animation: "msg-enter 0.2s ease both" }}>
             {/* Avatar + name row — identical to TextMessage AI layout */}
@@ -578,7 +653,7 @@ export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, overrid
                 <Avatar size={28} radius="xl" color="primary" variant="light">
                     <IconHeartbeat size={14} />
                 </Avatar>
-                <Text size="sm" c="dimmed" fw={600}>CareAI</Text>
+                <Text size="sm" c="dimmed" fw={600}>CareAI{agentLabel ? ` · ${agentLabel}` : ""}</Text>
             </Group>
             {/* Typing bubble */}
             <Box pl={36}>

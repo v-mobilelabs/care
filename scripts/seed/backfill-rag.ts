@@ -19,10 +19,6 @@ config({ path: resolve(process.cwd(), ".env.local") });
 import { db } from "@/lib/firebase/admin";
 import { ragIndexer } from "@/data/shared/service";
 import {
-  toConditionDto,
-  type ConditionDocument,
-} from "@/data/conditions/models/condition.model";
-import {
   toVitalDto,
   type VitalDocument,
 } from "@/data/vitals/models/vital.model";
@@ -31,10 +27,6 @@ import {
   type MedicationDocument,
 } from "@/data/medications/models/medication.model";
 import {
-  toSoapNoteDto,
-  type SoapNoteDocument,
-} from "@/data/soap-notes/models/soap-note.model";
-import {
   toLabReportDto,
   type LabReportDocument,
 } from "@/data/lab-reports/models/lab-report.model";
@@ -42,7 +34,7 @@ import {
   toAssessmentDto,
   type AssessmentDocument,
 } from "@/data/assessments/models/assessment.model";
-import type { ExtractedPrescriptionData } from "@/data/sessions/models/file.model";
+import type { ExtractedPrescriptionData } from "@/data/files";
 import type { PrescriptionDto } from "@/data/prescriptions/models/prescription.model";
 
 // ── Concurrency limiter ───────────────────────────────────────────────────────
@@ -76,25 +68,6 @@ async function isAlreadyIndexed(
 }
 
 // ── Per-collection indexers ───────────────────────────────────────────────────
-
-async function backfillConditions(
-  profileRef: FirebaseFirestore.DocumentReference,
-  profileId: string,
-): Promise<void> {
-  const snap = await profileRef.collection("conditions").get();
-  let count = 0;
-  for (const doc of snap.docs) {
-    const data = doc.data() as ConditionDocument;
-    if (await isAlreadyIndexed(profileId, doc.id)) continue;
-    await ragIndexer.indexCondition(
-      data.userId,
-      profileId,
-      toConditionDto(doc.id, data),
-    );
-    count++;
-  }
-  if (snap.size > 0) console.log(`  conditions: ${count}/${snap.size} indexed`);
-}
 
 async function backfillVitals(
   profileRef: FirebaseFirestore.DocumentReference,
@@ -133,25 +106,6 @@ async function backfillMedications(
   }
   if (snap.size > 0)
     console.log(`  medications: ${count}/${snap.size} indexed`);
-}
-
-async function backfillSoapNotes(
-  profileRef: FirebaseFirestore.DocumentReference,
-  profileId: string,
-): Promise<void> {
-  const snap = await profileRef.collection("soapNotes").get();
-  let count = 0;
-  for (const doc of snap.docs) {
-    const data = doc.data() as SoapNoteDocument;
-    if (await isAlreadyIndexed(profileId, doc.id)) continue;
-    await ragIndexer.indexSoapNote(
-      data.userId,
-      profileId,
-      toSoapNoteDto(doc.id, data),
-    );
-    count++;
-  }
-  if (snap.size > 0) console.log(`  soapNotes: ${count}/${snap.size} indexed`);
 }
 
 async function backfillLabReports(
@@ -248,10 +202,8 @@ async function backfillPrescriptions(
 async function backfillProfile(profileId: string): Promise<void> {
   console.log(`\n[backfill] Profile: ${profileId}`);
   const profileRef = db.collection("profiles").doc(profileId);
-  await backfillConditions(profileRef, profileId);
   await backfillVitals(profileRef, profileId);
   await backfillMedications(profileRef, profileId);
-  await backfillSoapNotes(profileRef, profileId);
   await backfillLabReports(profileRef, profileId);
   await backfillAssessments(profileRef, profileId);
   await backfillPrescriptions(profileRef, profileId);

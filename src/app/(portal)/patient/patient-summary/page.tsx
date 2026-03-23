@@ -3,7 +3,7 @@ import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
-import { ListPatientSummariesUseCase } from "@/data/patient-summary";
+import { getCachedPatientSummaries } from "@/data/cached";
 import { PatientSummaryContent } from "./_content";
 import PatientSummaryLoading from "./loading";
 
@@ -12,8 +12,7 @@ async function SummaryData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
     await queryClient.prefetchQuery({
         queryKey: [...chatKeys.patientSummaries(), undefined],
-        queryFn: () =>
-            new ListPatientSummariesUseCase().execute({ userId }),
+        queryFn: () => getCachedPatientSummaries(userId),
     });
     return (
         <Hydrate client={queryClient}>

@@ -35,21 +35,101 @@ import type {
   AgentStreamParameters,
   GenerateTextResult,
   LanguageModelMiddleware,
+  ModelMessage,
   StreamTextResult,
   SystemModelMessage,
   ToolSet,
   LanguageModel,
 } from "ai";
 import { devToolsMiddleware } from "@ai-sdk/devtools";
-import { creditMiddleware } from "@/data/shared/service/middleware/credit.middleware";
-import { guardrailMiddleware } from "@/data/shared/service/middleware/guardrail.middleware";
-import { ragMiddleware } from "@/data/shared/service/middleware/rag.middleware";
-import { memoryMiddleware } from "@/data/shared/service/middleware/memory.middleware";
 import {
   cachedContentMiddleware,
   getContextCache,
 } from "@/data/shared/service/middleware/cached-content.middleware";
+import { preContextMiddleware } from "@/data/shared/service/middleware/pre-context.middleware";
+import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
+import { actionCard } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
+import { GetProfileUseCase, type ProfileDto } from "@/data/profile";
+
+// ── Prune helper ──────────────────────────────────────────────────────────────
+
+type AssistantParts = Exclude<
+  Extract<ModelMessage, { role: "assistant" }>["content"],
+  string
+>;
+
+/** Find the original message whose tool-call IDs match the pruned parts. */
+function findOriginalWithReasoning(
+  parts: AssistantParts,
+  originals: ModelMessage[],
+): AssistantParts | null {
+  for (const o of originals) {
+    if (o.role !== "assistant" || typeof o.content === "string") continue;
+    const hasReasoning = o.content.some((p) => p.type === "reasoning");
+    const sharesToolCall = o.content.some(
+      (p) =>
+        p.type === "tool-call" &&
+        parts.some(
+          (mp) => mp.type === "tool-call" && mp.toolCallId === p.toolCallId,
+        ),
+    );
+    if (hasReasoning && sharesToolCall) return o.content;
+  }
+  return null;
+}
+
+/** Restore reasoning parts stripped from an assistant tool-call message. */
+function restoreToolCallReasoning(
+  pruned: ModelMessage,
+  originals: ModelMessage[],
+): ModelMessage {
+  if (pruned.role !== "assistant" || typeof pruned.content === "string")
+    return pruned;
+  const parts = pruned.content;
+  if (parts.some((p) => p.type === "reasoning")) return pruned;
+  if (!parts.some((p) => p.type === "tool-call")) return pruned;
+  const origContent = findOriginalWithReasoning(parts, originals);
+  if (!origContent) return pruned;
+  const reasoning = origContent.filter((p) => p.type === "reasoning");
+  return reasoning.length > 0
+    ? { ...pruned, content: [...reasoning, ...parts] }
+    : pruned;
+}
+
+/**
+ * Prune reasoning from prior messages, but keep reasoning paired with tool
+ * calls — Gemini links thought + functionCall via thoughtSignature and rejects
+ * orphaned signatures.
+ */
+function pruneKeepingToolCallReasoning(
+  messages: ModelMessage[],
+): ModelMessage[] {
+  return pruneMessages({ messages, reasoning: "before-last-message" }).map(
+    (m) => restoreToolCallReasoning(m, messages),
+  );
+}
+
+// ── Profile context builder ───────────────────────────────────────────────────
+
+function buildProfileContext(profile: ProfileDto): string {
+  const age = profile.dateOfBirth
+    ? Math.floor(
+        (Date.now() - new Date(profile.dateOfBirth).getTime()) / 31_557_600_000,
+      )
+    : undefined;
+  const lines = [
+    `- ID: ${profile.userId}`,
+    `- Kind: ${profile.kind}`,
+    profile.name && `- Name: ${profile.name}`,
+    profile.gender && `- Gender: ${profile.gender}`,
+    profile.city && `- City: ${profile.city}`,
+    profile.country && `- Country: ${profile.country}`,
+    profile.dateOfBirth &&
+      `- Date of Birth: ${profile.dateOfBirth}${age !== undefined ? ` (Age: ${age})` : ""}`,
+  ].filter(Boolean);
+  return `## Patient Profile\n${lines.join("\n")}`;
+}
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -77,6 +157,10 @@ export interface AgentCallOptions {
   /** Whether this query needs patient medical records (RAG). When false, the
    *  expensive KNN + Bedrock reranking pipeline is skipped entirely. */
   needsRag?: boolean;
+  /** Pre-fetched context from prefetchContext(). When provided, the agent
+   *  skips guardrail/credit/memory/rag middleware and uses a lightweight
+   *  injector instead. */
+  preContext?: PreRunContext;
 }
 
 /** Configuration for a specialist agent. */
@@ -98,10 +182,13 @@ export interface AgentConfig {
   /** Fast model ID for context cache key. Default: "gemini-3-flash-preview". */
   fastModelId?: string;
   /** Whether to enable thinking mode. Default: true. */
-
   useThinking?: boolean;
   /** Maximum tool-loop iterations. Default: 10. */
   maxSteps?: number;
+  /** Sampling temperature. Lower = more deterministic. Default: provider default (~1.0). */
+  temperature?: number;
+  /** Maximum output tokens per LLM call. Default: 65536. */
+  maxOutputTokens?: number;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -132,6 +219,8 @@ export function createAgent(
     fastModelId = "gemini-3-flash-preview",
     useThinking = true,
     maxSteps = 10,
+    temperature,
+    maxOutputTokens = 65536,
   } = config;
 
   const agent: Agent<AgentCallOptions, ToolSet> = {
@@ -149,6 +238,7 @@ export function createAgent(
         sessionId: "",
       } as AgentCallOptions),
       memory: createMemoryTool("", "", ""),
+      actionCard,
     },
 
     async generate(
@@ -200,17 +290,28 @@ export function createAgent(
         `[${id}] Starting stream for user ${options.userId}, query: "${options.userQuery.slice(0, 80)}${options.userQuery.length > 80 ? "…" : ""}"`,
       );
 
-      // ── 1. Build per-request tools ──────────────────────────────────
-      const tools: ToolSet = {
-        ...buildTools(options),
-        memory: createMemoryTool(
-          options.userId,
-          options.profileId,
-          options.sessionId,
-        ),
-      };
+      // ── 1. Build per-request tools + fetch profile ─────────────────
+      const [tools, profile] = await Promise.all([
+        Promise.resolve({
+          ...buildTools(options),
+          memory: createMemoryTool(
+            options.userId,
+            options.profileId,
+            options.sessionId,
+          ),
+          actionCard,
+        } as ToolSet),
+        new GetProfileUseCase()
+          .execute({ userId: options.profileId })
+          .catch(() => null),
+      ]);
+
       const staticPrompt = buildSystemPrompt();
-      const dynamicContext = (await buildDynamicContext?.(options)) ?? "";
+      const agentDynamicContext = (await buildDynamicContext?.(options)) ?? "";
+      const profileContext = profile ? buildProfileContext(profile) : "";
+      const dynamicContext = [profileContext, agentDynamicContext]
+        .filter(Boolean)
+        .join("\n\n");
 
       console.log(
         `[${id}] Instructions: static ${staticPrompt.length} chars + dynamic ${dynamicContext.length} chars | Tools: ${Object.keys(tools).join(", ")}`,
@@ -246,34 +347,29 @@ export function createAgent(
       };
 
       // ── 4. Middleware chain ─────────────────────────────────────────
-      const middleware: LanguageModelMiddleware[] = [
-        guardrailMiddleware({
-          userId: options.userId,
-          userQuery: options.userQuery,
-        }),
-        creditMiddleware(options.userId),
-        memoryMiddleware({
-          agentId: id,
-          profileId: options.profileId,
-          cacheActive: !!cacheName,
-        }),
-        ragMiddleware({
-          agentId: id,
-          userId: options.userId,
-          profileId: options.profileId,
-          dependentId: options.dependentId,
-          userQuery: options.userQuery,
-          needsRag: options.needsRag !== false,
-          queryEmbedding: options.queryEmbedding,
-          dynamicContext: dynamicContext || undefined,
-          cacheActive: !!cacheName,
-        }),
+      const commonMiddleware: LanguageModelMiddleware[] = [
         ...(cacheName ? [cachedContentMiddleware] : []),
         addToolInputExamplesMiddleware(),
         ...(process.env.NODE_ENV === "development"
           ? [devToolsMiddleware()]
           : []),
       ];
+
+      const middleware: LanguageModelMiddleware[] = options.preContext
+        ? [
+            preContextMiddleware({
+              agentId: id,
+              preContext: options.preContext,
+              dynamicContext: dynamicContext || undefined,
+              cacheActive: !!cacheName,
+            }),
+            ...commonMiddleware,
+          ]
+        : (() => {
+            throw new Error(
+              `[${id}] preContext is required — PrepareChatUseCase must call prefetchContext() before streaming.`,
+            );
+          })();
 
       const wrappedModel = wrapLanguageModel({
         model: activeModel as Parameters<typeof wrapLanguageModel>[0]["model"],
@@ -291,16 +387,15 @@ export function createAgent(
         model: wrappedModel,
         instructions,
         tools,
+        ...(temperature !== undefined && { temperature }),
+        ...(maxOutputTokens !== undefined && { maxOutputTokens }),
         stopWhen: stepCountIs(maxSteps),
         providerOptions:
           Object.keys(googleOptions).length > 0
             ? { google: googleOptions satisfies GoogleLanguageModelOptions }
             : undefined,
         prepareStep: ({ messages }) => ({
-          messages: pruneMessages({
-            messages,
-            reasoning: "before-last-message",
-          }),
+          messages: pruneKeepingToolCallReasoning(messages),
         }),
         experimental_onToolCallStart: ({ toolCall }) => {
           console.log(`[${id}] Tool call started: ${toolCall.toolName}`);

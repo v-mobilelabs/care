@@ -32,6 +32,13 @@ interface IndexableIndexOptions {
   metadataFields?: string[];
   /** Reserved for future use — defaults to "parallel" (fire-and-forget) */
   trigger?: "parallel";
+  /**
+   * When set, the embedding is stored directly in this top-level Firestore
+   * collection (on an `embedding` field of the document itself) instead of
+   * the default `profiles/{pid}/embeddings` subcollection.  Useful for global
+   * knowledge-base collections that are not scoped to a single profile.
+   */
+  collection?: string;
 }
 
 /** Options for deletion — routes to ragService.removeDocument() */
@@ -39,6 +46,11 @@ interface IndexableRemoveOptions {
   /** Property name on the input that holds the document's source ID */
   sourceIdField: string;
   remove: true;
+  /**
+   * When set, removes from this top-level collection instead of the default
+   * `profiles/{pid}/embeddings` subcollection.
+   */
+  collection?: string;
 }
 
 export type IndexableOptions = IndexableIndexOptions | IndexableRemoveOptions;

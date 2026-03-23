@@ -17,6 +17,8 @@ export interface MessageDocument {
     completionTokens: number;
     totalTokens: number;
   };
+  /** The specialist agent that produced this message (assistant messages only) */
+  agentType?: string;
 }
 
 // ── DTO — outbound (API responses) ───────────────────────────────────────────
@@ -33,6 +35,8 @@ export interface MessageDto {
     completionTokens: number;
     totalTokens: number;
   };
+  /** The specialist agent that produced this message (assistant messages only) */
+  agentType?: string;
 }
 
 // ── DTO — inbound (add message) ───────────────────────────────────────────────
@@ -54,6 +58,8 @@ export const AddMessageSchema = z.object({
       totalTokens: z.number().int().nonnegative(),
     })
     .optional(),
+  /** The specialist agent that produced this message (assistant messages only) */
+  agentType: z.string().optional(),
 });
 
 export type AddMessageInput = z.infer<typeof AddMessageSchema>;
@@ -87,19 +93,71 @@ export function toMessageDto(id: string, doc: MessageDocument): MessageDto {
     sessionId: doc.sessionId,
     userId: doc.userId,
     role: doc.role,
-    content: doc.content,
+    content: normalizeMessageContent(doc.content),
     createdAt: doc.createdAt.toDate().toISOString(),
     usage: doc.usage,
+    ...(doc.agentType && { agentType: doc.agentType }),
   };
 }
 
 /** Parse a message's content string back into UIMessage parts. */
 export function parseMessageContent(content: string): UIMessage["parts"] {
   try {
-    return JSON.parse(content) as UIMessage["parts"];
+    const parsed = JSON.parse(content) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [{ type: "text", text: content }];
+    }
+    return normalizeMessageParts(parsed as Array<Record<string, unknown>>);
   } catch {
     return [{ type: "text", text: content }];
   }
+}
+
+/**
+ * Normalize persisted JSON message content to a stable UI parts shape.
+ * This runs server-side when mapping Firestore documents to DTOs so all
+ * API consumers receive consistent tool-part states after reload.
+ */
+export function normalizeMessageContent(content: string): string {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (!Array.isArray(parsed)) return content;
+    return JSON.stringify(normalizeMessageParts(parsed));
+  } catch {
+    return content;
+  }
+}
+
+function normalizeMessageParts(
+  parts: Array<Record<string, unknown>>,
+): UIMessage["parts"] {
+  return parts.map((p) => {
+    // Legacy shape: { type: "tool-invocation", toolName, toolCallId, args/input, result/output }
+    if (p.type === "tool-invocation" && typeof p.toolName === "string") {
+      return {
+        type: `tool-${p.toolName}`,
+        toolCallId: p.toolCallId ?? "",
+        state: "output-available",
+        input: p.args ?? p.input ?? null,
+        output: p.result ?? p.output ?? null,
+      };
+    }
+
+    // Legacy / mixed state normalization: result -> output-available
+    if (
+      typeof p.type === "string" &&
+      p.type.startsWith("tool-") &&
+      p.state === "result"
+    ) {
+      return {
+        ...p,
+        state: "output-available",
+        output: p.output ?? p.result ?? null,
+      };
+    }
+
+    return p;
+  }) as UIMessage["parts"];
 }
 
 /** Convert a persisted MessageDto back to an AI SDK UIMessage. */

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   CreateConditionUseCase,
   ListConditionsUseCase,
 } from "@/data/conditions";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/conditions — list all conditions for the authenticated user
 export const GET = WithContext(async ({ user, dependentId }) => {
@@ -20,5 +22,6 @@ export const POST = WithContext(async ({ user, req, dependentId }) => {
     ...(body as object),
     userId: user.uid,
   });
+  revalidateTag(CacheTags.conditions(user.uid), "minutes");
   return NextResponse.json(condition, { status: 201 });
 });

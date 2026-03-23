@@ -39,6 +39,6 @@ export class CreateAssessmentUseCase extends UseCase<
   }
 
   protected async run(input: CreateAssessmentInput): Promise<AssessmentDto> {
-    return this.service.upsertBySession(input, this.dependentId);
+    return this.service.upsertBySessionRun(input, this.dependentId);
   }
 }

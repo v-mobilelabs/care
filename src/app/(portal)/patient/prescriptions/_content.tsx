@@ -1,9 +1,10 @@
 "use client";
-import { ActionIcon, Badge, Box, Button, Card, Container, Group, ScrollArea, SimpleGrid, Skeleton, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Box, Button, Container, Group, Pagination, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
 import { useRef, useState } from "react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCamera, IconCheck, IconReportMedical, IconUpload } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
 
 import {
     usePrescriptionsQuery,
@@ -13,13 +14,15 @@ import {
     type PrescriptionRecord,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
-import { PrescriptionDetailDrawer } from "./_prescription-detail-drawer";
 import { PrescriptionCard } from "./_prescription-card";
 import { EmptyPrescriptions } from "./_empty-prescriptions";
+
+const PAGE_SIZE = 10;
 
 // ── Main content ──────────────────────────────────────────────────────────────
 
 export function PrescriptionsContent() {
+    const router = useRouter();
     const { data: prescriptions = [], isLoading } = usePrescriptionsQuery();
     const upload = useUploadPrescriptionMutation();
     const deleteRx = useDeletePrescriptionMutation();
@@ -29,8 +32,11 @@ export function PrescriptionsContent() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [extractingFileId, setExtractingFileId] = useState<string | null>(null);
-    const [detailFileId, setDetailFileId] = useState<string | null>(null);
-    const detailFile = prescriptions.find((f) => f.id === detailFileId) ?? null;
+    const [page, setPage] = useState(1);
+
+    const totalPages = Math.max(1, Math.ceil(prescriptions.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = prescriptions.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
     function handleFiles(files: FileList | null) {
         if (!files || files.length === 0) return;
@@ -45,7 +51,7 @@ export function PrescriptionsContent() {
                         color: colors.success,
                         icon: <IconCheck size={16} />,
                     });
-                    if (count > 0) setDetailFileId(result.id);
+                    if (count > 0) router.push(`/patient/prescriptions/${result.id}`);
                 },
                 onError: (err) =>
                     notifications.show({
@@ -71,7 +77,7 @@ export function PrescriptionsContent() {
                     color: count > 0 ? colors.success : "gray",
                     icon: count > 0 ? <IconCheck size={16} /> : undefined,
                 });
-                if (count > 0) setDetailFileId(file.id);
+                if (count > 0) router.push(`/patient/prescriptions/${file.id}`);
             },
             onError: (err) => {
                 setExtractingFileId(null);
@@ -97,13 +103,19 @@ export function PrescriptionsContent() {
             confirmProps: { color: "red" },
             onConfirm: () => {
                 deleteRx.mutate(
-                    { fileId: file.id },
+                    { prescriptionId: file.id },
                     {
                         onSuccess: () =>
                             notifications.show({
                                 message: `${label} deleted.`,
                                 color: colors.success,
                                 icon: <IconCheck size={16} />,
+                            }),
+                        onError: () =>
+                            notifications.show({
+                                title: "Delete failed",
+                                message: `Could not delete prescription. Please try again.`,
+                                color: colors.danger,
                             }),
                     },
                 );
@@ -113,15 +125,6 @@ export function PrescriptionsContent() {
 
     return (
         <Container pt="md">
-            {/* Detail modal — key resets state when switching between prescriptions */}
-            <PrescriptionDetailDrawer
-                key={detailFileId ?? ""}
-                file={detailFile}
-                isExtracting={extractingFileId === detailFileId}
-                onExtract={() => { if (detailFile) handleExtract(detailFile); }}
-                onClose={() => setDetailFileId(null)}
-            />
-
             {/* Hidden inputs */}
             <input
                 ref={cameraInputRef}
@@ -143,128 +146,131 @@ export function PrescriptionsContent() {
             />
 
             {/* Header */}
-            <Card
-                radius={"xl"}
-                withBorder
+            <Stack
             >
-                <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="md" withBorder>
-                    <Group justify="space-between" align="center">
-                        <Group gap="sm">
-                            <ThemeIcon size={36} radius="md" color="primary" variant="light">
-                                <IconReportMedical size={20} />
-                            </ThemeIcon>
-                            <Box>
-                                <Title order={4} lh={1.2}>Prescriptions</Title>
-                                <Text size="xs" c="dimmed">
-                                    Store photos &amp; PDFs — hit ✦ to extract medications with AI
-                                </Text>
-                            </Box>
-                        </Group>
-                        <Group gap="xs">
-                            {!isLoading && prescriptions.length > 0 && (
-                                <Badge variant="light" color="gray" size="sm" radius="xl">
-                                    {prescriptions.length} {prescriptions.length === 1 ? "file" : "files"}
-                                </Badge>
-                            )}
-                            {/* Mobile: Icon-only buttons */}
-                            <Tooltip label="Take Photo" withArrow hiddenFrom="sm">
-                                <ActionIcon
-                                    size={32}
-                                    variant="filled"
-                                    color="primary"
-                                    loading={upload.isPending}
-                                    onClick={() => cameraInputRef.current?.click()}
-                                    hiddenFrom="sm"
-                                    aria-label="Take Photo"
-                                >
-                                    <IconCamera size={16} />
-                                </ActionIcon>
-                            </Tooltip>
-                            <Tooltip label="Upload" withArrow hiddenFrom="sm">
-                                <ActionIcon
-                                    size={32}
-                                    variant="light"
-                                    color="primary"
-                                    loading={upload.isPending}
-                                    onClick={() => fileInputRef.current?.click()}
-                                    hiddenFrom="sm"
-                                    aria-label="Upload"
-                                >
-                                    <IconUpload size={16} />
-                                </ActionIcon>
-                            </Tooltip>
-                            {/* Desktop: Full buttons with text */}
-                            <Button
-                                leftSection={<IconCamera size={15} />}
-                                size="xs"
+                <Group justify="space-between" align="center">
+                    <Group gap="sm">
+                        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+                            <IconReportMedical size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>Prescriptions</Title>
+                            <Text size="xs" c="dimmed">
+                                Store photos &amp; PDFs — hit ✦ to extract medications with AI
+                            </Text>
+                        </Box>
+                    </Group>
+                    <Group gap="xs">
+                        {!isLoading && prescriptions.length > 0 && (
+                            <Badge variant="light" color="gray" size="sm" radius="xl">
+                                {prescriptions.length} {prescriptions.length === 1 ? "file" : "files"}
+                            </Badge>
+                        )}
+                        {/* Mobile: Icon-only buttons */}
+                        <Tooltip label="Take Photo" withArrow hiddenFrom="sm">
+                            <ActionIcon
+                                size={32}
                                 variant="filled"
                                 color="primary"
                                 loading={upload.isPending}
                                 onClick={() => cameraInputRef.current?.click()}
-                                visibleFrom="sm"
+                                hiddenFrom="sm"
+                                aria-label="Take Photo"
                             >
-                                Take Photo
-                            </Button>
-                            <Button
-                                leftSection={<IconUpload size={15} />}
-                                size="xs"
+                                <IconCamera size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label="Upload" withArrow hiddenFrom="sm">
+                            <ActionIcon
+                                size={32}
                                 variant="light"
                                 color="primary"
                                 loading={upload.isPending}
                                 onClick={() => fileInputRef.current?.click()}
-                                visibleFrom="sm"
+                                hiddenFrom="sm"
+                                aria-label="Upload"
                             >
-                                Upload
-                            </Button>
-                        </Group>
+                                <IconUpload size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                        {/* Desktop: Full buttons with text */}
+                        <Button
+                            leftSection={<IconCamera size={15} />}
+                            size="xs"
+                            variant="filled"
+                            color="primary"
+                            loading={upload.isPending}
+                            onClick={() => cameraInputRef.current?.click()}
+                            visibleFrom="sm"
+                        >
+                            Take Photo
+                        </Button>
+                        <Button
+                            leftSection={<IconUpload size={15} />}
+                            size="xs"
+                            variant="light"
+                            color="primary"
+                            loading={upload.isPending}
+                            onClick={() => fileInputRef.current?.click()}
+                            visibleFrom="sm"
+                        >
+                            Upload
+                        </Button>
                     </Group>
-                </Card.Section>
-                <Card.Section p="md">
-                    {/* Scrollable content */}
-                    <Box style={{ flex: 1, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }}>
-                            <Box maw={1080} mx="auto">
-                                {/* Loading skeletons */}
-                                {isLoading && (
-                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
-                                        {["sk-a", "sk-b", "sk-c", "sk-d"].map((k) => (
-                                            <Skeleton key={k} height={140} radius="md" />
-                                        ))}
-                                    </SimpleGrid>
-                                )}
+                </Group>
+                {/* Scrollable content */}
+                <Box>
+                    {/* Loading skeletons */}
+                    {isLoading && (
+                        <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
+                            {["sk-a", "sk-b", "sk-c", "sk-d"].map((k) => (
+                                <Skeleton key={k} height={140} radius="md" />
+                            ))}
+                        </SimpleGrid>
+                    )}
 
-                                {/* Empty state */}
-                                {!isLoading && prescriptions.length === 0 && (
-                                    <EmptyPrescriptions
-                                        onCameraCapture={() => cameraInputRef.current?.click()}
-                                        onFileSelect={() => fileInputRef.current?.click()}
+                    {/* Empty state */}
+                    {!isLoading && prescriptions.length === 0 && (
+                        <EmptyPrescriptions
+                            onCameraCapture={() => cameraInputRef.current?.click()}
+                            onFileSelect={() => fileInputRef.current?.click()}
+                        />
+                    )}
+
+                    {/* Grid */}
+                    {!isLoading && prescriptions.length > 0 && (
+                        <Stack gap="md">
+                            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
+                                {paginated.map((rx) => (
+                                    <PrescriptionCard
+                                        key={rx.id}
+                                        file={rx}
+                                        isPendingDelete={
+                                            deleteRx.isPending &&
+                                            deleteRx.variables?.prescriptionId === rx.id
+                                        }
+                                        isExtracting={extractingFileId === rx.id}
+                                        onDelete={() => handleDelete(rx)}
+                                        onExtract={() => handleExtract(rx)}
+                                        onOpenDetail={() => router.push(`/patient/prescriptions/${rx.id}`)}
+                                        isOptimistic={rx.id.startsWith("__optimistic__")}
                                     />
-                                )}
-
-                                {/* Grid */}
-                                {!isLoading && prescriptions.length > 0 && (
-                                    <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">
-                                        {prescriptions.map((rx) => (
-                                            <PrescriptionCard
-                                                key={rx.id}
-                                                file={rx}
-                                                isPendingDelete={
-                                                    deleteRx.isPending &&
-                                                    deleteRx.variables?.fileId === rx.id
-                                                }
-                                                isExtracting={extractingFileId === rx.id}
-                                                onDelete={() => handleDelete(rx)}
-                                                onExtract={() => handleExtract(rx)}
-                                                onOpenDetail={() => setDetailFileId(rx.id)}
-                                            />
-                                        ))}
-                                    </SimpleGrid>
-                                )}
-                            </Box>
-                        </ScrollArea>
-                    </Box>
-                </Card.Section>
-            </Card>
+                                ))}
+                            </SimpleGrid>
+                            {totalPages > 1 && (
+                                <Group justify="center" mt="md">
+                                    <Pagination
+                                        size="sm"
+                                        total={totalPages}
+                                        value={safePage}
+                                        onChange={setPage}
+                                    />
+                                </Group>
+                            )}
+                        </Stack>
+                    )}
+                </Box>
+            </Stack>
         </Container>
     );
 }

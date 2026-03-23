@@ -1,20 +1,15 @@
 "use client";
 import { Card, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconGauge } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
 
-// Replace with your actual query key and fetcher
-import { chatKeys } from "@/app/(portal)/patient/_keys";
+import { useCreditsQuery } from "@/app/(portal)/patient/_query";
+import { UsageCardError, UsageCardSkeleton } from "./_shared";
 
 export function UsageKpiCard() {
-    const { data, isLoading, isError } = useQuery({
-        queryKey: chatKeys.usage(),
-        queryFn: () => fetch("/api/usage").then((res) => res.json()),
-        staleTime: 60_000,
-    });
+    const { data, isLoading, isError } = useCreditsQuery();
 
-    if (isLoading) return <Card radius="md">Loading...</Card>;
-    if (isError || !data) return <Card radius="md">Failed to load usage KPI</Card>;
+    if (isLoading) return <UsageCardSkeleton />;
+    if (isError || !data) return <UsageCardError title="Usage KPI" subtitle="Overview of your usage metrics" />;
 
     return (
         <Card radius="md" withBorder>

@@ -105,7 +105,7 @@ export interface GuardrailMiddlewareOptions {
   userQuery: string;
 }
 
-async function runGuardrailCheck(opts: GuardrailMiddlewareOptions) {
+export async function runGuardrailCheck(opts: GuardrailMiddlewareOptions) {
   const query = opts.userQuery.trim();
   if (!query) return;
 

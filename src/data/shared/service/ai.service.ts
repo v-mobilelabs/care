@@ -339,6 +339,7 @@ export class AIService {
       model,
       output: Output.object({ schema }),
       messages,
+      temperature: 0,
     });
 
     // Cast required: TS cannot infer the output shape from a generic schema param.
@@ -387,6 +388,8 @@ export class AIService {
       model,
       output: Output.choice({ options: options as unknown as string[] }),
       messages,
+      temperature: 0,
+      maxOutputTokens: 256,
     });
 
     const choice = (result as unknown as { output?: T }).output;

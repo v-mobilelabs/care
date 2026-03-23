@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
-import { chatKeys } from "./_components/keys";
+import { chatKeys } from "@/app/(portal)/patient/_keys";
 import { ListMessagesUseCase } from "@/data/sessions";
 import { ChatContent } from "./_content";
 import { ChatSkeleton } from "./_chat-skeleton";

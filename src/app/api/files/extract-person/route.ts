@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import {
-  ExtractPersonUseCase,
-  type ExtractedPersonResult,
-} from "@/data/sessions";
+import { ExtractPersonUseCase, type ExtractedPersonResult } from "@/data/files";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

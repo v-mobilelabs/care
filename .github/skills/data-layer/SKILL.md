@@ -25,7 +25,7 @@ API Route / Server Action
   ↓ calls
 UseCase (validates input via Zod, wraps in OTel span, auto-indexes via @Indexable)
   ↓ delegates to
-Service (optional orchestration — cross-cutting logic, enrichment, multi-repo coordination)
+Service (business logic — delegation, orchestration, enrichment, multi-repo coordination)
   ↓ calls
 Repository (direct Firestore access — queries, writes, reads)
   ↓ uses
@@ -34,14 +34,14 @@ Model (Document interface, DTO, mapper, Zod schemas)
 
 ### When to use each layer
 
-| Layer          | Required? | When to use                                                                              |
-| -------------- | --------- | ---------------------------------------------------------------------------------------- |
-| **Model**      | Always    | Every domain needs types + schemas                                                       |
-| **Repository** | Always    | Every domain needs Firestore access                                                      |
-| **Service**    | Optional  | Only when: cross-repo coordination, enrichment, or cleanup logic (e.g., Firestore + RAG) |
-| **UseCase**    | Always    | Every operation exposed to API routes or server actions                                  |
+| Layer          | Required? | When to use                                                                                                                          |
+| -------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Model**      | Always    | Every domain needs types + schemas                                                                                                   |
+| **Repository** | Always    | Every domain needs Firestore access                                                                                                  |
+| **Service**    | Always    | Every domain gets a service layer between UseCase and Repository — even simple CRUD uses a thin pass-through service for consistency |
+| **UseCase**    | Always    | Every operation exposed to API routes or server actions                                                                              |
 
-If a domain is simple CRUD with no cross-cutting concerns, the UseCase can call the Repository directly — skip the Service layer.
+The architecture is always **UseCase → Service → Repository**. Even for simple CRUD, create a service that delegates to the repository. This keeps the layering consistent, makes it trivial to add cross-cutting concerns later, and ensures UseCases never import repositories directly.
 
 ---
 
@@ -287,16 +287,16 @@ export const doctorPatientRepository = {
 
 **File**: `src/data/{domain}/service/{entity}.service.ts`
 
-Services are exported as **class + singleton instance**. They are optional — only needed when there's orchestration logic beyond simple delegation.
+Services are exported as **class + singleton instance**. Every domain must have a service layer — even simple CRUD gets a thin pass-through service for consistency.
 
-### When to use a Service
+### Service Complexity Levels
 
-| Scenario                                | Use Service?                           | Example                                                        |
-| --------------------------------------- | -------------------------------------- | -------------------------------------------------------------- |
-| Simple CRUD pass-through                | No — UseCase calls Repository directly | Conditions, vitals                                             |
-| Cross-cutting cleanup (Firestore + RAG) | **Yes**                                | Prescriptions (delete from Firestore + remove from RAG index)  |
-| Multi-repository coordination           | **Yes**                                | Messages (save message + bump session counter)                 |
-| Batch enrichment from other collections | **Yes**                                | Doctor-patients (fetch profile photos alongside relationships) |
+| Complexity                              | Service Pattern                             | Example                                                        |
+| --------------------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| Simple CRUD pass-through                | Thin delegation to repository               | Conditions, vitals, patient-summaries                          |
+| Cross-cutting cleanup (Firestore + RAG) | Orchestrates repository + external services | Prescriptions (delete from Firestore + remove from RAG index)  |
+| Multi-repository coordination           | Coordinates multiple repositories           | Messages (save message + bump session counter)                 |
+| Batch enrichment from other collections | Fetches + merges from multiple sources      | Doctor-patients (fetch profile photos alongside relationships) |
 
 ### Template — Simple Service
 
@@ -680,6 +680,8 @@ Cursor-based pagination using Firestore timestamps. The pattern: fetch `limit + 
 export interface PaginatedAllergies {
   allergies: AllergyDto[];
   nextCursor: string | null; // ISO-8601 timestamp, or null when no more pages
+  /** Total matching docs — only present on the first page (no cursor). */
+  totalCount?: number;
 }
 
 export const ListAllergiesSchema = z.object({
@@ -718,7 +720,15 @@ async list(
     ? allergies[allergies.length - 1].createdAt  // last item's timestamp
     : null;
 
-  return { allergies, nextCursor };
+  // Count total matching docs only on the first page (no cursor).
+  // Uses Firestore count() aggregation — cheap and doesn't transfer documents.
+  let totalCount: number | undefined;
+  if (!cursor) {
+    const countSnap = await allergiesCol(userId, dependentId).count().get();
+    totalCount = countSnap.data().count;
+  }
+
+  return { allergies, nextCursor, totalCount };
 },
 ```
 
@@ -758,6 +768,65 @@ const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
 
 // Flatten pages for rendering
 const allergies = data?.pages.flatMap((p) => p.allergies) ?? [];
+
+// Total count from the first page (accurate server-side count)
+const totalCount = data?.pages[0]?.totalCount;
+```
+
+### Client — Lazy Load with IntersectionObserver
+
+Replace "Load more" buttons with automatic lazy loading. Use a sentinel `<div>` observed by `IntersectionObserver` — when it scrolls into view, fetch the next page.
+
+```tsx
+function LazyLoadSentinel({
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+}: Readonly<{
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => void;
+}>) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }, // trigger 200px before visible
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  if (!hasNextPage) return null;
+
+  return (
+    <Group justify="center" mt="lg" ref={ref}>
+      {isFetchingNextPage && <Loader size="sm" />}
+    </Group>
+  );
+}
+```
+
+Use in a list component:
+
+```tsx
+<SimpleGrid cols={{ base: 1, xs: 2, sm: 3 }}>
+    {items.map((item) => <ItemCard key={item.id} item={item} />)}
+</SimpleGrid>
+
+<LazyLoadSentinel
+    hasNextPage={!!hasNextPage}
+    isFetchingNextPage={isFetchingNextPage}
+    fetchNextPage={fetchNextPage}
+/>
 ```
 
 ### Key Points
@@ -765,6 +834,8 @@ const allergies = data?.pages.flatMap((p) => p.allergies) ?? [];
 - **Cursor = ISO-8601 timestamp** from the last item of the previous page
 - Fetch `limit + 1` — if you get more than `limit`, there's a next page
 - `nextCursor = null` means no more data
+- **totalCount** — compute via Firestore `count()` only on the first page (when `!cursor`). Reuse from `data.pages[0].totalCount` on the client. Never use `files.length` (that's only the loaded subset)
+- **Lazy load** — prefer IntersectionObserver sentinel over "Load more" buttons. Use `rootMargin: "200px"` to trigger before the sentinel is visible
 - For **reverse chronological** (newest first), the cursor points to the oldest item on the page
 - For **reverse display** (oldest first, like chat messages), reverse after fetching: `page.reverse()`
 
@@ -1019,6 +1090,262 @@ Decorator for automatic RAG indexing on create/delete use cases.
 
 ---
 
+## 13. Firestore Indexes (`firestore.indexes.json`)
+
+Firestore requires **composite indexes** for any query that combines `where()` + `orderBy()` on different fields, or multiple inequality/`where()` filters. Manage them in `firestore.indexes.json` at the project root.
+
+### File Structure
+
+```json
+{
+  "indexes": [
+    /* composite index entries */
+  ],
+  "fieldOverrides": [
+    /* single-field index overrides */
+  ]
+}
+```
+
+### When to Add an Index
+
+Add a composite index whenever a **repository query** uses:
+
+| Query Pattern                                                                        | Index Needed?                                 |
+| ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `.orderBy("createdAt", "desc")` alone                                                | No — single-field, auto-created               |
+| `.where("status", "==", "active")` alone                                             | No — single-field, auto-created               |
+| `.where("doctorId", "==", id).orderBy("invitedAt", "desc")`                          | **Yes** — where + orderBy on different fields |
+| `.where("doctorId", "==", id).where("status", "==", s).orderBy("invitedAt", "desc")` | **Yes** — multi-field filter + orderBy        |
+| Vector KNN query with pre-filters                                                    | **Yes** — include vector config               |
+
+**Rule of thumb**: if a repository method combines fields in a query, add the index. If you get a **gRPC code 9** error at runtime ("The query requires an index"), the missing index must be added here.
+
+### Index Entry Format
+
+```json
+{
+  "collectionGroup": "collection_name",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "filterField1", "order": "ASCENDING" },
+    { "fieldPath": "filterField2", "order": "ASCENDING" },
+    { "fieldPath": "sortField", "order": "DESCENDING" }
+  ]
+}
+```
+
+**Field ordering rules**:
+
+1. **Equality filters first** (`where("field", "==", value)`) — always `"ASCENDING"`
+2. **Range/inequality filters next** — match the query direction
+3. **orderBy field last** — match `"asc"` → `"ASCENDING"`, `"desc"` → `"DESCENDING"`
+
+### Query Scope
+
+| Scope                | Use When                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `"COLLECTION"`       | Query targets a single collection path (default — most queries)                       |
+| `"COLLECTION_GROUP"` | Query uses `collectionGroup()` to search across all subcollections with the same name |
+
+Example — scoped health data under `profiles/{profileId}/files` queried per-collection:
+
+```json
+{ "collectionGroup": "files", "queryScope": "COLLECTION", "fields": [...] }
+```
+
+Example — files queried across all profiles by `userId`:
+
+```json
+{ "collectionGroup": "files", "queryScope": "COLLECTION_GROUP", "fields": [...] }
+```
+
+### Common Patterns
+
+**Pattern 1 — Filter + Sort (most common)**
+
+Repository:
+
+```ts
+col.where("doctorId", "==", doctorId).orderBy("invitedAt", "desc");
+```
+
+Index:
+
+```json
+{
+  "collectionGroup": "doctor_patients",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "doctorId", "order": "ASCENDING" },
+    { "fieldPath": "invitedAt", "order": "DESCENDING" }
+  ]
+}
+```
+
+**Pattern 2 — Multi-Filter + Sort**
+
+Repository:
+
+```ts
+col
+  .where("doctorId", "==", id)
+  .where("status", "==", status)
+  .orderBy("invitedAt", "desc");
+```
+
+Index:
+
+```json
+{
+  "collectionGroup": "doctor_patients",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "doctorId", "order": "ASCENDING" },
+    { "fieldPath": "status", "order": "ASCENDING" },
+    { "fieldPath": "invitedAt", "order": "DESCENDING" }
+  ]
+}
+```
+
+**Pattern 3 — Vector Search with Pre-Filters**
+
+Repository:
+
+```ts
+col
+  .where("userId", "==", userId)
+  .where("type", "==", type)
+  .findNearest("embedding", queryVector, { limit: 10 });
+```
+
+Index:
+
+```json
+{
+  "collectionGroup": "embeddings",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "userId", "order": "ASCENDING" },
+    { "fieldPath": "type", "order": "ASCENDING" },
+    {
+      "fieldPath": "embedding",
+      "vectorConfig": { "dimension": 768, "flat": {} }
+    }
+  ]
+}
+```
+
+**Pattern 4 — Vector Search without Pre-Filters**
+
+```json
+{
+  "collectionGroup": "guidelines",
+  "queryScope": "COLLECTION",
+  "fields": [
+    {
+      "fieldPath": "embedding",
+      "vectorConfig": { "dimension": 768, "flat": {} }
+    }
+  ]
+}
+```
+
+### Field Overrides
+
+Use `fieldOverrides` to change the default indexing behavior for a specific field — e.g., enable `COLLECTION_GROUP` scope on a field that Firestore only indexes at `COLLECTION` scope by default:
+
+```json
+{
+  "fieldOverrides": [
+    {
+      "collectionGroup": "files",
+      "fieldPath": "userId",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
+    }
+  ]
+}
+```
+
+### When to Update an Index
+
+Update (replace) an existing index entry when:
+
+- A query changes its `orderBy` direction (e.g., `asc` → `desc`)
+- A query adds/removes a `where()` filter field
+- A vector dimension changes (e.g., model upgrade from 768 → 1024)
+
+Find the existing entry by matching `collectionGroup` + `fields`, then modify it in place.
+
+### When to Delete an Index
+
+Remove an index entry when:
+
+- The repository query it supports is deleted
+- A domain/collection is removed entirely
+- The query is simplified to single-field (no composite index needed)
+
+**Never leave orphan indexes** — they consume Firestore storage and write overhead. When deleting a domain or simplifying a query, remove the corresponding index entries.
+
+### Deployment
+
+After modifying `firestore.indexes.json`, deploy with:
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+This is non-destructive for existing data — indexes are built asynchronously by Firestore. New indexes may take minutes to build depending on collection size.
+
+### Checklist for New Domains
+
+When adding a new data domain, audit every repository method for composite queries and add indexes for each. Typical set for a scoped collection:
+
+```json
+// filter by parent scope field + sort by time
+{
+  "collectionGroup": "{collection}",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "{scopeField}", "order": "ASCENDING" },
+    { "fieldPath": "createdAt", "order": "DESCENDING" }
+  ]
+}
+```
+
+If the domain supports status filtering:
+
+```json
+{
+  "collectionGroup": "{collection}",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "{scopeField}", "order": "ASCENDING" },
+    { "fieldPath": "status", "order": "ASCENDING" },
+    { "fieldPath": "createdAt", "order": "DESCENDING" }
+  ]
+}
+```
+
+If the domain uses RAG embeddings:
+
+```json
+{
+  "collectionGroup": "embeddings",
+  "queryScope": "COLLECTION",
+  "fields": [
+    { "fieldPath": "userId", "order": "ASCENDING" },
+    { "fieldPath": "type", "order": "ASCENDING" },
+    {
+      "fieldPath": "embedding",
+      "vectorConfig": { "dimension": 768, "flat": {} }
+    }
+  ]
+}
+```
+
+---
+
 ## Complete Scaffold Checklist
 
 When creating a new data domain, create these files in order:
@@ -1034,13 +1361,14 @@ When creating a new data domain, create these files in order:
 9. **`src/app/api/{resource}/[{id}]/route.ts`** — GET + DELETE
 10. **`src/data/cached.ts`** — add `CacheTags.{entity}` + `getCached{Entity}s()`
 11. **`src/data/actions.ts`** — add `revalidate{Entity}s()`
-12. **`firestore.indexes.json`** — add composite indexes for `where` + `orderBy` combos
+12. **`firestore.indexes.json`** — add composite indexes for every `where` + `orderBy` combo in repository queries (see §13 Firestore Indexes for format and patterns)
 
 ### Common Pitfalls
 
 - Forgetting `stripUndefined()` before Firestore writes → runtime error
 - Forgetting to thread `dependentId` through UseCase → Service → Repository → data belongs to wrong profile
-- Missing composite index in `firestore.indexes.json` → 503 error at runtime
+- Missing composite index in `firestore.indexes.json` → gRPC code 9 / 503 error at runtime (see §13)
+- Leaving orphan indexes after deleting a domain or simplifying queries → wasted storage + write overhead
 - Returning raw `Document` instead of `DTO` from repository → timestamps leak as Firestore objects
 - Not adding `nameLower` field → case-insensitive search/duplicate detection doesn't work
 - Calling `ragService` manually instead of using `@Indexable` → inconsistent indexing behavior

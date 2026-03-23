@@ -6,37 +6,27 @@ import {
     Collapse,
     Divider,
     Group,
+    Loader,
     Menu,
     Paper,
     Stack,
+    Switch,
     Text,
     ThemeIcon,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-    IconCapsule,
     IconChevronDown,
     IconChevronRight,
     IconDotsVertical,
     IconEdit,
-    IconMessageCircle,
+    IconPillFilled,
     IconPrescription,
     IconTrash,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
-
 import { type MedicationRecord, type MedicationStatus } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+import { formatDate } from "@/lib/format";
 
 const STATUS_COLOR: Record<MedicationStatus, string> = {
     active: colors.success,
@@ -54,16 +44,18 @@ const STATUS_LABEL: Record<MedicationStatus, string> = {
 
 // ── Medication Card ───────────────────────────────────────────────────────────
 
-export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Readonly<{
+export function MedicationCard({ med, onEdit, isPendingDelete, onDelete, onToggleStatus, isTogglingStatus, isOptimistic = false }: Readonly<{
     med: MedicationRecord;
     onEdit: () => void;
     isPendingDelete: boolean;
     onDelete: () => void;
+    onToggleStatus: () => void;
+    isTogglingStatus: boolean;
+    isOptimistic?: boolean;
 }>) {
     const [expanded, { toggle }] = useDisclosure(false);
-    const router = useRouter();
     const statusColor = STATUS_COLOR[med.status];
-    const hasDetails = !!(med.dosage ?? med.form ?? med.frequency ?? med.duration ?? med.instructions ?? med.condition);
+    const hasDetails = !!(med.dosage ?? med.form ?? med.frequency ?? med.duration ?? med.condition);
 
     const statusBorderColor = (() => {
         if (statusColor === colors.success) return "teal";
@@ -73,16 +65,35 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
 
     return (
         <Paper
-            withBorder
+            shadow="0"
             radius="lg"
-            p="md"
+            px="md"
+            py="md"
+            withBorder={false}
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
-                borderLeft: `3px solid var(--mantine-color-${statusBorderColor}-5)`,
+                backgroundColor: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-7))",
+                position: isOptimistic ? "relative" as const : undefined,
             }}
         >
-            <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
+            {isOptimistic && (
+                <Box
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 1,
+                        borderRadius: "var(--mantine-radius-lg)",
+                        background: "light-dark(rgba(255,255,255,0.6), rgba(30,32,40,0.6))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    <Loader size="sm" />
+                </Box>
+            )}
+            <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
                 {/* Left: icon + name + badges */}
                 <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }} align="flex-start">
                     <ThemeIcon
@@ -92,11 +103,11 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                         variant="light"
                         style={{ flexShrink: 0, marginTop: 2 }}
                     >
-                        <IconCapsule size={18} />
+                        <IconPillFilled size={18} />
                     </ThemeIcon>
                     <Box style={{ minWidth: 0 }}>
-                        <Text fw={600} size="sm" lineClamp={2}>{med.name}</Text>
-                        <Group gap={6} mt={4} wrap="wrap">
+                        <Text size="sm" lineClamp={2}>{med.name}</Text>
+                        <Group gap={6} mt={0} wrap="wrap">
                             <Badge size="xs" variant="light" color={statusColor} radius="sm">
                                 {STATUS_LABEL[med.status]}
                             </Badge>
@@ -127,8 +138,18 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                     </Box>
                 </Group>
 
-                {/* Right: actions */}
-                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }} align="center">
+                {/* Right: toggle + actions */}
+                <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }} align="center">
+                    {(med.status === "active" || med.status === "paused") && (
+                        <Switch
+                            size="xs"
+                            color={colors.success}
+                            checked={med.status === "active"}
+                            onChange={onToggleStatus}
+                            disabled={isTogglingStatus}
+                            aria-label={med.status === "active" ? "Pause medication" : "Resume medication"}
+                        />
+                    )}
                     {hasDetails && (
                         <ActionIcon
                             size={28}
@@ -147,15 +168,6 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                             </ActionIcon>
                         </Menu.Target>
                         <Menu.Dropdown>
-                            <Menu.Item
-                                leftSection={<IconMessageCircle size={14} />}
-                                onClick={() => {
-                                    const sessionId = med.sessionId ?? crypto.randomUUID();
-                                    router.push(`/patient/assistant?id=${sessionId}`);
-                                }}
-                            >
-                                Chat about this
-                            </Menu.Item>
                             <Menu.Item leftSection={<IconEdit size={14} />} onClick={onEdit}>
                                 Edit
                             </Menu.Item>
@@ -183,7 +195,6 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete }: Reado
                             { label: "Frequency", value: med.frequency },
                             { label: "Duration", value: med.duration },
                             { label: "For", value: med.condition },
-                            { label: "Instructions", value: med.instructions },
                         ]
                             .filter((f) => !!f.value)
                             .map(({ label, value }) => (

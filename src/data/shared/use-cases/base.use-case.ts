@@ -6,6 +6,7 @@ import {
   buildIndexMetadata,
 } from "./indexable.decorator";
 import { ragService } from "@/data/shared/service/rag/rag.service";
+import { indexToCollection, removeFromCollection } from "./collection-indexer";
 
 const tracer = trace.getTracer("careai.use-cases");
 
@@ -75,10 +76,19 @@ export abstract class UseCase<TInput, TOutput> {
           const profileId = dependentId ?? inp.profileId ?? userId;
 
           if (isRemoveOptions(indexable)) {
-            const sourceId = inp[indexable.sourceIdField] as string;
-            void ragService
-              .removeDocument({ userId, profileId, sourceId })
-              .catch((e) => console.error("[Indexable] Remove failed:", e));
+            if (indexable.collection) {
+              // Custom collection — delete by sourceId from named collection
+              const sourceId = inp[indexable.sourceIdField] as string;
+              void removeFromCollection(indexable.collection, sourceId).catch(
+                (e) =>
+                  console.error("[Indexable] Collection remove failed:", e),
+              );
+            } else {
+              const sourceId = inp[indexable.sourceIdField] as string;
+              void ragService
+                .removeDocument({ userId, profileId, sourceId })
+                .catch((e) => console.error("[Indexable] Remove failed:", e));
+            }
           } else {
             const data = result as Record<string, unknown>;
             const content = buildIndexContent(data, indexable.contentFields);
@@ -90,22 +100,39 @@ export abstract class UseCase<TInput, TOutput> {
               ? buildIndexMetadata(data, indexable.metadataFields)
               : {};
 
-            console.log(
-              `[Indexable] Indexing ${indexable.type} (sourceId: ${sourceId})`,
-            );
-            void ragService
-              .indexDocument({
-                userId,
-                profileId,
-                dependentId,
-                type: indexable.type,
+            if (indexable.collection) {
+              // Custom collection — embed + store on the document directly
+              console.log(
+                `[Indexable] Indexing to ${indexable.collection} (sourceId: ${sourceId})`,
+              );
+              void indexToCollection({
+                collection: indexable.collection,
                 sourceId,
+                type: indexable.type,
                 content,
                 metadata,
-              })
-              .catch((e: unknown) =>
-                console.error("[Indexable] Indexing failed:", e),
+                data,
+              }).catch((e: unknown) =>
+                console.error("[Indexable] Collection indexing failed:", e),
               );
+            } else {
+              console.log(
+                `[Indexable] Indexing ${indexable.type} (sourceId: ${sourceId})`,
+              );
+              void ragService
+                .indexDocument({
+                  userId,
+                  profileId,
+                  dependentId,
+                  type: indexable.type,
+                  sourceId,
+                  content,
+                  metadata,
+                })
+                .catch((e: unknown) =>
+                  console.error("[Indexable] Indexing failed:", e),
+                );
+            }
           }
         }
 

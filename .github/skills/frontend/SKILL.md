@@ -13,6 +13,7 @@ description: "**FRONTEND SKILL** — Mantine v8 best practices, advanced styling
 4. **Mobile-first** — design for small screens, scale up with responsive props `{{ base, sm, md, lg }}`.
 5. **React Compiler active** — no manual `useMemo`/`useCallback`. The compiler handles memoization.
 6. **Props type safety** — all component props must be `Readonly<{...}>` or `Readonly<Props>`.
+7. **Mantine hooks first** — prefer `@mantine/hooks` (`useScrollIntoView`, `useDisclosure`, `useIntersection`, `useDebouncedValue`, etc.) over custom React hooks. Only create custom hooks when Mantine has no equivalent.
 
 ---
 
@@ -504,6 +505,217 @@ modals.openConfirmModal({
 
 ---
 
+## Optimistic CRUD Patterns
+
+All mutations (Create, Update, Delete) MUST use optimistic updates: reflect the change immediately in the UI and roll back on failure. Items pending server confirmation show a **loading overlay** on top of the real card content.
+
+### Optimistic Overlay (shared UI pattern)
+
+Every card component accepts an `isOptimistic?: boolean` prop. When true, a semi-transparent overlay with a `Loader` renders on top of the real card content. The card's root element gets `position: "relative"` so the overlay can cover it with `position: "absolute"; inset: 0`.
+
+```tsx
+// In every card component — add to props:
+isOptimistic?: boolean;
+
+// In the card root element's style prop:
+style={{
+  ...otherStyles,
+  position: isOptimistic ? "relative" as const : undefined,
+}}
+
+// Right after the opening tag of the card root:
+{isOptimistic && (
+  <Box
+    style={{
+      position: "absolute",
+      inset: 0,
+      zIndex: 1,
+      borderRadius: "var(--mantine-radius-lg)",
+      background: "light-dark(rgba(255,255,255,0.6), rgba(30,32,40,0.6))",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+  >
+    <Loader size="sm" />
+  </Box>
+)}
+```
+
+Detection in the content file — pass to the card:
+
+```tsx
+<ItemCard item={item} isOptimistic={item.id.startsWith("__optimistic__")} />
+```
+
+### Optimistic Create
+
+Insert a temporary item with an `__optimistic__` prefixed ID. The card renders immediately with the overlay. On success, the real server data replaces it. On error, roll back to snapshot.
+
+#### Mutation (`_query.ts`)
+
+```tsx
+export function useCreateItemMutation() {
+  const qc = useQueryClient();
+  const key = ["items"] as const;
+  return useMutation({
+    mutationFn: (data: CreateItemInput) =>
+      apiFetch<ItemRecord>("/api/items", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onMutate: async (data) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<ItemRecord[]>(key);
+      const optimistic: ItemRecord = {
+        id: `__optimistic__${crypto.randomUUID()}`,
+        ...data,
+        createdAt: new Date().toISOString(),
+      };
+      qc.setQueryData<ItemRecord[]>(key, (old = []) => [optimistic, ...old]);
+      return { snapshot };
+    },
+    onSuccess: (created) => {
+      // Replace optimistic item with real server data
+      qc.setQueryData<ItemRecord[]>(key, (old = []) =>
+        old.map((i) => (i.id.startsWith("__optimistic__") ? created : i)),
+      );
+    },
+    onError: (_err, _data, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+```
+
+### Optimistic Update
+
+Merge the updated fields into the existing item immediately. Show overlay on the card during save.
+
+#### Mutation (`_query.ts`)
+
+```tsx
+export function useUpdateItemMutation() {
+  const qc = useQueryClient();
+  const key = ["items"] as const;
+  return useMutation({
+    mutationFn: (vars: { itemId: string; data: UpdateItemInput }) =>
+      apiFetch<ItemRecord>(`/api/items/${vars.itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify(vars.data),
+      }),
+    onMutate: async ({ itemId, data }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<ItemRecord[]>(key);
+      qc.setQueryData<ItemRecord[]>(key, (old = []) =>
+        old.map((i) => (i.id === itemId ? { ...i, ...data } : i)),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+```
+
+#### UI — show overlay during update
+
+```tsx
+<ItemCard
+  item={item}
+  isOptimistic={
+    updateMutation.isPending && updateMutation.variables?.itemId === item.id
+  }
+/>
+```
+
+### Optimistic Delete
+
+Remove the item immediately from the UI. If the API fails, restore from snapshot.
+
+#### Mutation (`_query.ts`)
+
+```tsx
+export function useDeleteItemMutation() {
+  const qc = useQueryClient();
+  const key = ["items"] as const;
+  return useMutation({
+    mutationFn: (itemId: string) =>
+      apiFetch<{ ok: boolean }>(`/api/items/${itemId}`, { method: "DELETE" }),
+    onMutate: async (itemId) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<ItemRecord[]>(key);
+      qc.setQueryData<ItemRecord[]>(key, (old = []) =>
+        old.filter((i) => i.id !== itemId),
+      );
+      return { snapshot };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+```
+
+#### UI — confirm modal with notifications
+
+```tsx
+function handleDelete(id: string, name: string) {
+  modals.openConfirmModal({
+    title: "Delete item?",
+    children: (
+      <Text size="sm">
+        <strong>{name}</strong> will be permanently removed. This cannot be
+        undone.
+      </Text>
+    ),
+    labels: { confirm: "Delete", cancel: "Cancel" },
+    confirmProps: { color: "red" },
+    onConfirm: () => {
+      deleteMutation.mutate(id, {
+        onSuccess: () =>
+          notifications.show({
+            title: "Deleted",
+            message: `${name} has been removed.`,
+            color: colors.success,
+            icon: <IconCheck size={16} />,
+          }),
+        onError: () =>
+          notifications.show({
+            title: "Delete failed",
+            message: `Could not delete ${name}. Please try again.`,
+            color: colors.danger,
+          }),
+      });
+    },
+  });
+}
+```
+
+### Checklist (all CRUD)
+
+- [ ] Mutation saves a **snapshot** before optimistic update
+- [ ] Mutation restores snapshot in **`onError`**
+- [ ] Mutation calls **`invalidateQueries`** in `onSettled`
+- [ ] Create mutations use **`__optimistic__` prefixed ID** for the temporary item
+- [ ] Card components accept **`isOptimistic`** prop and show overlay with `Loader`
+- [ ] Content component passes `isOptimistic={item.id.startsWith("__optimistic__")}` for creates
+- [ ] Update overlays use `mutation.isPending && mutation.variables?.id === item.id`
+- [ ] Delete shows **success notification** on `onSuccess`
+- [ ] Delete shows **error notification** on `onError`
+
+---
+
 ## Key Mantine Hooks
 
 | Hook                | Use Case                                                          |
@@ -651,6 +863,93 @@ var(--mantine-z-index-max)     → 9999
 
 ---
 
+## Collection / List Page Layout Pattern
+
+Use a **flat `<Stack>` layout** for pages that display a grid of items (files, prescriptions, lab reports, etc.). Do NOT wrap the entire page in a `<Card>` with `<Card.Section>` blocks — this creates visual heaviness and inconsistency.
+
+### Structure
+
+```tsx
+<Container pt="md">
+  <Stack>
+    {/* Header — icon + title + badge count */}
+    <Group justify="space-between" align="center">
+      <Group gap="sm">
+        <ThemeIcon size={36} radius="md" color="primary" variant="light">
+          <IconFolder size={20} />
+        </ThemeIcon>
+        <Box>
+          <Title order={4} lh={1.2}>Page Title</Title>
+          <Text size="xs" c="dimmed">Subtitle</Text>
+        </Box>
+      </Group>
+      <Badge variant="light" color="gray" size="sm" radius="xl">{count} items</Badge>
+    </Group>
+
+    {/* Optional toolbars / filters — flat, not in Card.Section */}
+
+    {/* Scrollable content */}
+    <Box style={{ flex: 1, overflow: "hidden" }}>
+      <ScrollArea style={{ height: "100%" }}>
+        <Box maw={1080} mx="auto">
+          {isLoading && <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md">…skeletons…</SimpleGrid>}
+          {!isLoading && items.length === 0 && <EmptyState />}
+          {!isLoading && items.length > 0 && <SimpleGrid …>…cards…</SimpleGrid>}
+        </Box>
+      </ScrollArea>
+    </Box>
+  </Stack>
+</Container>
+```
+
+### Item Cards
+
+Use compact `<Card radius="md">` (not `radius="lg"` or `"xl"`) with:
+
+- **Thumbnail section**: 72px height, `Card.Section` with clickable area
+- **Info section**: `Card.Section withBorder`, `<Stack gap={6} p="sm">` for name + badges
+- **Actions section**: `Card.Section` with `bg="light-dark(…)"`, date on left, icon buttons (size 24, icon size 13) on right
+
+Reference implementations: `src/app/(portal)/patient/prescriptions/_content.tsx`, `src/app/(portal)/patient/files/_content.tsx`
+
+### Pagination
+
+All collection pages use **client-side pagination** with `PAGE_SIZE = 10` and Mantine's `<Pagination>` component. Add pagination to any list that can grow beyond ~10 items.
+
+```tsx
+const PAGE_SIZE = 10;
+const [page, setPage] = useState(1);
+
+// Compute inside render (auto-reset when filters change)
+const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+const safePage = Math.min(page, totalPages);
+const paginated = filtered.slice(
+  (safePage - 1) * PAGE_SIZE,
+  safePage * PAGE_SIZE,
+);
+
+// Reset page when search/filter state changes:
+// onChange={(v) => { setFilter(v); setPage(1); }}
+
+// In JSX, after the item list:
+{
+  totalPages > 1 && (
+    <Group justify="center" mt="md">
+      <Pagination
+        size="sm"
+        total={totalPages}
+        value={safePage}
+        onChange={setPage}
+      />
+    </Group>
+  );
+}
+```
+
+Reference implementations: `src/app/(portal)/patient/vitals/_content.tsx`, `src/app/(portal)/patient/medications/_content.tsx`
+
+---
+
 ## Anti-Patterns (Do NOT)
 
 | Anti-Pattern                                 | Instead                                                  |
@@ -665,3 +964,4 @@ var(--mantine-z-index-max)     → 9999
 | Use negated conditions in JSX                | Prefer positive condition first                          |
 | Override theme defaults without reason       | Trust `theme.ts` component defaults                      |
 | Use responsive style props in large lists    | Use static values or CSS variables                       |
+| Wrap collection pages in a `<Card>`          | Use flat `<Stack>` layout (see Collection Page Pattern)  |

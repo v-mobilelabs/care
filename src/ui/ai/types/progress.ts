@@ -13,6 +13,10 @@ export const progressPartSchema = z.object({
     .array(z.string())
     .optional()
     .describe("Gateway-generated contextual phrases for cycling display"),
+  agentType: z
+    .string()
+    .optional()
+    .describe("Which specialist agent is handling this request"),
 });
 
 export type ProgressData = z.infer<typeof progressPartSchema>;

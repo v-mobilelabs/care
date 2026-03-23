@@ -1,17 +1,18 @@
-import { ActionIcon, Badge, Box, Card, Group, Image, Stack, Text, ThemeIcon, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Badge, Box, Card, Group, Image, Loader, Stack, Text, ThemeIcon, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconCapsule, IconDownload, IconExternalLink, IconPhoto, IconSparkles, IconTrash } from "@tabler/icons-react";
 
 import { type PrescriptionRecord } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { DateText } from "@/ui/DateText";
 
-export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onOpenDetail }: Readonly<{
+export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete, onExtract, onOpenDetail, isOptimistic = false }: Readonly<{
     file: PrescriptionRecord;
     isPendingDelete: boolean;
     isExtracting: boolean;
     onDelete: () => void;
     onExtract: () => void;
     onOpenDetail: () => void;
+    isOptimistic?: boolean;
 }>) {
     const medCount = file.medications.length;
     const hasMeds = medCount > 0;
@@ -27,8 +28,25 @@ export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease, box-shadow 120ms ease",
+                position: isOptimistic ? "relative" as const : undefined,
             }}
         >
+            {isOptimistic && (
+                <Box
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 1,
+                        borderRadius: "var(--mantine-radius-md)",
+                        background: "light-dark(rgba(255,255,255,0.6), rgba(30,32,40,0.6))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    <Loader size="sm" />
+                </Box>
+            )}
             {/* Clickable area: thumbnail + metadata → opens detail modal */}
             <Card.Section aria-label="View prescription details">
                 <UnstyledButton onClick={onOpenDetail} style={{ display: "flex", flexDirection: "column", width: "100%", textAlign: "left" }}>
@@ -45,9 +63,9 @@ export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete
                             overflow: "hidden",
                         }}
                     >
-                        {isImage && file.fileUrl ? (
+                        {file.fileUrl ? (
                             <Image
-                                src={file.fileUrl}
+                                src={file.fileUrl + "/thumbnail"}
                                 alt={displayName}
                                 w="100%"
                                 h="100%"
@@ -89,7 +107,7 @@ export function PrescriptionCard({ file, isPendingDelete, isExtracting, onDelete
             </Card.Section>
 
             {/* Actions */}
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5))" variant="light" withBorder px="sm">
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" variant="light" withBorder px="sm">
                 <Group justify="space-between">
                     <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>
                         <DateText date={file.createdAt} />

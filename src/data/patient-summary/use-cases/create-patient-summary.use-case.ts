@@ -8,7 +8,14 @@ import {
   type PatientSummaryDto,
 } from "../models/patient-summary.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
+import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
+@Indexable({
+  type: "patient-summary",
+  contentFields: ["title", "narrative"],
+  sourceIdField: "id",
+  metadataFields: ["title", "createdAt"],
+})
 export class CreatePatientSummaryUseCase extends UseCase<
   CreatePatientSummaryInput,
   PatientSummaryDto

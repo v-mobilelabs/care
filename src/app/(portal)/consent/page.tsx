@@ -40,6 +40,7 @@ export default function ConsentPage() {
     const [, startRouting] = useTransition();
 
     async function handleWithdrawConsent() {
+        await fetch("/api/patients/me/consent", { method: "DELETE" });
         localStorage.removeItem(CONSENT_KEY);
         await signOut();
         startRouting(() => { router.replace("/auth/login"); });

@@ -47,6 +47,8 @@ export interface MessageRecord {
   content: string;
   createdAt: string;
   usage?: TokenUsage;
+  /** The specialist agent that produced this message (assistant messages only) */
+  agentType?: string;
 }
 
 export interface PaginatedMessagesResponse {
@@ -183,6 +185,15 @@ export type MedicationStatus =
   | "discontinued"
   | "paused";
 
+export type Sex = "male" | "female";
+
+export type ActivityLevel =
+  | "sedentary"
+  | "light"
+  | "moderate"
+  | "active"
+  | "very_active";
+
 export interface MedicationRecord {
   id: string;
   userId: string;
@@ -274,7 +285,7 @@ function useActiveDependentId() {
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const headers = new Headers((init?.headers as HeadersInit | undefined) ?? {});
+  const headers = new Headers(init?.headers ?? {});
   if (_activeDependentId) headers.set("x-dependent-id", _activeDependentId);
   const res = await fetch(input, { ...init, headers });
   if (!res.ok) {
@@ -316,30 +327,34 @@ export function useOptimisticDeductCredit() {
     qc.setQueryData<CreditsDto>(chatKeys.credits(), (prev) =>
       prev ? { ...prev, remaining: Math.max(0, prev.remaining - 1) } : prev,
     );
-    void qc.invalidateQueries({ queryKey: chatKeys.credits() });
+    qc.invalidateQueries({ queryKey: chatKeys.credits() });
   };
 }
 
 /** Invalidate the credits cache — call after each message is sent. */
 export function useInvalidateCredits() {
   const qc = useQueryClient();
-  return () => void qc.invalidateQueries({ queryKey: chatKeys.credits() });
+  return () => {
+    qc.invalidateQueries({ queryKey: chatKeys.credits() });
+  };
 }
 
 /** Invalidate the conditions cache — call after a message finishes streaming (AI tools may have saved new conditions). */
 export function useInvalidateConditions() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.conditions(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.conditions(), pid] });
+  };
 }
 
 /** Invalidate the SOAP notes cache — call after a message finishes streaming (AI tools may have saved new notes). */
 export function useInvalidateSoapNotes() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.soapNotes(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.soapNotes(), pid] });
+  };
 }
 
 /**
@@ -413,7 +428,7 @@ export function useDeleteSessionMutation() {
       if (ctx?.snapshot) qc.setQueryData(sessKey, ctx.snapshot);
     },
     onSettled: (_result, _err, id) => {
-      void qc.invalidateQueries({ queryKey: sessKey });
+      qc.invalidateQueries({ queryKey: chatKeys.sessions() });
       qc.removeQueries({ queryKey: chatKeys.messages(id) });
     },
   });
@@ -443,7 +458,7 @@ export function useCreateSessionMutation() {
       ]);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: sessKey });
+      qc.invalidateQueries({ queryKey: sessKey });
     },
   });
 }
@@ -455,8 +470,9 @@ export function useCreateSessionMutation() {
 export function useInvalidateSessions() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.sessions(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.sessions(), pid] });
+  };
 }
 
 /** Fetch all saved conditions for the authenticated user, sorted newest-first. */
@@ -521,7 +537,7 @@ export function useAddConditionMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -569,7 +585,7 @@ export function useDeleteSoapNoteMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -596,7 +612,7 @@ export function useDeleteConditionMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -633,8 +649,8 @@ export function useUploadFileMutation() {
       return res.json() as Promise<FileRecord>;
     },
     onSuccess: (data) => {
-      void qc.invalidateQueries({ queryKey: chatKeys.files() });
-      void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
+      qc.invalidateQueries({ queryKey: chatKeys.files() });
+      qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
       trackEvent({
         name: "file_uploaded",
         params: { file_type: data.mimeType },
@@ -688,8 +704,8 @@ export function useDeleteFileMutation() {
       if (ctx?.snapshot) qc.setQueryData(chatKeys.files(), ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.files() });
-      void qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
+      qc.invalidateQueries({ queryKey: chatKeys.files() });
+      qc.invalidateQueries({ queryKey: chatKeys.storageMetrics() });
     },
   });
 }
@@ -811,7 +827,7 @@ export function useUploadPrescriptionMutation() {
         [...chatKeys.prescriptions(), pid],
         (old = []) => [prescription, ...old],
       );
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: [...chatKeys.prescriptions(), pid],
       });
     },
@@ -824,15 +840,15 @@ export function useDeletePrescriptionMutation() {
   const pid = useActiveDependentId();
   const prescKey = [...chatKeys.prescriptions(), pid] as const;
   return useMutation({
-    mutationFn: ({ fileId }: { fileId: string }) =>
-      apiFetch<{ ok: boolean }>(`/api/prescriptions/${fileId}`, {
+    mutationFn: ({ prescriptionId }: { prescriptionId: string }) =>
+      apiFetch<{ ok: boolean }>(`/api/prescriptions/${prescriptionId}`, {
         method: "DELETE",
       }),
-    onMutate: async ({ fileId }) => {
+    onMutate: async ({ prescriptionId }) => {
       await qc.cancelQueries({ queryKey: prescKey });
       const snapshot = qc.getQueryData<PrescriptionRecord[]>(prescKey);
       qc.setQueryData<PrescriptionRecord[]>(prescKey, (old = []) =>
-        old.filter((p) => p.fileId !== fileId),
+        old.filter((p) => p.id !== prescriptionId),
       );
       return { snapshot };
     },
@@ -904,7 +920,7 @@ export function useLinkPrescriptionSessionMutation() {
       if (ctx?.snapshot) qc.setQueryData(prescKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: prescKey });
+      qc.invalidateQueries({ queryKey: prescKey });
     },
   });
 }
@@ -924,8 +940,9 @@ export function useMedicationsQuery() {
 export function useInvalidateMedications() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.medications(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.medications(), pid] });
+  };
 }
 
 export interface AddMedicationPayload {
@@ -937,7 +954,7 @@ export interface AddMedicationPayload {
   duration?: string;
   instructions?: string;
   condition?: string;
-  status?: "active" | "completed" | "discontinued" | "paused";
+  status?: MedicationStatus;
 }
 
 /** Add a new medication to the user's list. */
@@ -986,7 +1003,7 @@ export function useAddMedicationMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1000,7 +1017,7 @@ export interface UpdateMedicationPayload {
   duration?: string;
   instructions?: string;
   condition?: string;
-  status?: "active" | "completed" | "discontinued" | "paused";
+  status?: MedicationStatus;
 }
 
 /** Update an existing medication. */
@@ -1027,7 +1044,7 @@ export function useUpdateMedicationMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1054,7 +1071,7 @@ export function useDeleteMedicationMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1075,8 +1092,9 @@ export function useDietPlansQuery() {
 export function useInvalidateDietPlans() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.dietPlans(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.dietPlans(), pid] });
+  };
 }
 
 export interface AddDietPlanPayload {
@@ -1135,7 +1153,7 @@ export function useAddDietPlanMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1162,7 +1180,7 @@ export function useDeleteDietPlanMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1256,7 +1274,7 @@ export function useAddDoctorMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1281,7 +1299,7 @@ export function useDeleteDoctorMutation() {
       if (ctx?.snapshot) qc.setQueryData(chatKeys.doctors(), ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.doctors() });
+      qc.invalidateQueries({ queryKey: chatKeys.doctors() });
     },
   });
 }
@@ -1315,8 +1333,15 @@ export interface AssessmentRecord {
   id: string;
   userId: string;
   sessionId: string;
+  runId?: string;
   title: string;
   condition?: string;
+  guideline?: string;
+  estimatedQuestions?: number;
+  estimatedMinutes?: string;
+  status?: "active" | "completed" | "abandoned";
+  startedAt?: string;
+  completedAt?: string;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
   qa: QaPair[];
@@ -1350,18 +1375,20 @@ export function useAssessmentQuery(assessmentId: string) {
 export function useInvalidateAssessments() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({ queryKey: [...chatKeys.assessments(), pid] });
+  return () => {
+    qc.invalidateQueries({ queryKey: [...chatKeys.assessments(), pid] });
+  };
 }
 
 /** Invalidate the patient-summaries cache — call after a message finishes streaming. */
 export function useInvalidatePatientSummaries() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
-  return () =>
-    void qc.invalidateQueries({
+  return () => {
+    qc.invalidateQueries({
       queryKey: [...chatKeys.patientSummaries(), pid],
     });
+  };
 }
 
 // ── Drug Search ──────────────────────────────────────────────────────────────
@@ -1416,7 +1443,7 @@ export function useDeleteAssessmentMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1431,13 +1458,13 @@ export interface ProfileRecord {
   /** Self-identified gender */
   gender?: string;
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
   waistCm?: number;
   neckCm?: number;
   hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
   country?: string;
   city?: string;
   /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
@@ -1449,13 +1476,13 @@ export interface ProfileRecord {
 
 export interface UpsertProfilePayload {
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
   waistCm?: number;
   neckCm?: number;
   hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
   country?: string;
   city?: string;
   /** Food/dietary preferences e.g. ["vegetarian", "gluten-free"] */
@@ -1481,7 +1508,7 @@ export function useUpsertProfileMutation() {
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+      qc.invalidateQueries({ queryKey: chatKeys.profile() });
     },
   });
 }
@@ -1497,7 +1524,7 @@ export function useConsentMutation() {
         body: JSON.stringify({ consentedAt: new Date().toISOString() }),
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.profile() });
+      qc.invalidateQueries({ queryKey: chatKeys.profile() });
     },
   });
 }
@@ -1537,13 +1564,13 @@ export function useUpdateIdentityMutation() {
 export interface PatientRecord {
   userId: string;
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
   waistCm?: number;
   neckCm?: number;
   hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
   foodPreferences?: string[];
   bloodGroup?: string;
   consentedAt?: string;
@@ -1551,10 +1578,10 @@ export interface PatientRecord {
 
 export interface UpsertPatientPayload {
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
 }
 
 /** Fetch patient health data from patients/{userId} */
@@ -1600,13 +1627,13 @@ export interface DependentRecord {
   lastName: string;
   relationship: Relationship;
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
   waistCm?: number;
   neckCm?: number;
   hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
   country?: string;
   city?: string;
   createdAt: string;
@@ -1618,13 +1645,13 @@ export interface CreateDependentPayload {
   lastName?: string;
   relationship: Relationship;
   dateOfBirth?: string;
-  sex?: "male" | "female";
+  sex?: Sex;
   height?: number;
   weight?: number;
   waistCm?: number;
   neckCm?: number;
   hipCm?: number;
-  activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  activityLevel?: ActivityLevel;
   country?: string;
   city?: string;
 }
@@ -1689,7 +1716,7 @@ export function useCreateDependentMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1716,7 +1743,7 @@ export function useUpdateDependentMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1742,7 +1769,7 @@ export function useDeleteDependentMutation() {
       if (ctx?.snapshot) qc.setQueryData(chatKeys.dependents(), ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.dependents() });
+      qc.invalidateQueries({ queryKey: chatKeys.dependents() });
     },
   });
 }
@@ -1864,7 +1891,7 @@ export function useAddInsuranceMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1893,7 +1920,7 @@ export function useUpdateInsuranceMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1920,7 +1947,7 @@ export function useDeleteInsuranceMutation() {
       if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: key });
     },
   });
 }
@@ -1955,7 +1982,7 @@ export function useUploadInsuranceDocumentMutation() {
       return res.json() as Promise<InsuranceRecord>;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({
+      qc.invalidateQueries({
         queryKey: [...chatKeys.insurance(), pid],
       });
     },
@@ -2083,7 +2110,7 @@ export function useUploadLabReportMutation() {
       return res.json() as Promise<LabReportRecord>;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: [...chatKeys.labReports(), pid] });
+      qc.invalidateQueries({ queryKey: [...chatKeys.labReports(), pid] });
     },
   });
 }
@@ -2110,7 +2137,7 @@ export function useDeleteLabReportMutation() {
       if (ctx?.snapshot) qc.setQueryData(lrKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: lrKey });
+      qc.invalidateQueries({ queryKey: lrKey });
     },
   });
 }

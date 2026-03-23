@@ -1,12 +1,12 @@
 "use client";
+import { useState } from "react";
 import {
     ActionIcon,
     Box,
     Button,
-    Card,
     Container,
     Group,
-    ScrollArea,
+    Pagination,
     Stack,
     Text,
     ThemeIcon,
@@ -33,6 +33,8 @@ import { colors } from "@/ui/tokens";
 import { FoodPreferencesModal } from "./_food-preferences-modal";
 import { DietPlanCard } from "./_diet-plan-card";
 import { DietPlanSkeletons, EmptyState } from "./_skeletons";
+
+const PAGE_SIZE = 10;
 
 // ── Diet Plans Content ────────────────────────────────────────────────────────
 
@@ -69,105 +71,120 @@ export function DietPlansContent() {
                             color: colors.success,
                             icon: <IconCheck size={16} />,
                         }),
+                    onError: () =>
+                        notifications.show({
+                            title: "Delete failed",
+                            message: "Could not delete diet plan. Please try again.",
+                            color: colors.danger,
+                        }),
                 });
             },
         });
     }
 
+    const [page, setPage] = useState(1);
+    const totalPages = Math.max(1, Math.ceil(plans.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = plans.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
     return (
         <Container pt="md">
             <FoodPreferencesModal opened={prefsOpened} onClose={closePrefs} />
-            <Card radius="xl" shadow="xl">
-                <Card.Section px="xl" py="lg" withBorder>
-                    <Group justify="space-between" wrap="nowrap" align="center">
-                        <Group gap="sm">
-                            <ThemeIcon size={36} radius="md" color="green" variant="light">
-                                <IconSalad size={20} />
-                            </ThemeIcon>
-                            <Box>
-                                <Title order={4} lh={1.2}>My Diet Plans</Title>
-                                <Text size="xs" c="dimmed">
-                                    {(() => {
-                                        if (plans.length === 0) return "Save AI-generated diet plans for reference";
-                                        if (plans.length === 1) return "1 saved plan";
-                                        return `${plans.length} saved plans`;
-                                    })()}
-                                </Text>
-                            </Box>
-                        </Group>
-                        <Group gap="xs">
-                            {/* Mobile: Icon-only buttons */}
-                            <Tooltip label="Food Preferences" withArrow hiddenFrom="sm">
-                                <ActionIcon
-                                    size={32}
-                                    variant="subtle"
-                                    color="green"
-                                    onClick={openPrefs}
-                                    hiddenFrom="sm"
-                                    aria-label="Food Preferences"
-                                >
-                                    <IconLeaf size={16} />
-                                </ActionIcon>
-                            </Tooltip>
-                            <Tooltip label="Create Diet Plan" withArrow hiddenFrom="sm">
-                                <ActionIcon
-                                    size={32}
-                                    variant="light"
-                                    color="green"
-                                    onClick={handleCreateDietPlan}
-                                    hiddenFrom="sm"
-                                    aria-label="Create Diet Plan"
-                                >
-                                    <IconPlus size={16} />
-                                </ActionIcon>
-                            </Tooltip>
-                            {/* Desktop: Full buttons */}
-                            <Button
-                                leftSection={<IconLeaf size={16} />}
-                                color="green"
-                                variant="subtle"
-                                size="sm"
-                                onClick={openPrefs}
-                                visibleFrom="sm"
-                            >
-                                Preferences
-                            </Button>
-                            <Button
-                                leftSection={<IconPlus size={16} />}
-                                color="green"
-                                variant="light"
-                                size="sm"
-                                onClick={handleCreateDietPlan}
-                                visibleFrom="sm"
-                            >
-                                Create diet plan
-                            </Button>
-                        </Group>
+            <Stack>
+                <Group justify="space-between" wrap="nowrap" align="center">
+                    <Group gap="sm">
+                        <ThemeIcon size={36} radius="md" color="green" variant="light">
+                            <IconSalad size={20} />
+                        </ThemeIcon>
+                        <Box>
+                            <Title order={4} lh={1.2}>My Diet Plans</Title>
+                            <Text size="xs" c="dimmed">
+                                {(() => {
+                                    if (plans.length === 0) return "Save AI-generated diet plans for reference";
+                                    if (plans.length === 1) return "1 saved plan";
+                                    return `${plans.length} saved plans`;
+                                })()}
+                            </Text>
+                        </Box>
                     </Group>
-                </Card.Section>
-                <Card.Section p="md">
-                    <Box style={{ flex: 1, overflow: "hidden" }}>
-                        <ScrollArea style={{ height: "100%" }}>
-                            <Box maw={800} mx="auto">
-                                {isLoading && <DietPlanSkeletons />}
-                                {!isLoading && plans.length === 0 && <EmptyState onCreateDietPlan={handleCreateDietPlan} />}
-                                {!isLoading && plans.length > 0 && (
-                                    <Stack gap="sm">
-                                        {plans.map((plan) => (
-                                            <DietPlanCard
-                                                key={plan.id}
-                                                plan={plan}
-                                                isPendingDelete={deleteMutation.isPending && deleteMutation.variables === plan.id}
-                                                onDelete={() => handleDelete(plan.id, plan.condition)}
-                                            />
-                                        ))}
-                                    </Stack>
-                                )}
-                            </Box>
-                        </ScrollArea>
-                    </Box>
-                </Card.Section>
-            </Card>
+                    <Group gap="xs">
+                        {/* Mobile: Icon-only buttons */}
+                        <Tooltip label="Food Preferences" withArrow hiddenFrom="sm">
+                            <ActionIcon
+                                size={32}
+                                variant="subtle"
+                                color="green"
+                                onClick={openPrefs}
+                                hiddenFrom="sm"
+                                aria-label="Food Preferences"
+                            >
+                                <IconLeaf size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label="Create Diet Plan" withArrow hiddenFrom="sm">
+                            <ActionIcon
+                                size={32}
+                                variant="light"
+                                color="green"
+                                onClick={handleCreateDietPlan}
+                                hiddenFrom="sm"
+                                aria-label="Create Diet Plan"
+                            >
+                                <IconPlus size={16} />
+                            </ActionIcon>
+                        </Tooltip>
+                        {/* Desktop: Full buttons */}
+                        <Button
+                            leftSection={<IconLeaf size={16} />}
+                            color="green"
+                            variant="subtle"
+                            size="sm"
+                            onClick={openPrefs}
+                            visibleFrom="sm"
+                        >
+                            Preferences
+                        </Button>
+                        <Button
+                            leftSection={<IconPlus size={16} />}
+                            color="green"
+                            variant="light"
+                            size="sm"
+                            onClick={handleCreateDietPlan}
+                            visibleFrom="sm"
+                        >
+                            Create diet plan
+                        </Button>
+                    </Group>
+                </Group>
+
+                <Box>
+                    {isLoading && <DietPlanSkeletons />}
+                    {!isLoading && plans.length === 0 && <EmptyState onCreateDietPlan={handleCreateDietPlan} />}
+                    {!isLoading && plans.length > 0 && (
+                        <Stack gap="sm">
+                            {paginated.map((plan) => (
+                                <DietPlanCard
+                                    key={plan.id}
+                                    plan={plan}
+                                    isPendingDelete={deleteMutation.isPending && deleteMutation.variables === plan.id}
+                                    onDelete={() => handleDelete(plan.id, plan.condition)}
+                                    isOptimistic={plan.id.startsWith("__optimistic__")}
+                                />
+                            ))}
+                            {totalPages > 1 && (
+                                <Group justify="center" mt="md">
+                                    <Pagination
+                                        size="sm"
+                                        total={totalPages}
+                                        value={safePage}
+                                        onChange={setPage}
+                                    />
+                                </Group>
+                            )}
+                        </Stack>
+                    )}
+                </Box>
+            </Stack>
         </Container>
     );
 }

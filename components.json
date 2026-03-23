@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "src/styles/shadcn.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "tabler",
+  "aliases": {
+    "components": "@/ui/components",
+    "utils": "@/lib/utils",
+    "ui": "@/ui/components",
+    "lib": "@/lib",
+    "hooks": "@/ui/hooks"
+  },
+  "registries": {
+    "@smoothui": "https://smoothui.dev/r/{name}.json"
+  }
+}

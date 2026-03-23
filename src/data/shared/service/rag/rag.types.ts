@@ -23,7 +23,9 @@ export interface DocumentChunk {
     | "bloodtest"
     | "prescription"
     | "profile"
-    | "patient";
+    | "patient"
+    | "patient-summary"
+    | "knowledge_base";
   /** Source document reference */
   sourceId: string;
   /** Plain text content of this chunk */

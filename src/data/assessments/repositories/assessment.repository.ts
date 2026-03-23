@@ -50,18 +50,57 @@ export const assessmentRepository = {
     return toAssessmentDto(d.id, d.data() as AssessmentDocument);
   },
 
+  async findBySessionAndRunId(
+    userId: string,
+    sessionId: string,
+    runId: string,
+    dependentId?: string,
+  ): Promise<AssessmentDto | null> {
+    const snap = await assessmentsCol(userId, dependentId)
+      .where("sessionId", "==", sessionId)
+      .where("runId", "==", runId)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    const d = snap.docs[0]!;
+    return toAssessmentDto(d.id, d.data() as AssessmentDocument);
+  },
+
+  async findLatestBySession(
+    userId: string,
+    sessionId: string,
+    dependentId?: string,
+  ): Promise<AssessmentDto | null> {
+    // Avoid requiring a composite index for where(sessionId)+orderBy(createdAt)
+    // by reading a small bounded set and sorting in memory.
+    const snap = await assessmentsCol(userId, dependentId)
+      .where("sessionId", "==", sessionId)
+      .limit(20)
+      .get();
+    if (snap.empty) return null;
+    const latest = snap.docs
+      .map((d) => toAssessmentDto(d.id, d.data() as AssessmentDocument))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+    return latest ?? null;
+  },
+
   async update(
     userId: string,
     assessmentId: string,
-    data: Omit<
-      AssessmentDocument,
-      "userId" | "sessionId" | "createdAt" | "updatedAt"
+    data: Partial<
+      Omit<
+        AssessmentDocument,
+        "userId" | "sessionId" | "createdAt" | "updatedAt"
+      >
     >,
     dependentId?: string,
   ): Promise<AssessmentDto> {
     const now = Timestamp.now();
     const ref = assessmentDoc(userId, assessmentId, dependentId);
-    await ref.update({ ...data, updatedAt: now });
+    await ref.update(stripUndefined({ ...data, updatedAt: now }));
     const snap = await ref.get();
     return toAssessmentDto(snap.id, snap.data() as AssessmentDocument);
   },

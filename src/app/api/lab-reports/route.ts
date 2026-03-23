@@ -6,7 +6,7 @@ import {
   ClassifyFileUseCase,
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
-} from "@/data/sessions";
+} from "@/data/files";
 import {
   ListLabReportsUseCase,
   ExtractLabReportUseCase,

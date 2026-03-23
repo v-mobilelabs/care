@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { GetStorageMetricsUseCase } from "@/data/sessions";
+import { GetStorageMetricsUseCase } from "@/data/files";
 
 // GET /api/files/storage — returns the authenticated user's storage usage metrics
 export const GET = WithContext(async ({ user }) => {

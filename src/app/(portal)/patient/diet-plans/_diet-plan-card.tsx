@@ -7,6 +7,7 @@ import {
     Divider,
     Group,
     List,
+    Loader,
     Paper,
     ScrollArea,
     SimpleGrid,
@@ -32,14 +33,7 @@ import {
 import { useState } from "react";
 
 import { type DietPlanRecord } from "@/app/(portal)/patient/_query";
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
+import { formatDate } from "@/lib/format";
 
 const MEAL_COLORS: Record<string, string> = {
     Breakfast: "orange",
@@ -49,10 +43,11 @@ const MEAL_COLORS: Record<string, string> = {
     Dinner: "indigo",
 };
 
-export function DietPlanCard({ plan, isPendingDelete, onDelete }: Readonly<{
+export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = false }: Readonly<{
     plan: DietPlanRecord;
     isPendingDelete: boolean;
     onDelete: () => void;
+    isOptimistic?: boolean;
 }>) {
     const [expanded, { toggle }] = useDisclosure(false);
     const days = plan.weeklyPlan ?? [];
@@ -69,8 +64,25 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete }: Readonly<{
                 transition: "opacity 150ms ease",
                 overflow: "hidden",
                 borderLeft: "4px solid var(--mantine-color-green-5)",
+                position: isOptimistic ? "relative" as const : undefined,
             }}
         >
+            {isOptimistic && (
+                <Box
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 1,
+                        borderRadius: "var(--mantine-radius-lg)",
+                        background: "light-dark(rgba(255,255,255,0.6), rgba(30,32,40,0.6))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    <Loader size="sm" />
+                </Box>
+            )}
             {/* ── Header — tinted green ── */}
             <Box
                 px="md"

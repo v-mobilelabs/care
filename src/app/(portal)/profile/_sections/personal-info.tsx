@@ -79,7 +79,7 @@ function PersonalInfoForm({ name, gender }: Readonly<{ name: string | null; gend
 
     return (
         <Card withBorder radius="lg">
-            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6))" }}>
+            <Card.Section withBorder style={{ background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" }}>
                 <Group gap="sm" align="center" p="md">
                     <ThemeIcon size={36} radius="md" variant="light" color="primary">
                         <IconUser size={20} />

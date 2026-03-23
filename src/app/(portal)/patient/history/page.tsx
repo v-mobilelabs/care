@@ -3,7 +3,7 @@ import { getQueryClient } from "@/lib/query/client";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
-import { ListSessionsUseCase } from "@/data/sessions";
+import { getCachedSessions } from "@/data/cached";
 import { HistoryContent } from "./_content";
 import HistoryLoading from "./loading";
 
@@ -12,10 +12,7 @@ async function HistoryData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
     await queryClient.prefetchQuery({
         queryKey: [...chatKeys.sessions(), undefined],
-        queryFn: () =>
-            new ListSessionsUseCase().execute(
-                { userId, profileId: userId },
-            ),
+        queryFn: () => getCachedSessions(userId),
     });
     return (
         <Hydrate client={queryClient}>

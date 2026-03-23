@@ -17,7 +17,7 @@
 import type { LanguageModelMiddleware } from "ai";
 import { ragContextBuilder } from "@/data/shared/service";
 import { ragService } from "@/data/shared/service/rag/rag.service";
-import { guidelineService } from "@/data/guidelines";
+import { knowledgeBaseService } from "@/data/knowledge-base";
 
 export interface RagMiddlewareOptions {
   agentId: string;
@@ -78,7 +78,7 @@ export function ragMiddleware(
             queryEmbedding = await ragService.embedQuery(opts.userQuery);
           }
 
-          const [ragResult, guipelinesResult] = await Promise.allSettled([
+          const [ragResult, kbResult] = await Promise.allSettled([
             withTimeout(
               ragContextBuilder.buildContext({
                 userId: opts.userId,
@@ -95,11 +95,11 @@ export function ragMiddleware(
               10000,
             ),
             withTimeout(
-              guidelineService
-                .search(opts.userQuery, { topK: 3, queryEmbedding })
+              knowledgeBaseService
+                .search(opts.userQuery, { topK: 5, queryEmbedding })
                 .catch((err: unknown) => {
                   console.error(
-                    `[${opts.agentId}] Guideline fetch failed:`,
+                    `[${opts.agentId}] Knowledge base fetch failed:`,
                     err,
                   );
                   return [];
@@ -112,22 +112,22 @@ export function ragMiddleware(
             ragResult.status === "fulfilled" && ragResult.value
               ? ragResult.value.context
               : "";
-          const guidelines =
-            guipelinesResult.status === "fulfilled" && guipelinesResult.value
-              ? guipelinesResult.value
+          const kbEntries =
+            kbResult.status === "fulfilled" && kbResult.value
+              ? kbResult.value
               : [];
-          const guidelinesText =
-            guidelines.length > 0
-              ? guidelineService.formatForPrompt(guidelines)
+          const kbText =
+            kbEntries.length > 0
+              ? knowledgeBaseService.formatForPrompt(kbEntries)
               : "";
 
-          if (guidelinesText) ragParts.push(guidelinesText);
+          if (kbText) ragParts.push(kbText);
           if (ragContext) ragParts.push(ragContext);
 
           console.log(
-            `[${opts.agentId}] RAG+Guidelines: ${(performance.now() - t0).toFixed(0)}ms | ` +
+            `[${opts.agentId}] RAG+KB: ${(performance.now() - t0).toFixed(0)}ms | ` +
               `RAG chunks: ${ragResult.status === "fulfilled" && ragResult.value ? ragResult.value.count : 0} | ` +
-              `Guidelines: ${guidelines.length}`,
+              `KB: ${kbEntries.length}`,
           );
         } else {
           console.log(`[${opts.agentId}] RAG skipped (needsRag=false)`);

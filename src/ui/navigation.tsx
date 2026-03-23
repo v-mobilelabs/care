@@ -1,21 +1,24 @@
 import type { UserKind } from "@/lib/auth/jwt";
 import {
     IconAi,
+    IconClipboardHeart,
+    IconBook2,
     IconCalendarStats,
-    IconCapsule,
     IconChartBar,
     IconDroplet,
     IconFiles,
+    IconHeart,
     IconHeartbeat,
     IconHistory,
     IconLayoutDashboard,
     IconPhone,
-    IconPill,
+    IconPillFilled,
+    IconSparkles,
     IconStethoscope,
     IconUserCircle,
     IconUsers,
     IconUsersGroup,
-    IconVideo,
+    IconVaccineBottle,
 } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
@@ -62,7 +65,8 @@ export type ApplicationInfo = {
  * ```
  */
 
-const ICON_SIZE = 18;
+const ICON_SIZE = 32;
+const ICON_SIZE_PROFILE = 16;
 export function getNavigationMenus(userKind: UserKind): NavigationMenus {
     if (userKind === "doctor") {
         return {
@@ -92,6 +96,11 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                     icon: <IconStethoscope size={ICON_SIZE} />,
                     href: "/doctor/encounters",
                 },
+                {
+                    label: "Knowledge Base",
+                    icon: <IconBook2 size={ICON_SIZE} />,
+                    href: "/console/knowledge-base",
+                },
             ],
             header: [],
             profile: [
@@ -114,7 +123,7 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
         navigation: [
             {
                 label: "Assistant",
-                icon: <IconAi size={ICON_SIZE} />,
+                icon: <IconSparkles size={ICON_SIZE} />,
                 href: "/patient/assistant",
             },
             {
@@ -134,13 +143,23 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
             // },
             {
                 label: "Prescriptions",
-                icon: <IconPill size={ICON_SIZE} />,
+                icon: <IconVaccineBottle size={ICON_SIZE} />,
                 href: "/patient/prescriptions",
             },
             {
                 label: "Medications",
-                icon: <IconCapsule size={ICON_SIZE} />,
+                icon: <IconPillFilled size={ICON_SIZE} />,
                 href: "/patient/medications",
+            },
+            {
+                label: "Vitals",
+                icon: <IconHeart size={ICON_SIZE} />,
+                href: "/patient/vitals",
+            },
+            {
+                label: "Assessments",
+                icon: <IconClipboardHeart size={ICON_SIZE} />,
+                href: "/patient/assessments",
             },
             {
                 label: "Lab Reports",
@@ -152,22 +171,27 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 icon: <IconFiles size={ICON_SIZE} />,
                 href: "/patient/files",
             },
+            {
+                label: "Knowledge Base",
+                icon: <IconBook2 size={ICON_SIZE} />,
+                href: "/console/knowledge-base",
+            },
         ],
         header: [],
         profile: [
             {
                 label: "Profile",
-                icon: <IconUserCircle size={ICON_SIZE} />,
+                icon: <IconUserCircle size={ICON_SIZE_PROFILE} />,
                 href: "/profile",
             },
             {
                 label: "Health Details",
-                icon: <IconHeartbeat size={ICON_SIZE} />,
+                icon: <IconHeartbeat size={ICON_SIZE_PROFILE} />,
                 href: "/patient/details",
             },
             {
                 label: "Usage",
-                icon: <IconChartBar size={ICON_SIZE} />,
+                icon: <IconChartBar size={ICON_SIZE_PROFILE} />,
                 href: "/patient/usage",
             },
         ],

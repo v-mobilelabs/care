@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import {
   ListDependentsUseCase,
   CreateDependentUseCase,
 } from "@/data/dependents";
+import { CacheTags } from "@/data/cached";
 
 // GET /api/dependents — list all dependents for the authenticated user
 export const GET = WithContext(async ({ user }) => {
@@ -20,5 +22,6 @@ export const POST = WithContext(async ({ user, req }) => {
     ...(body as object),
     ownerId: user.uid,
   });
+  revalidateTag(CacheTags.dependents(user.uid), "minutes");
   return NextResponse.json(dependent, { status: 201 });
 });

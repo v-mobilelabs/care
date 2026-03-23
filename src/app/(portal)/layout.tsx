@@ -1,6 +1,5 @@
 import { Provider } from "@/ui/providers/provider";
 import { getServerUser } from "@/lib/api/server-prefetch";
-import { GetProfileUseCase } from "@/data/profile";
 import { GetActiveMeetUseCase } from "@/data/meet";
 import { getQueryClient } from "@/lib/query/client";
 import { meetSessionKey } from "./meet/[requestId]/_keys";

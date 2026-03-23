@@ -58,7 +58,7 @@ export function UsageCardSkeleton() {
     return (
         <Card radius="md">
             {/* Header section skeleton */}
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="sm" withBorder>
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" px="md" py="sm" withBorder>
                 <Group justify="space-between" align="center" wrap="nowrap">
                     <Group gap="xs">
                         <Skeleton height={30} width={30} radius="md" />
@@ -103,7 +103,7 @@ export function UsageCardSkeleton() {
             </Card.Section>
 
             {/* Footer section skeleton */}
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5))" px="md" py="xs">
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" px="md" py="xs">
                 <Skeleton height={10} width="60%" />
             </Card.Section>
         </Card>
@@ -115,7 +115,7 @@ export function UsageCardSkeleton() {
 export function UsageCardError({ title, subtitle }: Readonly<{ title: string; subtitle: string }>) {
     return (
         <Card radius="md">
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))" px="md" py="sm" withBorder>
+            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" px="md" py="sm" withBorder>
                 <Group gap="xs">
                     <ThemeIcon size={30} radius="md" color="gray" variant="light">
                         <IconAlertCircle size={16} />

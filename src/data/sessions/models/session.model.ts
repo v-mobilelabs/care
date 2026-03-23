@@ -11,6 +11,12 @@ export interface SessionDocument {
   messageCount: number;
   /** The last agent type that handled this session (persisted for cross-worker routing). */
   lastAgentType?: string;
+  /** Accumulated token usage across all assistant messages in this session. */
+  totalUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -24,6 +30,12 @@ export interface SessionDto {
   title: string;
   messageCount: number;
   lastAgentType?: string;
+  /** Accumulated token usage across all assistant messages in this session. */
+  totalUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
@@ -78,6 +90,27 @@ export const ListSessionsSchema = z.object({
 
 export type ListSessionsInput = z.infer<typeof ListSessionsSchema>;
 
+// ── DTO — inbound (paginated list) ────────────────────────────────────────────
+
+export const ListSessionsPaginatedSchema = z.object({
+  userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
+  limit: z.number().int().min(1).max(100).optional().default(20),
+  cursor: z.string().optional(),
+});
+
+export type ListSessionsPaginatedInput = z.infer<
+  typeof ListSessionsPaginatedSchema
+>;
+
+// ── Paginated response ────────────────────────────────────────────────────────
+
+export interface PaginatedSessions {
+  sessions: SessionDto[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 export function toSessionDto(id: string, doc: SessionDocument): SessionDto {
@@ -88,6 +121,7 @@ export function toSessionDto(id: string, doc: SessionDocument): SessionDto {
     title: doc.title,
     messageCount: doc.messageCount,
     ...(doc.lastAgentType && { lastAgentType: doc.lastAgentType }),
+    ...(doc.totalUsage && { totalUsage: doc.totalUsage }),
     createdAt: doc.createdAt.toDate().toISOString(),
     updatedAt: doc.updatedAt.toDate().toISOString(),
   };

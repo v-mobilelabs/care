@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { GetFileUseCase } from "@/data/sessions";
+import { GetFileUseCase } from "@/data/files";
 import {
   ExtractPrescriptionUseCase,
   ListPrescriptionsUseCase,
