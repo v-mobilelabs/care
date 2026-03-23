@@ -21,7 +21,6 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
     IconAi,
-    IconCalendar,
     IconChevronRight,
     IconClock,
     IconDroplet,
@@ -33,7 +32,6 @@ import {
     IconPill,
     IconSearch,
     IconSalad,
-    IconStethoscope,
     IconTimeline,
     IconTrash,
     IconX,

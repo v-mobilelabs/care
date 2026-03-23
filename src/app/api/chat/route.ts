@@ -41,6 +41,13 @@ type StartAssessmentPayload = {
   estimatedMinutes?: string;
 };
 
+type ActionCardPayload = {
+  toolCallId?: string;
+  title: string;
+  items: string[];
+  disclaimer?: string;
+};
+
 type AskQuestionInputPayload = {
   question?: string;
   type?: string;
@@ -106,6 +113,36 @@ function extractStarts(parts: unknown[]): StartAssessmentPayload[] {
   return starts;
 }
 
+function extractActionCards(parts: unknown[]): ActionCardPayload[] {
+  const cards: ActionCardPayload[] = [];
+
+  for (const raw of parts) {
+    const p = toToolPart(raw);
+    if (p?.type !== "tool-actionCard") continue;
+    if (p.state === "input-streaming") continue;
+    const payload = p.input ?? p.args ?? {};
+
+    const title = getOptionalString(payload.title)?.trim();
+    const itemsRaw = payload.items;
+    const items = Array.isArray(itemsRaw)
+      ? itemsRaw.filter((item): item is string => typeof item === "string")
+      : [];
+
+    if (!title || items.length === 0) continue;
+
+    cards.push({
+      toolCallId: p.toolCallId,
+      title,
+      items,
+      ...(getOptionalString(payload.disclaimer)
+        ? { disclaimer: getOptionalString(payload.disclaimer) }
+        : {}),
+    });
+  }
+
+  return cards;
+}
+
 function toAnsweredQaPair(part: ToolPartLike | null): ExtractedQaPair | null {
   if (part?.type !== "tool-askQuestion") return null;
   if (part.state !== "output-available" && part.state !== "result") return null;
@@ -140,11 +177,14 @@ async function syncAssessmentsFromAssistantParts(args: {
   userId: string;
   sessionId: string;
   dependentId?: string;
+  specialtyAgent?: string;
   parts: unknown[];
 }) {
   const starts = extractStarts(args.parts);
   const qa = extractAnsweredQaPairs(args.parts);
-  if (starts.length === 0 && qa.length === 0) return;
+  const actionCards = extractActionCards(args.parts);
+  if (starts.length === 0 && qa.length === 0 && actionCards.length === 0)
+    return;
 
   let activeRunId: string | undefined;
   let latestTitle = "Clinical Assessment";
@@ -163,9 +203,11 @@ async function syncAssessmentsFromAssistantParts(args: {
       userId: args.userId,
       sessionId: args.sessionId,
       ...(start.runId ? { runId: start.runId } : {}),
+      specialtyAgent: args.specialtyAgent,
       title: start.title,
       condition: start.condition,
       guideline: start.guideline,
+      guidelinesFollowed: start.guideline ? [start.guideline] : undefined,
       estimatedQuestions: start.estimatedQuestions,
       estimatedMinutes: start.estimatedMinutes,
       status: "active",
@@ -175,17 +217,20 @@ async function syncAssessmentsFromAssistantParts(args: {
     activeRunId = saved.runId ?? start.runId;
   }
 
-  if (qa.length > 0) {
+  if (qa.length > 0 || actionCards.length > 0) {
     await new CreateAssessmentUseCase(args.dependentId).execute({
       userId: args.userId,
       sessionId: args.sessionId,
       ...(activeRunId ? { runId: activeRunId } : {}),
+      specialtyAgent: args.specialtyAgent,
       title: latestTitle,
       condition: latestCondition,
       guideline: latestGuideline,
+      guidelinesFollowed: latestGuideline ? [latestGuideline] : undefined,
       estimatedQuestions: latestEstimatedQuestions,
       estimatedMinutes: latestEstimatedMinutes,
       status: "active",
+      actionCards,
       qa,
     });
   }
@@ -313,6 +358,7 @@ export const POST = WithContext(
           userId: user.uid,
           sessionId,
           dependentId,
+          specialtyAgent: agentType,
           parts: persistPayload.responseParts,
         });
       } catch (saveError) {

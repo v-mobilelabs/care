@@ -118,6 +118,12 @@ export interface FileRecord {
   thumbnailUrl?: string | null;
 }
 
+export interface PaginatedFilesResponse {
+  files: FileRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+
 export type MedicationForm =
   | "Tablet"
   | "Capsule"
@@ -673,7 +679,41 @@ export function useUploadFileMutation() {
 export function useFilesQuery() {
   return useQuery({
     queryKey: chatKeys.files(),
-    queryFn: () => apiFetch<FileRecord[]>("/api/files"),
+    queryFn: async () => {
+      const response = await apiFetch<{ files: FileRecord[] }>("/api/files");
+      return response.files;
+    },
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Cursor-paginated files query for large file libraries.
+ * Supports server-side search + label filtering, plus continuous load in UI.
+ */
+export function useInfiniteFilesQuery(filters?: {
+  q?: string;
+  label?: FileLabel | "all";
+  limit?: number;
+}) {
+  const q = filters?.q?.trim() ?? "";
+  const label = filters?.label ?? "all";
+  const limit = filters?.limit ?? 21;
+
+  return useInfiniteQuery({
+    queryKey: [...chatKeys.files(), "infinite", q, label, limit],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("cursor", pageParam);
+      params.set("limit", String(limit));
+      if (q.length > 0) params.set("q", q);
+      if (label !== "all") params.set("label", label);
+      const qs = params.toString();
+      const url = qs ? `/api/files?${qs}` : "/api/files";
+      return apiFetch<PaginatedFilesResponse>(url);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     staleTime: 30_000,
   });
 }
@@ -856,7 +896,7 @@ export function useDeletePrescriptionMutation() {
       if (ctx?.snapshot) qc.setQueryData(prescKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: prescKey });
+      qc.invalidateQueries({ queryKey: prescKey });
     },
   });
 }
@@ -1329,14 +1369,23 @@ export interface QaPair {
   answer: string;
 }
 
+export interface AssessmentActionCardRecord {
+  toolCallId?: string;
+  title: string;
+  items: string[];
+  disclaimer?: string;
+}
+
 export interface AssessmentRecord {
   id: string;
   userId: string;
   sessionId: string;
   runId?: string;
+  specialtyAgent?: string;
   title: string;
   condition?: string;
   guideline?: string;
+  guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
   status?: "active" | "completed" | "abandoned";
@@ -1344,9 +1393,16 @@ export interface AssessmentRecord {
   completedAt?: string;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
+  actionCards?: AssessmentActionCardRecord[];
   qa: QaPair[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface PaginatedAssessmentsResponse {
+  assessments: AssessmentRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
 }
 
 /** Fetch all AI assessments for the authenticated user, newest-first. */
@@ -1354,7 +1410,12 @@ export function useAssessmentsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
     queryKey: [...chatKeys.assessments(), pid],
-    queryFn: () => apiFetch<AssessmentRecord[]>("/api/assessments"),
+    queryFn: async () => {
+      const page = await apiFetch<PaginatedAssessmentsResponse>(
+        "/api/assessments?limit=50",
+      );
+      return page.assessments;
+    },
     staleTime: 30_000,
   });
 }

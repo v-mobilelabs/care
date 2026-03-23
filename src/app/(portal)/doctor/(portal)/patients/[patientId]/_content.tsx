@@ -48,11 +48,6 @@ import { useMessaging } from "@/ui/providers/messaging-provider";
 import { startConversation } from "@/lib/messaging/actions";
 import {
     iosCard,
-    iosGroupedCard,
-    iosRow,
-    iosRowLast,
-    iosLargeTitle,
-    iosSubtitle,
     ios,
     allKeyframes,
 } from "@/ui/ios";

@@ -1,6 +1,3 @@
-import { getQueryClient } from "@/lib/query/client";
-import { getServerUser } from "@/lib/api/server-prefetch";
-import { Hydrate } from "@/ui/hydrate";
 import {
     ProfileContent
 } from "./_content";

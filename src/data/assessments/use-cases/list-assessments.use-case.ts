@@ -5,13 +5,13 @@ import {
 import {
   ListAssessmentsSchema,
   type ListAssessmentsInput,
-  type AssessmentDto,
+  type PaginatedAssessments,
 } from "../models/assessment.model";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class ListAssessmentsUseCase extends UseCase<
   ListAssessmentsInput,
-  AssessmentDto[]
+  PaginatedAssessments
 > {
   constructor(
     private readonly dependentId?: string,
@@ -24,7 +24,9 @@ export class ListAssessmentsUseCase extends UseCase<
     return ListAssessmentsSchema.parse(input);
   }
 
-  protected async run(input: ListAssessmentsInput): Promise<AssessmentDto[]> {
+  protected async run(
+    input: ListAssessmentsInput,
+  ): Promise<PaginatedAssessments> {
     return this.service.list(input, this.dependentId);
   }
 }

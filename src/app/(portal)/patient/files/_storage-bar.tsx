@@ -1,7 +1,6 @@
 "use client";
 import {
     Badge,
-    Box,
     Group,
     Paper,
     Progress,

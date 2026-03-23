@@ -1,4 +1,4 @@
-import { Box, Group, Skeleton, Stack, Tabs } from "@mantine/core";
+import { Box, Group, Skeleton, Stack } from "@mantine/core";
 
 export default function PatientDetailLoading() {
     return (

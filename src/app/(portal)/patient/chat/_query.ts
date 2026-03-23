@@ -84,6 +84,25 @@ export interface PaginatedFilesResponse {
   totalCount?: number;
 }
 
+function removeFileFromPaginatedData(
+  old:
+    | {
+        pages: PaginatedFilesResponse[];
+        pageParams: (string | undefined)[];
+      }
+    | undefined,
+  fileId: string,
+) {
+  if (!old) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      files: page.files.filter((f) => f.id !== fileId),
+    })),
+  };
+}
+
 export type MedicationForm =
   | "Tablet"
   | "Capsule"
@@ -493,16 +512,9 @@ export function useDeleteFileMutation() {
       qc.setQueriesData<{
         pages: PaginatedFilesResponse[];
         pageParams: (string | undefined)[];
-      }>({ queryKey: chatKeys.files() }, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            files: page.files.filter((f) => f.id !== fileId),
-          })),
-        };
-      });
+      }>({ queryKey: chatKeys.files() }, (old) =>
+        removeFileFromPaginatedData(old, fileId),
+      );
       return { snapshot };
     },
     onError: (_err, _vars, ctx) => {
@@ -666,7 +678,7 @@ export function useDeletePrescriptionMutation() {
       if (ctx?.snapshot) qc.setQueryData(prescKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: prescKey });
+      qc.invalidateQueries({ queryKey: prescKey });
     },
   });
 }
@@ -1120,14 +1132,23 @@ export interface QaPair {
   answer: string;
 }
 
+export interface AssessmentActionCardRecord {
+  toolCallId?: string;
+  title: string;
+  items: string[];
+  disclaimer?: string;
+}
+
 export interface AssessmentRecord {
   id: string;
   userId: string;
   sessionId: string;
   runId?: string;
+  specialtyAgent?: string;
   title: string;
   condition?: string;
   guideline?: string;
+  guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
   status?: "active" | "completed" | "abandoned";
@@ -1135,9 +1156,16 @@ export interface AssessmentRecord {
   completedAt?: string;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
+  actionCards?: AssessmentActionCardRecord[];
   qa: QaPair[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface PaginatedAssessmentsResponse {
+  assessments: AssessmentRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
 }
 
 /** Fetch all AI assessments for the authenticated user, newest-first. */
@@ -1145,7 +1173,12 @@ export function useAssessmentsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
     queryKey: [...chatKeys.assessments(), pid],
-    queryFn: () => apiFetch<AssessmentRecord[]>("/api/assessments"),
+    queryFn: async () => {
+      const page = await apiFetch<PaginatedAssessmentsResponse>(
+        "/api/assessments?limit=50",
+      );
+      return page.assessments;
+    },
     staleTime: 30_000,
   });
 }

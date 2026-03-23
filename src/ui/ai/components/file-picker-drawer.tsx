@@ -12,16 +12,20 @@ import {
     Loader,
     Paper,
     ScrollArea,
+    Select,
     SimpleGrid,
     Skeleton,
     Stack,
     Text,
+    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
 } from "@mantine/core";
 import { Dropzone, type FileWithPath } from "@mantine/dropzone";
+import { useDebouncedValue, useIntersection } from "@mantine/hooks";
 import {
+    IconArrowsSort,
     IconCamera,
     IconCheck,
     IconFile,
@@ -31,12 +35,14 @@ import {
     IconFolderOpen,
     IconPhoto,
     IconPlus,
+    IconSearch,
+    IconTag,
     IconUpload,
     IconX,
 } from "@tabler/icons-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useFilesQuery, type FileRecord } from "@/ui/ai/query";
+import { useInfiniteFilesQuery, type FileLabel, type FileRecord } from "@/ui/ai/query";
 import { colors } from "@/ui/tokens";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -75,6 +81,38 @@ function getMimeLabel(mimeType: string): string {
     if (mimeType.includes("word")) return "Word";
     return "File";
 }
+
+function getLabelText(label: FileLabel): string {
+    const withSpaces = label.replaceAll("_", " ");
+    return withSpaces
+        .split(" ")
+        .map((part) => {
+            if (part.length === 0) return part;
+            return part.charAt(0).toUpperCase() + part.slice(1);
+        })
+        .join(" ");
+}
+
+type FileSort = "newest" | "oldest" | "name-asc" | "name-desc" | "size-desc";
+
+const LABEL_FILTER_OPTIONS: Array<{ value: "all" | FileLabel; label: string }> = [
+    { value: "all", label: "All labels" },
+    { value: "xray", label: "X-ray" },
+    { value: "blood_test", label: "Blood test" },
+    { value: "prescription", label: "Prescription" },
+    { value: "scan", label: "Scan" },
+    { value: "report", label: "Report" },
+    { value: "vaccination", label: "Vaccination" },
+    { value: "other", label: "Other" },
+];
+
+const SORT_OPTIONS: Array<{ value: FileSort; label: string }> = [
+    { value: "newest", label: "Newest first" },
+    { value: "oldest", label: "Oldest first" },
+    { value: "name-asc", label: "Name A → Z" },
+    { value: "name-desc", label: "Name Z → A" },
+    { value: "size-desc", label: "Largest first" },
+];
 
 // ── File picker item ──────────────────────────────────────────────────────────
 
@@ -181,6 +219,16 @@ function FilePickerItem({
                             {file.name}
                         </Text>
                     </Tooltip>
+                    {file.label && (
+                        <Badge
+                            size="xs"
+                            variant="light"
+                            color="primary"
+                            mt={2}
+                        >
+                            {getLabelText(file.label)}
+                        </Badge>
+                    )}
                     <Text size="xs" c="dimmed">
                         {formatBytes(file.size)} · {formatDate(file.createdAt)}
                     </Text>
@@ -249,7 +297,51 @@ export interface FilePickerDrawerProps {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePickerDrawerProps>) {
-    const { data: files = [], isLoading } = useFilesQuery();
+    const [search, setSearch] = useState("");
+    const [debouncedSearch] = useDebouncedValue(search, 250);
+    const [labelFilter, setLabelFilter] = useState<"all" | FileLabel>("all");
+    const [sortBy, setSortBy] = useState<FileSort>("newest");
+    const {
+        data,
+        isLoading,
+        isFetchingNextPage,
+        hasNextPage,
+        fetchNextPage,
+    } = useInfiniteFilesQuery({
+        q: debouncedSearch,
+        label: labelFilter,
+        limit: 21,
+    });
+
+    const { ref: loadMoreRef, entry } = useIntersection({
+        threshold: 0.1,
+    });
+
+    useEffect(() => {
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+            fetchNextPage().catch(() => undefined);
+        }
+    }, [entry?.isIntersecting, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    const flatFiles = data?.pages.flatMap((page) => page.files) ?? [];
+    const files = [...flatFiles];
+    if (sortBy === "newest") {
+        files.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    if (sortBy === "oldest") {
+        files.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    if (sortBy === "name-asc") {
+        files.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (sortBy === "name-desc") {
+        files.sort((a, b) => b.name.localeCompare(a.name));
+    }
+    if (sortBy === "size-desc") {
+        files.sort((a, b) => b.size - a.size);
+    }
+
+    const totalCount = data?.pages[0]?.totalCount;
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -325,16 +417,16 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
             <ScrollArea style={{ flex: 1 }} px="md">
                 {/* Hidden native inputs */}
                 <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf,.docx" multiple style={{ display: "none" }}
-                    onChange={(e) => { if (e.target.files) addPendingFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+                    onChange={(e) => { if (e.target.files) { addPendingFiles(Array.from(e.target.files)); e.target.value = ""; } }} />
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                    onChange={(e) => { if (e.target.files) addPendingFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+                    onChange={(e) => { if (e.target.files) { addPendingFiles(Array.from(e.target.files)); e.target.value = ""; } }} />
                 <input ref={galleryInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
-                    onChange={(e) => { if (e.target.files) addPendingFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+                    onChange={(e) => { if (e.target.files) { addPendingFiles(Array.from(e.target.files)); e.target.value = ""; } }} />
                 <input ref={browseInputRef} type="file" accept="*/*" multiple style={{ display: "none" }}
-                    onChange={(e) => { if (e.target.files) addPendingFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+                    onChange={(e) => { if (e.target.files) { addPendingFiles(Array.from(e.target.files)); e.target.value = ""; } }} />
 
                 {/* Mobile-first quick-action tiles */}
-                <SimpleGrid cols={3} spacing="sm" py="md">
+                <SimpleGrid cols={3} spacing="sm" py="md" hiddenFrom="sm">
                     {([
                         { label: "Camera", icon: <IconCamera size={22} />, color: "violet", onClick: handleCameraClick },
                         { label: "Photo Library", icon: <IconPhoto size={22} />, color: "primary", onClick: handleGalleryClick },
@@ -366,9 +458,41 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
                 </SimpleGrid>
 
                 {/* Desktop drag-and-drop zone */}
-                <Box pb="sm">
+                <Box pb="sm" visibleFrom="sm">
                     <UploadZone onDrop={addPendingFiles} />
                 </Box>
+
+                {/* Search, filter, sort */}
+                <Stack gap="xs" pb="sm">
+                    <TextInput
+                        value={search}
+                        onChange={(event) => setSearch(event.currentTarget.value)}
+                        placeholder="Search files by name"
+                        leftSection={<IconSearch size={14} />}
+                    />
+                    <Group grow>
+                        <Select
+                            value={labelFilter}
+                            onChange={(value) => {
+                                if (!value) return;
+                                setLabelFilter(value as "all" | FileLabel);
+                            }}
+                            data={LABEL_FILTER_OPTIONS}
+                            leftSection={<IconTag size={14} />}
+                            allowDeselect={false}
+                        />
+                        <Select
+                            value={sortBy}
+                            onChange={(value) => {
+                                if (!value) return;
+                                setSortBy(value as FileSort);
+                            }}
+                            data={SORT_OPTIONS}
+                            leftSection={<IconArrowsSort size={14} />}
+                            allowDeselect={false}
+                        />
+                    </Group>
+                </Stack>
 
                 {/* Pending (new) files */}
                 {pendingFiles.length > 0 && (
@@ -410,7 +534,7 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
                     <Group gap={6} mb="xs">
                         <Text size="sm" fw={600}>My files</Text>
                         {!isLoading && (
-                            <Badge size="xs" variant="light" color="gray">{files.length}</Badge>
+                            <Badge size="xs" variant="light" color="gray">{totalCount ?? files.length}</Badge>
                         )}
                         {selectedIds.size > 0 && (
                             <Badge size="xs" variant="filled" color="primary">{selectedIds.size} selected</Badge>
@@ -445,16 +569,42 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
                     )}
 
                     {!isLoading && files.length > 0 && (
-                        <SimpleGrid cols={{ base: 3, xs: 5, sm: 7 }} spacing={6}>
-                            {files.map((file) => (
-                                <FilePickerItem
-                                    key={file.id}
-                                    file={file}
-                                    selected={selectedIds.has(file.id)}
-                                    onToggle={() => toggleFile(file.id)}
-                                />
-                            ))}
-                        </SimpleGrid>
+                        <>
+                            <SimpleGrid cols={{ base: 3, xs: 5, sm: 7 }} spacing={6}>
+                                {files.map((file) => (
+                                    <FilePickerItem
+                                        key={file.id}
+                                        file={file}
+                                        selected={selectedIds.has(file.id)}
+                                        onToggle={() => toggleFile(file.id)}
+                                    />
+                                ))}
+                            </SimpleGrid>
+
+                            <Box ref={loadMoreRef} h={1} />
+
+                            {(hasNextPage || isFetchingNextPage) && (
+                                <Group justify="center" mt="sm">
+                                    <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        color="primary"
+                                        loading={isFetchingNextPage}
+                                        onClick={() => {
+                                            fetchNextPage().catch(() => undefined);
+                                        }}
+                                    >
+                                        Load more
+                                    </Button>
+                                </Group>
+                            )}
+
+                            {isFetchingNextPage && (
+                                <Group justify="center" mt="xs">
+                                    <Loader size="xs" />
+                                </Group>
+                            )}
+                        </>
                     )}
                 </Box>
             </ScrollArea>
@@ -465,14 +615,30 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
                 <Button variant="subtle" color="gray" onClick={handleClose}>
                     Cancel
                 </Button>
-                <Button
-                    color="primary"
-                    disabled={totalSelected === 0}
-                    leftSection={totalSelected > 0 ? <Badge size="xs" variant="white" color="primary" circle>{totalSelected}</Badge> : <IconPlus size={16} />}
-                    onClick={handleConfirm}
-                >
-                    {totalSelected > 0 ? `Attach ${totalSelected} file${totalSelected > 1 ? "s" : ""}` : "Select files"}
-                </Button>
+                {(() => {
+                    if (totalSelected === 0) {
+                        return (
+                            <Button
+                                color="primary"
+                                disabled
+                                leftSection={<IconPlus size={16} />}
+                                onClick={handleConfirm}
+                            >
+                                Select files
+                            </Button>
+                        );
+                    }
+                    const fileSuffix = totalSelected > 1 ? "s" : "";
+                    return (
+                        <Button
+                            color="primary"
+                            leftSection={<Badge size="xs" variant="white" color="primary" circle>{totalSelected}</Badge>}
+                            onClick={handleConfirm}
+                        >
+                            Attach {totalSelected} file{fileSuffix}
+                        </Button>
+                    );
+                })()}
             </Group>
         </Drawer>
     );

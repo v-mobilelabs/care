@@ -24,7 +24,6 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
 
     const lastMsg = messages.at(-1);
     const unansweredUser = lastMsg?.role === "user";
-    console.log("count: ", messages.length)
     return (
         <Stack gap="lg" maw={760} mx="auto" px="lg" pt="lg" pb={80}>
             {hasNextPage && (

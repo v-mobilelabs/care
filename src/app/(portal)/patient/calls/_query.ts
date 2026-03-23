@@ -14,6 +14,7 @@ export function useCallHistory() {
       if (!res.ok) throw new Error("Failed to load call history");
       return res.json() as Promise<CallRequestDto[]>;
     },
+    // Call history changes after calls complete/cancel — keep fresh
     staleTime: 60_000,
   });
 }

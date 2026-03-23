@@ -6,7 +6,6 @@ import {
     Chip,
     Group,
     Loader,
-    Paper,
     Slider,
     Stack,
     Text,

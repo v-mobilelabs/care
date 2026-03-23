@@ -1,5 +1,6 @@
 import {
   Timestamp,
+  type Query,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
@@ -8,6 +9,8 @@ import {
   toAssessmentDto,
   type AssessmentDocument,
   type AssessmentDto,
+  type ListAssessmentsInput,
+  type PaginatedAssessments,
 } from "../models/assessment.model";
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
@@ -115,18 +118,105 @@ export const assessmentRepository = {
     return toAssessmentDto(snap.id, snap.data() as AssessmentDocument);
   },
 
-  async list(
+  async listPaginated(
     userId: string,
-    limit: number,
+    opts: ListAssessmentsInput,
     dependentId?: string,
-  ): Promise<AssessmentDto[]> {
-    const snap = await assessmentsCol(userId, dependentId)
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
-    return snap.docs.map((d: QueryDocumentSnapshot) =>
+  ): Promise<PaginatedAssessments> {
+    let query: Query = assessmentsCol(userId, dependentId).orderBy(
+      "createdAt",
+      "desc",
+    );
+
+    if (opts.cursor) {
+      query = query.startAfter(Timestamp.fromDate(new Date(opts.cursor)));
+    }
+
+    const hasClientFilters =
+      !!opts.q || !!opts.status || !!opts.riskLevel || !!opts.agent;
+    const fetchLimit = hasClientFilters ? (opts.limit + 1) * 3 : opts.limit + 1;
+    const snap = await query.limit(fetchLimit).get();
+
+    let assessments = snap.docs.map((d: QueryDocumentSnapshot) =>
       toAssessmentDto(d.id, d.data() as AssessmentDocument),
     );
+
+    if (opts.status) {
+      assessments = assessments.filter((a) => a.status === opts.status);
+    }
+    if (opts.riskLevel) {
+      assessments = assessments.filter((a) => a.riskLevel === opts.riskLevel);
+    }
+    if (opts.agent) {
+      const wanted = opts.agent.toLowerCase();
+      assessments = assessments.filter(
+        (a) => a.specialtyAgent?.toLowerCase() === wanted,
+      );
+    }
+    if (opts.q) {
+      const term = opts.q.toLowerCase();
+      assessments = assessments.filter((a) => {
+        const title = a.title.toLowerCase();
+        const condition = a.condition?.toLowerCase() ?? "";
+        const guideline = a.guideline?.toLowerCase() ?? "";
+        const specialtyAgent = a.specialtyAgent?.toLowerCase() ?? "";
+        return (
+          title.includes(term) ||
+          condition.includes(term) ||
+          guideline.includes(term) ||
+          specialtyAgent.includes(term)
+        );
+      });
+    }
+
+    const hasMore = assessments.length > opts.limit;
+    const page = hasMore ? assessments.slice(0, opts.limit) : assessments;
+    const nextCursor = hasMore
+      ? (page[page.length - 1]?.createdAt ?? null)
+      : null;
+
+    let totalCount: number | undefined;
+    if (!opts.cursor) {
+      if (hasClientFilters) {
+        const allSnap = await assessmentsCol(userId, dependentId).get();
+        const all = allSnap.docs.map((d: QueryDocumentSnapshot) =>
+          toAssessmentDto(d.id, d.data() as AssessmentDocument),
+        );
+        totalCount = all.filter((a) => {
+          const matchesStatus = opts.status ? a.status === opts.status : true;
+          const matchesRisk = opts.riskLevel
+            ? a.riskLevel === opts.riskLevel
+            : true;
+          const matchesAgent = opts.agent
+            ? a.specialtyAgent?.toLowerCase() === opts.agent.toLowerCase()
+            : true;
+          const matchesQuery = opts.q
+            ? [
+                a.title,
+                a.condition ?? "",
+                a.guideline ?? "",
+                a.specialtyAgent ?? "",
+              ]
+                .join(" ")
+                .toLowerCase()
+                .includes(opts.q.toLowerCase())
+            : true;
+
+          return matchesStatus && matchesRisk && matchesAgent && matchesQuery;
+        }).length;
+      } else {
+        const countSnap = await assessmentsCol(userId, dependentId)
+          .count()
+          .get();
+        totalCount = countSnap.data().count;
+      }
+    }
+
+    return {
+      assessments: page,
+      nextCursor,
+      ...(typeof totalCount === "number" ? { totalCount } : {}),
+    };
   },
 
   async delete(

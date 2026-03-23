@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
-import { ActionIcon, Box, Avatar, Button, Group, Modal, Slider, Stack, Text, Tooltip } from "@mantine/core";
+import { Box, Avatar, Button, Group, Modal, Slider, Stack, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCamera, IconCheck, IconX } from "@tabler/icons-react";
 import Cropper from "react-easy-crop";

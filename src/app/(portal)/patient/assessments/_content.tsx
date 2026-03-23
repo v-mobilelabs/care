@@ -1,109 +1,143 @@
 "use client";
-import { useState } from "react";
+
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
     ActionIcon,
     Badge,
     Box,
-    Collapse,
+    Button,
     Container,
-    Divider,
     Group,
     Loader,
-    Pagination,
     Paper,
     ScrollArea,
+    SegmentedControl,
     Skeleton,
     Stack,
     Text,
+    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
 } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconCheck,
-    IconChevronDown,
-    IconChevronRight,
     IconClipboardHeart,
+    IconHeartHandshake,
     IconMessage,
     IconMessageQuestion,
+    IconSearch,
+    IconSortAscending,
+    IconSortDescending,
     IconTrash,
+    IconX,
 } from "@tabler/icons-react";
-import Link, { useLinkStatus } from "@/ui/link";
+import { useRouter } from "next/navigation";
 
+import Link, { useLinkStatus } from "@/ui/link";
 import {
-    useAssessmentsQuery,
+    useAssessmentsInfiniteQuery,
     useDeleteAssessmentMutation,
     type AssessmentRecord,
-    type QaPair,
 } from "@/app/(portal)/patient/_query";
 import { colors } from "@/ui/tokens";
 import { formatDate } from "@/lib/format";
 
-const PAGE_SIZE = 10;
+type SortField = "date" | "title" | "qa";
 
-const RISK_COLOR: Record<
-    NonNullable<AssessmentRecord["riskLevel"]>,
-    string
-> = {
+type AssessmentRisk = NonNullable<AssessmentRecord["riskLevel"]>;
+
+const RISK_COLOR: Record<AssessmentRisk, string> = {
     low: colors.success,
     moderate: colors.warning,
     high: colors.danger,
     emergency: colors.danger,
 };
 
-// ── Q&A pair display ──────────────────────────────────────────────────────────
-
-function QaItem({ pair, index }: Readonly<{ pair: QaPair; index: number }>) {
-    return (
-        <Box>
-            <Group gap={6} mb={4} wrap="nowrap" align="flex-start">
-                <ThemeIcon
-                    size={18}
-                    radius="xl"
-                    color="primary"
-                    variant="light"
-                    style={{ flexShrink: 0, marginTop: 2 }}
-                >
-                    <Text size="9px" fw={700}>{index + 1}</Text>
-                </ThemeIcon>
-                <Text size="sm" fw={500} lh={1.5}>
-                    {pair.question}
-                </Text>
-            </Group>
-            {pair.options && pair.options.length > 0 && (
-                <Group gap={4} ml={26} mb={4} wrap="wrap">
-                    {pair.options.map((opt) => (
-                        <Badge
-                            key={opt}
-                            size="xs"
-                            variant={pair.answer === opt || pair.answer.includes(opt) ? "filled" : "outline"}
-                            color={pair.answer === opt || pair.answer.includes(opt) ? "primary" : "gray"}
-                            radius="sm"
-                        >
-                            {opt}
-                        </Badge>
-                    ))}
-                </Group>
-            )}
-            <Group gap={6} ml={26} wrap="nowrap" align="flex-start">
-                <IconCheck size={13} color="var(--mantine-color-teal-6)" style={{ marginTop: 3, flexShrink: 0 }} />
-                <Text size="sm" c="dimmed" lh={1.5}>
-                    {pair.answer}
-                </Text>
-            </Group>
-        </Box>
-    );
+function sortAssessments(
+    assessments: readonly AssessmentRecord[],
+    field: SortField,
+    asc: boolean,
+): AssessmentRecord[] {
+    const sorted = [...assessments];
+    sorted.sort((a, b) => {
+        if (field === "title") return a.title.localeCompare(b.title);
+        if (field === "qa") return a.qa.length - b.qa.length;
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+    return asc ? sorted : sorted.reverse();
 }
 
-// ── Assessment card ───────────────────────────────────────────────────────────
+function getAssessmentGuidelines(assessment: AssessmentRecord): string[] {
+    if (assessment.guidelinesFollowed?.length) {
+        return assessment.guidelinesFollowed;
+    }
+    if (assessment.guideline) {
+        return [assessment.guideline];
+    }
+    return [];
+}
+
+function getDeleteFailureMessage(error: unknown, title: string): string {
+    if (error instanceof Error && error.message.trim().length > 0) {
+        return error.message;
+    }
+    return `Could not delete ${title}. Please try again.`;
+}
 
 function OpenSessionIcon() {
     const { pending } = useLinkStatus();
     if (pending) return <Loader size={12} />;
     return <IconMessage size={14} />;
+}
+
+function AssessmentMetaRow({
+    assessment,
+    guidelines,
+}: Readonly<{ assessment: AssessmentRecord; guidelines: string[] }>) {
+    const riskColor = assessment.riskLevel
+        ? RISK_COLOR[assessment.riskLevel]
+        : "primary";
+    const actionCardsCount = assessment.actionCards?.length ?? 0;
+
+    return (
+        <Group gap={6} mt={4} wrap="wrap">
+            {assessment.riskLevel ? (
+                <Badge size="xs" variant="light" color={riskColor} radius="sm">
+                    {assessment.riskLevel} risk
+                </Badge>
+            ) : null}
+            {assessment.condition ? (
+                <Badge size="xs" variant="outline" color="gray" radius="sm">
+                    {assessment.condition}
+                </Badge>
+            ) : null}
+            {assessment.specialtyAgent ? (
+                <Badge size="xs" variant="light" color="primary" radius="sm">
+                    {assessment.specialtyAgent}
+                </Badge>
+            ) : null}
+            {guidelines.length > 0 ? (
+                <Badge size="xs" variant="light" color="indigo" radius="sm">
+                    {guidelines.length} guideline{guidelines.length === 1 ? "" : "s"}
+                </Badge>
+            ) : null}
+            {actionCardsCount > 0 ? (
+                <Badge size="xs" variant="light" color="teal" radius="sm">
+                    {actionCardsCount} action card{actionCardsCount === 1 ? "" : "s"}
+                </Badge>
+            ) : null}
+            <Badge size="xs" variant="light" color="gray" radius="sm">
+                {assessment.qa.length} Q&amp;A
+            </Badge>
+            <Text size="xs" c="dimmed">
+                {formatDate(assessment.createdAt)}
+            </Text>
+        </Group>
+    );
 }
 
 function AssessmentCard({
@@ -115,29 +149,45 @@ function AssessmentCard({
     isPendingDelete: boolean;
     onDelete: () => void;
 }>) {
-    const [expanded, { toggle }] = useDisclosure(false);
+    const router = useRouter();
+    const riskColor = assessment.riskLevel
+        ? RISK_COLOR[assessment.riskLevel]
+        : "primary";
+    const guidelines = getAssessmentGuidelines(assessment);
+
+    const openDetails = () => {
+        router.push(`/patient/assessments/${assessment.id}`);
+    };
+
+    const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openDetails();
+        }
+    };
 
     return (
         <Paper
             withBorder
             radius="lg"
             p="md"
+            onClick={openDetails}
+            onKeyDown={handleCardKeyDown}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open assessment ${assessment.title}`}
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
+                cursor: "pointer",
             }}
         >
             <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
-                {/* Left: icon + title + badges */}
                 <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }} align="flex-start">
                     <ThemeIcon
                         size={36}
                         radius="md"
-                        color={
-                            assessment.riskLevel
-                                ? RISK_COLOR[assessment.riskLevel]
-                                : "primary"
-                        }
+                        color={riskColor}
                         variant="light"
                         style={{ flexShrink: 0, marginTop: 2 }}
                     >
@@ -147,33 +197,10 @@ function AssessmentCard({
                         <Text fw={600} size="sm" lineClamp={2}>
                             {assessment.title}
                         </Text>
-                        <Group gap={6} mt={4} wrap="wrap">
-                            {assessment.riskLevel && (
-                                <Badge
-                                    size="xs"
-                                    variant="light"
-                                    color={RISK_COLOR[assessment.riskLevel]}
-                                    radius="sm"
-                                >
-                                    {assessment.riskLevel} risk
-                                </Badge>
-                            )}
-                            {assessment.condition && (
-                                <Badge size="xs" variant="outline" color="gray" radius="sm">
-                                    {assessment.condition}
-                                </Badge>
-                            )}
-                            <Badge size="xs" variant="light" color="gray" radius="sm">
-                                {assessment.qa.length} Q&amp;A
-                            </Badge>
-                            <Text size="xs" c="dimmed">
-                                {formatDate(assessment.createdAt)}
-                            </Text>
-                        </Group>
+                        <AssessmentMetaRow assessment={assessment} guidelines={guidelines} />
                     </Box>
                 </Group>
 
-                {/* Right: actions */}
                 <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }} align="center">
                     <Tooltip label="Open session" withArrow>
                         <ActionIcon
@@ -182,30 +209,21 @@ function AssessmentCard({
                             color="gray"
                             component={Link}
                             href={`/patient/assistant?id=${assessment.sessionId}`}
+                            onClick={(event) => event.stopPropagation()}
                             aria-label="Open source session"
                         >
                             <OpenSessionIcon />
                         </ActionIcon>
                     </Tooltip>
-                    <ActionIcon
-                        size={28}
-                        variant="subtle"
-                        color="gray"
-                        onClick={toggle}
-                        aria-label={expanded ? "Collapse" : "Expand"}
-                    >
-                        {expanded ? (
-                            <IconChevronDown size={14} />
-                        ) : (
-                            <IconChevronRight size={14} />
-                        )}
-                    </ActionIcon>
                     <Tooltip label="Delete" withArrow>
                         <ActionIcon
                             size={28}
                             variant="subtle"
                             color="red"
-                            onClick={onDelete}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onDelete();
+                            }}
                             disabled={isPendingDelete}
                             aria-label="Delete assessment"
                         >
@@ -214,108 +232,130 @@ function AssessmentCard({
                     </Tooltip>
                 </Group>
             </Group>
-
-            {/* Expandable Q&A details */}
-            <Collapse in={expanded}>
-                <Divider my="sm" />
-                <Stack gap="md">
-                    {assessment.summary && (
-                        <Box>
-                            <Text
-                                size="xs"
-                                fw={700}
-                                c="dimmed"
-                                mb={4}
-                                style={{
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.5px",
-                                }}
-                            >
-                                Clinical Summary
-                            </Text>
-                            <Text size="sm" c="dimmed" lh={1.6}>
-                                {assessment.summary}
-                            </Text>
-                        </Box>
-                    )}
-                    <Box>
-                        <Text
-                            size="xs"
-                            fw={700}
-                            c="dimmed"
-                            mb={8}
-                            style={{
-                                textTransform: "uppercase",
-                                letterSpacing: "0.5px",
-                            }}
-                        >
-                            Assessment Q&amp;A
-                        </Text>
-                        <Stack gap="md">
-                            {assessment.qa.map((pair, i) => (
-                                <QaItem key={i} pair={pair} index={i} />
-                            ))}
-                        </Stack>
-                    </Box>
-                </Stack>
-            </Collapse>
         </Paper>
     );
 }
-
-// ── Skeleton loaders ──────────────────────────────────────────────────────────
 
 function AssessmentSkeletons() {
     return (
         <Stack gap="sm">
             {["sk-a", "sk-b", "sk-c"].map((k) => (
-                <Skeleton key={k} height={80} radius="lg" />
+                <Skeleton key={k} height={88} radius="lg" />
             ))}
         </Stack>
     );
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+function EmptyState({ hasFilters }: Readonly<{ hasFilters: boolean }>) {
+    if (hasFilters) {
+        return (
+            <Box py={80} style={{ textAlign: "center" }}>
+                <Text size="sm" c="dimmed" maw={360} mx="auto" lh={1.6}>
+                    No assessments match your current search and filters.
+                </Text>
+            </Box>
+        );
+    }
 
-function EmptyState() {
     return (
         <Box py={80} style={{ textAlign: "center" }}>
-            <ThemeIcon
-                size={64}
-                radius="xl"
-                color="gray"
-                variant="light"
-                mx="auto"
-                mb="md"
-            >
+            <ThemeIcon size={64} radius="xl" color="gray" variant="light" mx="auto" mb="md">
                 <IconMessageQuestion size={32} />
             </ThemeIcon>
             <Text size="sm" c="dimmed" maw={320} mx="auto" lh={1.6}>
-                No assessments saved yet. Start a clinical assessment chat and
-                the AI will automatically save your Q&amp;A here.
+                No assessments saved yet. Start a clinical assessment chat and the AI will
+                automatically save your Q&amp;A here.
             </Text>
+            <Button
+                mt="lg"
+                component={Link}
+                href="/patient/assistant?message=Start%20a%20clinical%20assessment"
+                leftSection={<IconHeartHandshake size={16} />}
+            >
+                Start assessment
+            </Button>
         </Box>
     );
 }
 
-// ── Main content ──────────────────────────────────────────────────────────────
+function LazyLoadSentinel({
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+}: Readonly<{
+    hasNextPage: boolean;
+    isFetchingNextPage: boolean;
+    fetchNextPage: () => void;
+}>) {
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || !hasNextPage) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry?.isIntersecting && !isFetchingNextPage) {
+                    fetchNextPage();
+                }
+            },
+            { rootMargin: "200px" },
+        );
+
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    if (!hasNextPage) return null;
+
+    return (
+        <Group justify="center" mt="lg" ref={ref}>
+            {isFetchingNextPage ? <Loader size="sm" /> : null}
+        </Group>
+    );
+}
 
 export function AssessmentsContent() {
-    const { data: assessments = [], isLoading } = useAssessmentsQuery();
-    const deleteAssessment = useDeleteAssessmentMutation();
-    const [page, setPage] = useState(1);
+    const [search, setSearch] = useState("");
+    const [debouncedSearch] = useDebouncedValue(search, 300);
+    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "abandoned">("all");
+    const [riskFilter, setRiskFilter] = useState<"all" | "low" | "moderate" | "high" | "emergency">("all");
+    const [sortField, setSortField] = useState<SortField>("date");
+    const [sortAsc, setSortAsc] = useState(false);
 
-    const totalPages = Math.max(1, Math.ceil(assessments.length / PAGE_SIZE));
-    const safePage = Math.min(page, totalPages);
-    const paginated = assessments.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+    const status = statusFilter === "all" ? undefined : statusFilter;
+    const riskLevel = riskFilter === "all" ? undefined : riskFilter;
+
+    const {
+        data,
+        isLoading,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useAssessmentsInfiniteQuery({
+        q: debouncedSearch || undefined,
+        status,
+        riskLevel,
+    });
+
+    const assessments = sortAssessments(
+        data?.pages.flatMap((p) => p.assessments) ?? [],
+        sortField,
+        sortAsc,
+    );
+
+    const totalCount = data?.pages[0]?.totalCount;
+
+    const deleteAssessment = useDeleteAssessmentMutation();
+
+    const hasFilters = !!debouncedSearch || !!status || !!riskLevel;
 
     function handleDelete(id: string, title: string) {
         modals.openConfirmModal({
             title: "Delete assessment?",
             children: (
                 <Text size="sm">
-                    <strong>{title}</strong> will be permanently deleted. This
-                    cannot be undone.
+                    <strong>{title}</strong> will be permanently deleted. This cannot be undone.
                 </Text>
             ),
             labels: { confirm: "Delete", cancel: "Cancel" },
@@ -329,10 +369,10 @@ export function AssessmentsContent() {
                             color: colors.success,
                             icon: <IconCheck size={16} />,
                         }),
-                    onError: () =>
+                    onError: (error) =>
                         notifications.show({
                             title: "Delete failed",
-                            message: `Could not delete ${title}. Please try again.`,
+                            message: getDeleteFailureMessage(error, title),
                             color: colors.danger,
                         }),
                 });
@@ -343,57 +383,145 @@ export function AssessmentsContent() {
     return (
         <Container pt="md">
             <Stack>
-                <Group justify="space-between" wrap="nowrap">
+                <Group justify="space-between" align="center">
                     <Group gap="sm" wrap="nowrap">
                         <ThemeIcon size={36} radius="md" color="primary" variant="light">
                             <IconClipboardHeart size={20} />
                         </ThemeIcon>
                         <Box>
-                            <Title order={4} lh={1.2}>My Assessments</Title>
+                            <Title order={4} lh={1.2}>
+                                My Assessments
+                            </Title>
                             <Text size="xs" c="dimmed">
-                                AI clinical assessments — linked to your chat sessions
+                                Search, filter, and review complete assessment details
                             </Text>
                         </Box>
                     </Group>
-                    {!isLoading && assessments.length > 0 && (
-                        <Badge variant="light" color="gray" size="sm" radius="xl">
-                            {assessments.length}
-                        </Badge>
-                    )}
+                    <Group gap="sm" align="center">
+                        {!isLoading && totalCount != null && totalCount > 0 ? (
+                            <Badge variant="light" color="gray" size="sm" radius="xl">
+                                {totalCount} assessment{totalCount === 1 ? "" : "s"}
+                            </Badge>
+                        ) : null}
+                        <Button
+                            size="xs"
+                            component={Link}
+                            href="/patient/assistant?message=Start%20a%20clinical%20assessment"
+                            leftSection={<IconHeartHandshake size={14} />}
+                        >
+                            Start assessment
+                        </Button>
+                    </Group>
                 </Group>
 
-                <Box>
-                    {isLoading && <AssessmentSkeletons />}
-
-                    {!isLoading && assessments.length === 0 && <EmptyState />}
-
-                    {!isLoading && assessments.length > 0 && (
-                        <Stack gap="sm">
-                            {paginated.map((assessment: AssessmentRecord) => (
-                                <AssessmentCard
-                                    key={assessment.id}
-                                    assessment={assessment}
-                                    isPendingDelete={
-                                        deleteAssessment.isPending &&
-                                        deleteAssessment.variables === assessment.id
-                                    }
-                                    onDelete={() =>
-                                        handleDelete(assessment.id, assessment.title)
-                                    }
+                <Group gap="sm" wrap="wrap">
+                    <TextInput
+                        placeholder="Search assessments…"
+                        leftSection={<IconSearch size={16} />}
+                        rightSection={
+                            search ? (
+                                <IconX
+                                    size={14}
+                                    style={{ cursor: "pointer" }}
+                                    onClick={() => setSearch("")}
                                 />
-                            ))}
-                            {totalPages > 1 && (
-                                <Group justify="center" mt="md">
-                                    <Pagination
-                                        size="sm"
-                                        total={totalPages}
-                                        value={safePage}
-                                        onChange={setPage}
+                            ) : undefined
+                        }
+                        size="sm"
+                        value={search}
+                        onChange={(event) => setSearch(event.currentTarget.value)}
+                        style={{ flex: 1, minWidth: 180 }}
+                    />
+
+                    <SegmentedControl
+                        size="xs"
+                        value={statusFilter}
+                        onChange={(v) =>
+                            setStatusFilter(v as "all" | "active" | "completed" | "abandoned")
+                        }
+                        data={[
+                            { label: "All", value: "all" },
+                            { label: "Active", value: "active" },
+                            { label: "Completed", value: "completed" },
+                            { label: "Abandoned", value: "abandoned" },
+                        ]}
+                    />
+
+                    <SegmentedControl
+                        size="xs"
+                        value={riskFilter}
+                        onChange={(v) =>
+                            setRiskFilter(v as "all" | "low" | "moderate" | "high" | "emergency")
+                        }
+                        data={[
+                            { label: "All risk", value: "all" },
+                            { label: "Low", value: "low" },
+                            { label: "Moderate", value: "moderate" },
+                            { label: "High", value: "high" },
+                            { label: "Emergency", value: "emergency" },
+                        ]}
+                    />
+                </Group>
+
+                <Group gap="xs">
+                    <SegmentedControl
+                        size="xs"
+                        value={sortField}
+                        onChange={(v) => setSortField(v as SortField)}
+                        data={[
+                            { label: "Date", value: "date" },
+                            { label: "Title", value: "title" },
+                            { label: "Q&A", value: "qa" },
+                        ]}
+                    />
+                    <Box
+                        component="button"
+                        onClick={() => setSortAsc((prev) => !prev)}
+                        style={{
+                            all: "unset",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: "var(--mantine-font-size-xs)",
+                            color: "var(--mantine-color-dimmed)",
+                        }}
+                    >
+                        {sortAsc ? <IconSortAscending size={14} /> : <IconSortDescending size={14} />}
+                        {sortAsc ? "Asc" : "Desc"}
+                    </Box>
+                </Group>
+
+                <Box style={{ flex: 1, overflow: "hidden" }}>
+                    <ScrollArea style={{ height: "100%" }}>
+                        <Box maw={1080} mx="auto">
+                            {isLoading ? <AssessmentSkeletons /> : null}
+
+                            {!isLoading && assessments.length === 0 ? <EmptyState hasFilters={hasFilters} /> : null}
+
+                            {!isLoading && assessments.length > 0 ? (
+                                <Stack gap="sm">
+                                    {assessments.map((assessment) => (
+                                        <AssessmentCard
+                                            key={assessment.id}
+                                            assessment={assessment}
+                                            isPendingDelete={
+                                                deleteAssessment.isPending &&
+                                                deleteAssessment.variables === assessment.id
+                                            }
+                                            onDelete={() => handleDelete(assessment.id, assessment.title)}
+                                        />
+                                    ))}
+
+                                    <LazyLoadSentinel
+                                        hasNextPage={!!hasNextPage}
+                                        isFetchingNextPage={isFetchingNextPage}
+                                        fetchNextPage={fetchNextPage}
                                     />
-                                </Group>
-                            )}
-                        </Stack>
-                    )}
+                                </Stack>
+                            ) : null}
+                        </Box>
+                    </ScrollArea>
                 </Box>
             </Stack>
         </Container>

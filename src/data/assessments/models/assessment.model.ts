@@ -10,6 +10,13 @@ export interface QaPair {
   answer: string;
 }
 
+export interface AssessmentActionCard {
+  toolCallId?: string;
+  title: string;
+  items: string[];
+  disclaimer?: string;
+}
+
 export type AssessmentStatus = "active" | "completed" | "abandoned";
 
 // ── Firestore document shape ──────────────────────────────────────────────────
@@ -20,9 +27,14 @@ export interface AssessmentDocument {
   sessionId: string;
   /** Unique assessment run id (usually toolCallId from startAssessment) */
   runId?: string;
+  /** Agent selected for this assessment run (e.g. cardiology, nephrology) */
+  specialtyAgent?: string;
   title: string;
   condition?: string;
+  /** Primary guideline (legacy single guideline field) */
   guideline?: string;
+  /** Full guideline set followed during assessment */
+  guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
   status?: AssessmentStatus;
@@ -30,6 +42,7 @@ export interface AssessmentDocument {
   completedAt?: Timestamp;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
+  actionCards?: AssessmentActionCard[];
   qa: QaPair[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
@@ -42,9 +55,11 @@ export interface AssessmentDto {
   userId: string;
   sessionId: string;
   runId?: string;
+  specialtyAgent?: string;
   title: string;
   condition?: string;
   guideline?: string;
+  guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
   status?: AssessmentStatus;
@@ -52,6 +67,7 @@ export interface AssessmentDto {
   completedAt?: string;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
+  actionCards?: AssessmentActionCard[];
   qa: QaPair[];
   createdAt: string; // ISO-8601
   updatedAt?: string; // ISO-8601
@@ -66,15 +82,24 @@ const QaPairSchema = z.object({
   answer: z.string().min(1),
 });
 
+const ActionCardSchema = z.object({
+  toolCallId: z.string().min(1).optional(),
+  title: z.string().min(1),
+  items: z.array(z.string().min(1)).min(1).max(10),
+  disclaimer: z.string().optional(),
+});
+
 // ── DTO — inbound (create) ────────────────────────────────────────────────────
 
 export const CreateAssessmentSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
   sessionId: z.string().min(1, { message: "sessionId is required" }),
   runId: z.string().min(1).optional(),
+  specialtyAgent: z.string().min(1).optional(),
   title: z.string().min(1).max(120).optional().default("Clinical Assessment"),
   condition: z.string().optional(),
   guideline: z.string().optional(),
+  guidelinesFollowed: z.array(z.string().min(1)).optional(),
   estimatedQuestions: z.number().int().min(1).max(30).optional(),
   estimatedMinutes: z.string().optional(),
   status: z.enum(["active", "completed", "abandoned"]).optional(),
@@ -82,6 +107,7 @@ export const CreateAssessmentSchema = z.object({
   completedAt: z.iso.datetime().optional(),
   riskLevel: z.enum(["low", "moderate", "high", "emergency"]).optional(),
   summary: z.string().optional(),
+  actionCards: z.array(ActionCardSchema).optional().default([]),
   qa: z.array(QaPairSchema).optional().default([]),
 });
 
@@ -91,10 +117,26 @@ export type CreateAssessmentInput = z.infer<typeof CreateAssessmentSchema>;
 
 export const ListAssessmentsSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
-  limit: z.number().int().min(1).max(100).optional().default(50),
+  limit: z.number().int().min(1).max(100).optional().default(20),
+  cursor: z.string().optional(),
+  q: z.string().optional(),
+  status: z.enum(["active", "completed", "abandoned"]).optional(),
+  riskLevel: z.enum(["low", "moderate", "high", "emergency"]).optional(),
+  agent: z.string().optional(),
+  sortBy: z
+    .enum(["createdAt", "title", "updatedAt"])
+    .optional()
+    .default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).optional().default("desc"),
 });
 
 export type ListAssessmentsInput = z.infer<typeof ListAssessmentsSchema>;
+
+export interface PaginatedAssessments {
+  assessments: AssessmentDto[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
 
 // ── DTO — inbound (get / delete) ──────────────────────────────────────────────
 
@@ -126,14 +168,17 @@ function toAssessmentTiming(doc: AssessmentDocument) {
 function toAssessmentDetails(doc: AssessmentDocument) {
   return {
     runId: doc.runId,
+    specialtyAgent: doc.specialtyAgent,
     title: doc.title,
     condition: doc.condition,
     guideline: doc.guideline,
+    guidelinesFollowed: doc.guidelinesFollowed,
     estimatedQuestions: doc.estimatedQuestions,
     estimatedMinutes: doc.estimatedMinutes,
     status: doc.status,
     riskLevel: doc.riskLevel,
     summary: doc.summary,
+    actionCards: doc.actionCards,
     qa: doc.qa,
   };
 }

@@ -253,7 +253,7 @@ export function ChatContent() {
                             left: "var(--app-shell-navbar-offset, 0px)",
                             width: "calc(100% - var(--app-shell-navbar-offset, 0px) - var(--app-shell-aside-offset, 0px))",
                             zIndex: 100,
-                            backgroundColor: "light-dark( var(--mantine-color-gray-2), var(--mantine-color-dark-9))",
+                            backgroundColor: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-9))",
                         }}
                     >
                         {/* Scroll blur — fades messages into the input bar background */}

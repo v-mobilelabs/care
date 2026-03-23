@@ -1,8 +1,5 @@
 import { patientRepository } from "../repositories/patient.repository";
-import type {
-  UpsertPatientInput,
-  PatientDto,
-} from "../models/patient.model";
+import type { UpsertPatientInput, PatientDto } from "../models/patient.model";
 
 export class PatientService {
   async get(userId: string): Promise<PatientDto | null> {

@@ -4,14 +4,13 @@ import {
     Badge,
     Box,
     Group,
-    Stack,
     Text,
 } from "@mantine/core";
 import { IconUser, IconUsers } from "@tabler/icons-react";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
 import { colors } from "@/ui/tokens";
-import { iosCard, iosRow, iosRowLast, iosSection, ios, allKeyframes } from "@/ui/ios";
+import { iosCard, iosRow, iosRowLast, ios, allKeyframes } from "@/ui/ios";
 
 const MAX_VISIBLE = 5;
 

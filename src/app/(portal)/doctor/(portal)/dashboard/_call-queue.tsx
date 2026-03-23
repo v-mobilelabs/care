@@ -11,7 +11,6 @@ import {
     Paper,
     Stack,
     Text,
-    Title,
     Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -32,7 +31,7 @@ import { useDoctorCallQueue } from "@/lib/meet/use-doctor-call-queue";
 import type { AttendeeJoinInfo } from "@/data/meet";
 import { colors } from "@/ui/tokens";
 import type { IncomingCallEntry } from "@/lib/meet/use-doctor-call-queue";
-import { ios, iosCard, allKeyframes } from "@/ui/ios";
+import { ios, allKeyframes } from "@/ui/ios";
 import { useMeetSession } from "@/lib/meet/meet-session-context";
 import { meetSessionKey, type MeetSessionData } from "@/app/(portal)/meet/[requestId]/_keys";
 import { buildConversationId } from "@/lib/messaging/conversation-id";

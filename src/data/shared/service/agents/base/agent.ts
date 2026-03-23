@@ -11,12 +11,11 @@
  *  1. Builds per-request tools via `config.buildTools(options)`
  *  2. Checks/creates a Google context cache for the static prompt + tools
  *  3. Composes a middleware chain:
- *       creditMiddleware → ragMiddleware → cachedContentMiddleware → toolInputExamples
+ *       preContextMiddleware → cachedContentMiddleware → toolInputExamples
+ *     (guardrail, credit, memory, and RAG are pre-fetched in PrepareChatUseCase
+ *      via `prefetchContext()` and injected by `preContextMiddleware`)
  *  4. Wraps the model with the middleware chain
  *  5. Delegates to a fresh ToolLoopAgent for the actual LLM streaming loop
- *
- * Cross-cutting concerns (credit gate, RAG, caching) live in reusable
- * middleware under `src/data/shared/service/middleware/`.
  */
 
 import { google } from "@ai-sdk/google";

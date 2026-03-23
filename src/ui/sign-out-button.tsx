@@ -1,5 +1,5 @@
 "use client";
-import { Button, Text, UnstyledButton } from "@mantine/core";
+import { Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth/sign-out";

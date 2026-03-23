@@ -10,9 +10,14 @@ import AssessmentsLoading from "./loading";
 // ── Async data boundary — streams skeleton immediately, data follows ──────────
 async function AssessmentsData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
-    await queryClient.prefetchQuery({
-        queryKey: [...chatKeys.assessments(), undefined],
+    const initialQuery = "limit=20";
+    await queryClient.prefetchInfiniteQuery({
+        queryKey: [...chatKeys.assessments(), "paginated", undefined, initialQuery],
         queryFn: () => getCachedAssessments(userId),
+        initialPageParam: undefined as string | undefined,
+        getNextPageParam: (
+            lastPage: Awaited<ReturnType<typeof getCachedAssessments>>,
+        ) => lastPage.nextCursor ?? undefined,
     });
     return (
         <Hydrate client={queryClient}>

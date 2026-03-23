@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/ui/providers/auth-provider";
 import { usePresenceStatus } from "@/lib/presence/use-presence-status";
 import { colors } from "@/ui/tokens";
-import { iosCard, iosRow, iosRowLast, ios, allKeyframes } from "@/ui/ios";
+import { iosCard, iosRow, ios, allKeyframes } from "@/ui/ios";
 
 function StatusIcon({ status }: Readonly<{ status: "online" | "busy" | "offline" }>) {
     if (status === "busy") return <IconPhoneCall size={20} color="var(--mantine-color-orange-5)" />;

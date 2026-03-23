@@ -156,6 +156,7 @@ function InteractiveCard({ color, label, sub, onClick, reducedMotion, isTouchDev
                 borderRadius: "var(--mantine-radius-lg)",
                 overflow: "visible",
                 width: "100%",
+                height: "4.5rem",
             }}
         >
             {/* Ambient glow behind card — pulses on hover (pointer devices only) */}
@@ -268,6 +269,7 @@ export function StarterCards({ onSelect, onSend }: Readonly<StarterCardsProps>) 
                 gap: spacing.md,
                 position: "relative",
                 marginBottom: spacing.xl,
+                marginTop: spacing.xl,
             }}
         >
             {/* Category chips */}

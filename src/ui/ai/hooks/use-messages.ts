@@ -25,6 +25,15 @@ import type { MessageRecord } from "@/ui/ai/query";
 import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
 import { useCurrentProfile } from "@/lib/auth/use-current-profile";
 
+/** Question types that render their own inline answer UI inside the card.
+ *  Everything else (including "free_text" and unknown types) uses the input bar. */
+const INLINE_ANSWER_TYPES = [
+  "yes_no",
+  "single_choice",
+  "multi_choice",
+  "scale",
+];
+
 /**
  * Check if all tool calls in the last assistant message have outputs provided.
  * Replaces SDK's lastAssistantMessageIsCompleteWithToolCalls which internally
@@ -505,22 +514,13 @@ export function useMessages(sessionId: string) {
     // typed input (free_text, or any unrecognised type), the user answers via
     // the input bar rather than inline question-card buttons.
     pendingFreeText: (() => {
-      // Question types that have their own inline answer UI inside the card.
-      // Everything else (including "free_text" and any unknown type) uses the
-      // input bar, so we must unlock it when such a question is pending.
-      const inlineAnswerTypes = [
-        "yes_no",
-        "single_choice",
-        "multi_choice",
-        "scale",
-      ];
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         if (m.role !== "assistant") continue;
         for (const p of m.parts) {
           if (!isToolPart(p) || p.state !== "input-available") continue;
           const q = extractToolInput<AskQuestionInput>(p, "askQuestion");
-          if (q && !(inlineAnswerTypes as string[]).includes(q.type)) {
+          if (q && !(INLINE_ANSWER_TYPES as string[]).includes(q.type)) {
             return {
               toolCallId: p.toolCallId!,
               question: q.question,
@@ -536,12 +536,6 @@ export function useMessages(sessionId: string) {
     // Only checks the most recent assistant message so that once the AI sends
     // a new text-only reply (e.g. farewell), the input bar re-enables.
     hasPendingToolCall: (() => {
-      const inlineAnswerTypes = [
-        "yes_no",
-        "single_choice",
-        "multi_choice",
-        "scale",
-      ];
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         if (m.role !== "assistant") continue;
@@ -553,7 +547,7 @@ export function useMessages(sessionId: string) {
           // Non-askQuestion tool calls always block (e.g. approval flows).
           if (!q) return true;
           // Only block for question types that render inline answer UI.
-          return (inlineAnswerTypes as string[]).includes(q.type);
+          return (INLINE_ANSWER_TYPES as string[]).includes(q.type);
         });
       }
       return false;

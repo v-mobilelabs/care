@@ -12,7 +12,7 @@ html {
   min-height: -webkit-fill-available;
   /* Match body background for overscroll */
   background: light-dark(
-    var(--mantine-color-gray-5),
+    var(--mantine-color-gray-1),
     var(--mantine-color-dark-9)
   );
   overscroll-behavior-y: none; /* Stops the vertical bounce */
@@ -40,7 +40,7 @@ body {
   min-height: 100dvh;
   min-height: -webkit-fill-available;
   background: light-dark(
-    var(--mantine-color-gray-5),
+    var(--mantine-color-gray-1),
     var(--mantine-color-dark-9)
   );
 }

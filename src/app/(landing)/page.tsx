@@ -1,6 +1,5 @@
 "use client";
 import {
-  Anchor,
   Badge,
   Box,
   Button,
@@ -14,7 +13,6 @@ import {
   ThemeIcon,
   Title,
 } from "@mantine/core";
-import { LandingLayout } from "@/ui/layouts/landing";
 import {
   IconApple,
   IconBrain,

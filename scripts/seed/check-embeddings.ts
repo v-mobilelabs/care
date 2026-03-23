@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase/admin";
 async function main(): Promise<void> {
   // List all profiles
   const profilesSnap = await db.collection("profiles").get();
-  let total = 0;
+  const total = 0;
   console.log("First 5 embeddings (across all profiles):");
   let shown = 0;
   for (const profileDoc of profilesSnap.docs) {

@@ -1,5 +1,5 @@
 "use client";
-import { Badge, Box, Card, Group, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Box, Card, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconClipboardHeart, IconClock, IconListCheck, IconStethoscope } from "@tabler/icons-react";
 import type { StartAssessmentInput } from "@/ui/ai/types";
 

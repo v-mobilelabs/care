@@ -273,7 +273,7 @@ export function useDeviceControls({
             try {
                 let blurProcessor = blurProcessorRef.current;
                 if (!blurProcessor) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     
                     const spec = {
                         paths: {
                             asset: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.13.0",

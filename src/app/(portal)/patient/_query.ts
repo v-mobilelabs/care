@@ -53,6 +53,25 @@ export interface PaginatedSessionsResponse {
   totalCount?: number;
 }
 
+function removeSessionFromPaginatedData(
+  old:
+    | {
+        pages: PaginatedSessionsResponse[];
+        pageParams: unknown[];
+      }
+    | undefined,
+  sessionId: string,
+) {
+  if (!old) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      sessions: page.sessions.filter((s) => s.id !== sessionId),
+    })),
+  };
+}
+
 export interface MessageRecord {
   id: string;
   sessionId: string;
@@ -106,6 +125,25 @@ export interface PaginatedFilesResponse {
   files: FileRecord[];
   nextCursor: string | null;
   totalCount?: number;
+}
+
+function removeFileFromPaginatedData(
+  old:
+    | {
+        pages: PaginatedFilesResponse[];
+        pageParams: (string | undefined)[];
+      }
+    | undefined,
+  fileId: string,
+) {
+  if (!old) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      files: page.files.filter((f) => f.id !== fileId),
+    })),
+  };
 }
 
 export type MedicationForm =
@@ -384,16 +422,7 @@ export function useDeleteSessionMutation() {
       qc.setQueryData<{
         pages: PaginatedSessionsResponse[];
         pageParams: unknown[];
-      }>(infiniteKey, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            sessions: page.sessions.filter((s) => s.id !== id),
-          })),
-        };
-      });
+      }>(infiniteKey, (old) => removeSessionFromPaginatedData(old, id));
       return { snapshot };
     },
     onError: (_err, _id, ctx) => {
@@ -547,16 +576,9 @@ export function useDeleteFileMutation() {
       qc.setQueriesData<{
         pages: PaginatedFilesResponse[];
         pageParams: (string | undefined)[];
-      }>({ queryKey: chatKeys.files() }, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            files: page.files.filter((f) => f.id !== fileId),
-          })),
-        };
-      });
+      }>({ queryKey: chatKeys.files() }, (old) =>
+        removeFileFromPaginatedData(old, fileId),
+      );
       return { snapshot };
     },
     onError: (_err, _vars, ctx) => {
@@ -728,7 +750,7 @@ export function useDeletePrescriptionMutation() {
       if (ctx?.snapshot) qc.setQueryData(prescKey, ctx.snapshot);
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: prescKey });
+      qc.invalidateQueries({ queryKey: prescKey });
     },
   });
 }
@@ -1191,14 +1213,23 @@ export interface QaPair {
   answer: string;
 }
 
+export interface AssessmentActionCardRecord {
+  toolCallId?: string;
+  title: string;
+  items: string[];
+  disclaimer?: string;
+}
+
 export interface AssessmentRecord {
   id: string;
   userId: string;
   sessionId: string;
   runId?: string;
+  specialtyAgent?: string;
   title: string;
   condition?: string;
   guideline?: string;
+  guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
   status?: "active" | "completed" | "abandoned";
@@ -1206,9 +1237,45 @@ export interface AssessmentRecord {
   completedAt?: string;
   riskLevel?: "low" | "moderate" | "high" | "emergency";
   summary?: string;
+  actionCards?: AssessmentActionCardRecord[];
   qa: QaPair[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface PaginatedAssessmentsResponse {
+  assessments: AssessmentRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+
+export interface AssessmentsFilters {
+  q?: string;
+  status?: "active" | "completed" | "abandoned";
+  riskLevel?: "low" | "moderate" | "high" | "emergency";
+  agent?: string;
+}
+
+function removeAssessmentFromPaginatedCache(
+  old:
+    | {
+        pages: PaginatedAssessmentsResponse[];
+        pageParams: (string | undefined)[];
+      }
+    | undefined,
+  assessmentId: string,
+) {
+  if (!old) return old;
+
+  const pages = old.pages.map((page) => ({
+    ...page,
+    assessments: page.assessments.filter((a) => a.id !== assessmentId),
+  }));
+
+  return {
+    ...old,
+    pages,
+  };
 }
 
 /** Fetch all AI assessments for the authenticated user, newest-first. */
@@ -1216,7 +1283,38 @@ export function useAssessmentsQuery() {
   const pid = useActiveDependentId();
   return useQuery({
     queryKey: [...chatKeys.assessments(), pid],
-    queryFn: () => apiFetch<AssessmentRecord[]>("/api/assessments"),
+    queryFn: async () => {
+      const page = await apiFetch<PaginatedAssessmentsResponse>(
+        "/api/assessments?limit=50",
+      );
+      return page.assessments;
+    },
+    staleTime: 30_000,
+  });
+}
+
+/** Paginated assessments with optional server-side filtering and search. */
+export function useAssessmentsInfiniteQuery(filters?: AssessmentsFilters) {
+  const pid = useActiveDependentId();
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.riskLevel) params.set("riskLevel", filters.riskLevel);
+  if (filters?.agent) params.set("agent", filters.agent);
+  params.set("limit", "20");
+  const qs = params.toString();
+
+  return useInfiniteQuery({
+    queryKey: [...chatKeys.assessments(), "paginated", pid, qs],
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams(params);
+      if (pageParam) p.set("cursor", pageParam);
+      return apiFetch<PaginatedAssessmentsResponse>(
+        `/api/assessments?${p.toString()}`,
+      );
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     staleTime: 30_000,
   });
 }
@@ -1246,6 +1344,11 @@ export function useDeleteAssessmentMutation() {
   const qc = useQueryClient();
   const pid = useActiveDependentId();
   const key = [...chatKeys.assessments(), pid] as const;
+  const paginatedKeyPrefix = [
+    ...chatKeys.assessments(),
+    "paginated",
+    pid,
+  ] as const;
   return useMutation({
     mutationFn: (assessmentId: string) =>
       apiFetch<{ ok: boolean }>(`/api/assessments/${assessmentId}`, {
@@ -1253,17 +1356,37 @@ export function useDeleteAssessmentMutation() {
       }),
     onMutate: async (assessmentId) => {
       await qc.cancelQueries({ queryKey: key });
-      const snapshot = qc.getQueryData<AssessmentRecord[]>(key);
-      qc.setQueryData<AssessmentRecord[]>(key, (old = []) =>
-        old.filter((a) => a.id !== assessmentId),
+      await qc.cancelQueries({ queryKey: paginatedKeyPrefix });
+      const snapshot = qc.getQueryData<unknown>(key);
+      const paginatedSnapshot = qc.getQueriesData<{
+        pages: PaginatedAssessmentsResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix });
+      qc.setQueryData<unknown>(key, (old: unknown) => {
+        if (!Array.isArray(old)) {
+          return old;
+        }
+        return old.filter((a) => a.id !== assessmentId);
+      });
+      qc.setQueriesData<{
+        pages: PaginatedAssessmentsResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix }, (old) =>
+        removeAssessmentFromPaginatedCache(old, assessmentId),
       );
-      return { snapshot };
+      return { snapshot, paginatedSnapshot };
     },
     onError: (_err, _id, ctx) => {
-      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+      if (ctx?.snapshot !== undefined) qc.setQueryData(key, ctx.snapshot);
+      if (ctx?.paginatedSnapshot) {
+        for (const [queryKey, data] of ctx.paginatedSnapshot) {
+          qc.setQueryData(queryKey, data);
+        }
+      }
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: paginatedKeyPrefix });
     },
   });
 }
@@ -1818,7 +1941,7 @@ export function useAddVitalMutation() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: key });
-      void revalidateVitals();
+      revalidateVitals();
     },
   });
 }
@@ -1845,7 +1968,7 @@ export function useDeleteVitalMutation() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: key });
-      void revalidateVitals();
+      revalidateVitals();
     },
   });
 }

@@ -15,7 +15,6 @@
  */
 import {
     BackgroundBlurVideoFrameProcessor,
-    ConsoleLogger,
     DefaultDeviceController,
     DefaultEventController,
     DefaultMeetingSession,

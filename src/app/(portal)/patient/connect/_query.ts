@@ -20,6 +20,7 @@ export function useOnlineDoctors() {
       if (!res.ok) throw new Error("Failed to fetch doctors");
       return res.json() as Promise<OnlineDoctorDto[]>;
     },
+    // Poll for doctor availability changes
     refetchInterval: 30_000, // refresh every 30s
   });
 }

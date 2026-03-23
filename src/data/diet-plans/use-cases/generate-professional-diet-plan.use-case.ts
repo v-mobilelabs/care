@@ -7,8 +7,7 @@
 
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { z } from "zod";
-import { dietPlanRepository } from "../repositories/diet-plan.repository";
-import type { DietPlanDto, DietPlanDocument } from "../models/diet-plan.model";
+import type { DietPlanDto } from "../models/diet-plan.model";
 
 // TODO: Refactor — the old professionalDietPlannerAgent was deleted.
 // This use case needs to be replaced with DietPlannerChatAgent or a

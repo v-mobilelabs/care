@@ -10,9 +10,9 @@ function ActionCardHeader({ title, total }: Readonly<{ title: string; total: num
     const bg = "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))";
 
     return (
-        <Card.Section withBorder px="sm" py="sm" style={{ background: bg, transition: "background 200ms ease" }}>
+        <Card.Section withBorder px="sm" py="sm" style={{ background: bg }}>
             <Group gap="sm" wrap="nowrap" align="center">
-                <ThemeIcon size={32} radius="md" color={accent} variant="filled" style={{ flexShrink: 0 }}>
+                <ThemeIcon size={30} radius="md" color={accent} variant="light" style={{ flexShrink: 0 }}>
                     <IconListCheck size={16} />
                 </ThemeIcon>
                 <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
@@ -28,7 +28,7 @@ function ActionCardHeader({ title, total }: Readonly<{ title: string; total: num
 
 function ActionCardItem({ text }: Readonly<{ text: string }>) {
     return (
-        <Group gap="xs" wrap="nowrap" align="flex-start" style={{ pointerEvents: "none", opacity: 0.98 }}>
+        <Group gap="xs" wrap="nowrap" align="flex-start">
             <ThemeIcon size={20} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 1 }}>
                 <IconCheck size={12} />
             </ThemeIcon>
@@ -48,19 +48,33 @@ function ActionCardDisclaimer({ text }: Readonly<{ text: string }>) {
     );
 }
 
+function ActionCardItems({ items }: Readonly<{ items: readonly string[] }>) {
+    const seen = new Map<string, number>();
+
+    const keyedItems = items.map((item) => {
+        const count = (seen.get(item) ?? 0) + 1;
+        seen.set(item, count);
+        return { item, key: `${item}-${count}` };
+    });
+
+    return (
+        <Card.Section px="sm" py="sm" style={{ flex: 1, overflowY: "auto" }}>
+            <Stack gap="xs">
+                {keyedItems.map(({ item, key }) => (
+                    <ActionCardItem key={key} text={item} />
+                ))}
+            </Stack>
+        </Card.Section>
+    );
+}
+
 // ── Main card ─────────────────────────────────────────────────────────────────
 
 export function ActionCardCard({ data }: Readonly<{ data: ActionCardInput }>) {
     return (
-        <Card withBorder radius="lg">
+        <Card withBorder radius="lg" style={{ height: 260, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <ActionCardHeader title={data.title} total={data.items.length} />
-            <Card.Section px="sm" py="sm">
-                <Stack gap="xs">
-                    {data.items.map((item, i) => (
-                        <ActionCardItem key={i} text={item} />
-                    ))}
-                </Stack>
-            </Card.Section>
+            <ActionCardItems items={data.items} />
             {data.disclaimer && <ActionCardDisclaimer text={data.disclaimer} />}
         </Card>
     );

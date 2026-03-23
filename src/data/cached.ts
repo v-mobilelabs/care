@@ -120,7 +120,7 @@ export async function getCachedAssessments(userId: string) {
   cacheLife("minutes");
 
   const { ListAssessmentsUseCase } = await import("@/data/assessments");
-  return new ListAssessmentsUseCase().execute({ userId });
+  return new ListAssessmentsUseCase().execute({ userId, limit: 20 });
 }
 
 // ── Cached dependents ───────────────────────────────────────────────────────

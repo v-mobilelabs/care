@@ -6,6 +6,8 @@ import type {
   AssessmentRefInput,
   AssessmentDto,
   QaPair,
+  AssessmentActionCard,
+  PaginatedAssessments,
 } from "../models/assessment.model";
 
 function dedupeQa(qa: QaPair[]): QaPair[] {
@@ -25,16 +27,56 @@ function dedupeQa(qa: QaPair[]): QaPair[] {
   return out;
 }
 
+function dedupeGuidelines(guidelines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const guideline of guidelines) {
+    const normalized = guideline.trim();
+    if (normalized.length === 0) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function dedupeActionCards(
+  cards: AssessmentActionCard[],
+): AssessmentActionCard[] {
+  const seen = new Set<string>();
+  const out: AssessmentActionCard[] = [];
+  for (const card of cards) {
+    const key = JSON.stringify({
+      id: card.toolCallId ?? "",
+      title: card.title,
+      items: card.items,
+      disclaimer: card.disclaimer ?? "",
+    });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(card);
+  }
+  return out;
+}
+
 function toTimestamp(iso?: string): Timestamp | undefined {
   if (!iso) return undefined;
   return Timestamp.fromDate(new Date(iso));
 }
 
 function mapAssessmentBase(input: CreateAssessmentInput) {
+  const guidelinesFollowed = dedupeGuidelines([
+    ...(input.guidelinesFollowed ?? []),
+    ...(input.guideline ? [input.guideline] : []),
+  ]);
+
   return {
+    specialtyAgent: input.specialtyAgent,
     title: input.title,
     condition: input.condition,
     guideline: input.guideline,
+    guidelinesFollowed,
     estimatedQuestions: input.estimatedQuestions,
     estimatedMinutes: input.estimatedMinutes,
     status: input.status,
@@ -42,6 +84,7 @@ function mapAssessmentBase(input: CreateAssessmentInput) {
     completedAt: toTimestamp(input.completedAt),
     riskLevel: input.riskLevel,
     summary: input.summary,
+    actionCards: dedupeActionCards(input.actionCards ?? []),
   };
 }
 
@@ -86,11 +129,27 @@ async function updateAssessment(
   input: CreateAssessmentInput,
   dependentId?: string,
 ): Promise<AssessmentDto> {
+  const mergedGuidelines = dedupeGuidelines([
+    ...(existing.guidelinesFollowed ?? []),
+    ...(input.guidelinesFollowed ?? []),
+    ...(existing.guideline ? [existing.guideline] : []),
+    ...(input.guideline ? [input.guideline] : []),
+  ]);
+
+  const mergedActionCards = dedupeActionCards([
+    ...(existing.actionCards ?? []),
+    ...(input.actionCards ?? []),
+  ]);
+
   return assessmentRepository.update(
     input.userId,
     existing.id,
     {
       ...mapAssessmentBase(input),
+      guideline: input.guideline ?? existing.guideline,
+      guidelinesFollowed: mergedGuidelines,
+      specialtyAgent: input.specialtyAgent ?? existing.specialtyAgent,
+      actionCards: mergedActionCards,
       qa: dedupeQa([...(existing.qa ?? []), ...(input.qa ?? [])]),
     },
     dependentId,
@@ -132,8 +191,8 @@ export class AssessmentService {
   async list(
     input: ListAssessmentsInput,
     dependentId?: string,
-  ): Promise<AssessmentDto[]> {
-    return assessmentRepository.list(input.userId, input.limit, dependentId);
+  ): Promise<PaginatedAssessments> {
+    return assessmentRepository.listPaginated(input.userId, input, dependentId);
   }
 
   async delete(input: AssessmentRefInput, dependentId?: string): Promise<void> {

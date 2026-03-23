@@ -306,7 +306,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                                     </Text>
                                     <Stack gap={6}>
                                         {plan.recommended.map((r, i) => (
-                                            // eslint-disable-next-line react/no-array-index-key
+                                             
                                             <Box key={i}>
                                                 <Group gap={6} align="flex-start" wrap="nowrap">
                                                     <IconCheck size={12} color="var(--mantine-color-green-6)" style={{ flexShrink: 0, marginTop: 3 }} />
@@ -327,7 +327,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                                     </Text>
                                     <Stack gap={6}>
                                         {plan.avoid.map((a, i) => (
-                                            // eslint-disable-next-line react/no-array-index-key
+                                             
                                             <Box key={i}>
                                                 <Group gap={6} align="flex-start" wrap="nowrap">
                                                     <IconX size={12} color="var(--mantine-color-red-6)" style={{ flexShrink: 0, marginTop: 3 }} />
@@ -350,7 +350,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                                 </Text>
                                 <List size="sm" spacing={4}>
                                     {plan.tips.map((tip, i) => (
-                                        // eslint-disable-next-line react/no-array-index-key
+                                         
                                         <List.Item key={i}>
                                             <Text size="sm" c="dimmed">{tip}</Text>
                                         </List.Item>
