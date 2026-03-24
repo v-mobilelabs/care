@@ -15,7 +15,7 @@ export const maxDuration = 300; // 5 minutes for AI generation
 export const POST = WithContext(async (ctx) => {
   const body = (await ctx.req.json()) as unknown;
 
-  const useCase = new GenerateProfessionalDietPlanUseCase(ctx.dependentId);
+  const useCase = new GenerateProfessionalDietPlanUseCase();
   const dietPlan = await useCase.execute({
     ...(body as object),
     userId: ctx.user.uid,

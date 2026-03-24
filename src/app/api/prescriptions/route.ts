@@ -8,12 +8,10 @@ import {
 } from "@/data/prescriptions";
 
 // GET /api/prescriptions — list all prescription records for the current user
-export const GET = WithContext(async ({ user, dependentId }) => {
-  const prescriptions = await new ListPrescriptionsUseCase(dependentId).execute(
-    {
-      userId: user.uid,
-    },
-  );
+export const GET = WithContext(async ({ user }) => {
+  const prescriptions = await new ListPrescriptionsUseCase().execute({
+    userId: user.uid,
+  });
   return NextResponse.json(prescriptions);
 });
 

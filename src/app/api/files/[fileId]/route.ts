@@ -6,13 +6,12 @@ import { CacheTags } from "@/data/cached";
 
 // GET /api/files/[fileId] — redirect to a fresh signed download URL
 export const GET = WithContext<{ fileId: string }>(
-  async ({ user, profileId, dependentId }, { fileId }) => {
+  async ({ user, profileId }, { fileId }) => {
     let url: string;
     try {
       url = await new GetFileSignedUrlUseCase().execute({
         userId: user.uid,
         profileId,
-        dependentId,
         fileId,
       });
     } catch (e) {
@@ -34,13 +33,12 @@ export const GET = WithContext<{ fileId: string }>(
 
 // POST /api/files/[fileId] — return the signed URL as JSON
 export const POST = WithContext<{ fileId: string }>(
-  async ({ user, profileId, dependentId }, { fileId }) => {
+  async ({ user, profileId }, { fileId }) => {
     let url: string;
     try {
       url = await new GetFileSignedUrlUseCase().execute({
         userId: user.uid,
         profileId,
-        dependentId,
         fileId,
       });
     } catch (e) {

@@ -1,4 +1,4 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@/data/shared/service/vertex-provider";
 import { generateText, type SpeechModel } from "ai";
 
 const MODEL_ID = "gemini-2.5-flash-preview-tts";

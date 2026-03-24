@@ -74,12 +74,43 @@ function extractTextFromParts(
   return null;
 }
 
+function decodeURIComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function decodeUntilStable(value: string, maxIterations = 3): string {
+  let current = value;
+  for (let i = 0; i < maxIterations; i++) {
+    const decoded = decodeURIComponentSafe(current);
+    if (decoded === current) return current;
+    current = decoded;
+  }
+  return current;
+}
+
+function normalizeGsUrl(url: string): string {
+  if (!url.startsWith("gs://")) return url;
+  const withoutScheme = url.slice("gs://".length);
+  const slashIdx = withoutScheme.indexOf("/");
+  if (slashIdx < 0) return url;
+
+  const bucket = withoutScheme.slice(0, slashIdx);
+  const objectPath = withoutScheme.slice(slashIdx + 1);
+  const normalizedPath = decodeUntilStable(objectPath);
+  return `gs://${bucket}/${normalizedPath}`;
+}
+
 /**
  * Replaces file/image parts with storable URL references from attachmentUrls.
  * Non-file parts are passed through unchanged.
  *
- * File parts that already carry an HTTP(S) URL (uploaded by the client before
- * sending) are preserved directly — no attachmentUrls lookup needed.
+ * File parts that already carry an HTTP(S) URL or GCS URI (uploaded by the
+ * client before sending) are preserved directly — no attachmentUrls lookup
+ * needed.
  * Legacy flow: base64/blob file parts are matched to `attachmentUrls` by order.
  */
 function buildStorableParts(
@@ -91,10 +122,18 @@ function buildStorableParts(
     const t = p.type as string;
     if (t !== "file" && t !== "image") return p;
 
-    // File part already has an HTTP URL (uploaded before sendMessage) — keep it.
+    // File part already has an HTTP URL or GCS URI (uploaded before
+    // sendMessage) — keep it.
     const existingUrl = p.url as string | undefined;
-    if (existingUrl && existingUrl.startsWith("http")) {
-      return { type: "file", url: existingUrl, mediaType: (p.mediaType as string) || "application/octet-stream" };
+    if (
+      existingUrl &&
+      (existingUrl.startsWith("http") || existingUrl.startsWith("gs://"))
+    ) {
+      return {
+        type: "file",
+        url: normalizeGsUrl(existingUrl),
+        mediaType: (p.mediaType as string) || "application/octet-stream",
+      };
     }
 
     const attach = attachmentUrls?.[attachIdx++];

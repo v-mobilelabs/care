@@ -10,7 +10,7 @@
  * ```ts
  * const context = await ragContextBuilder.buildContext({
  *   userId: user.uid,
- *   dependentId,
+ *   profileId,
  *   query: latestUserMessage,
  * });
  * // Inject `context` into system prompt instead of full userSnapshot
@@ -23,7 +23,6 @@ import type { SearchResult } from "./rag.types";
 export interface BuildContextParams {
   userId: string;
   profileId: string;
-  dependentId?: string;
   /** User's latest message (for semantic search) */
   query: string;
   /** Max candidates for initial KNN search (default: 30 with reranking, 10 without) */
@@ -75,7 +74,6 @@ export class RAGContextBuilderService {
 
     const {
       userId,
-      dependentId,
       query,
       rerank = true,
       rerankTopK = 10,
@@ -92,7 +90,6 @@ export class RAGContextBuilderService {
     const searchStart = performance.now();
     const results = await ragService.search(query, {
       userId,
-      dependentId,
       limit,
       minScore,
       rerank,
@@ -152,18 +149,10 @@ export class RAGContextBuilderService {
       >;
     },
   ): Promise<RAGContextResult> {
-    const {
-      userId,
-      dependentId,
-      query,
-      limit = 10,
-      minScore = 0.5,
-      types,
-    } = params;
+    const { userId, query, limit = 10, minScore = 0.5, types } = params;
 
     const results = await ragService.search(query, {
       userId,
-      dependentId,
       limit,
       minScore,
       types,

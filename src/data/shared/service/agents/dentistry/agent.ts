@@ -3,6 +3,7 @@ import { createAgent } from "../base/agent";
 import { buildDentistryPrompt } from "./prompt";
 import { buildAttachmentContext } from "../clinical/prompt";
 import { askQuestionTool } from "../global-tools/ask-question.tool";
+import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 
 export const dentistryAgent = createAgent({
   id: "dentistry",
@@ -10,6 +11,7 @@ export const dentistryAgent = createAgent({
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
   buildTools: () => ({
+    startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,
   }),
 });

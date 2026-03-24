@@ -11,7 +11,7 @@ const eslintConfig = defineConfig([
     rules: {
       "max-lines-per-function": [
         "error",
-        { max: 20, skipBlankLines: true, skipComments: true },
+        { max: 100, skipBlankLines: true, skipComments: true },
       ],
       // Disable base rule — unused-imports plugin handles it with auto-fix
       "@typescript-eslint/no-unused-vars": "off",

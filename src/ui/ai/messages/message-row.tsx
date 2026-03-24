@@ -29,6 +29,8 @@ export interface MessageRowProps {
     onEditCancel: () => void;
     onEditSubmit: (msgId: string) => void;
     onLearnMore?: (text: string) => void;
+    sessionId?: string;
+    onSendReferralMessage?: (text: string) => Promise<void>;
 }
 
 export function MessageRow({
@@ -53,6 +55,8 @@ export function MessageRow({
     onEditCancel,
     onEditSubmit,
     onLearnMore,
+    sessionId,
+    onSendReferralMessage,
 }: Readonly<MessageRowProps>) {
     const isUser = msg.role === "user";
     const showDate = timestamp != null && (prevTimestamp == null || new Date(timestamp).toDateString() !== new Date(prevTimestamp).toDateString());
@@ -115,6 +119,8 @@ export function MessageRow({
                                 answeredIds={answeredIds}
                                 isLoading={isLoading}
                                 onLearnMore={onLearnMore}
+                                sessionId={sessionId}
+                                onSendReferralMessage={onSendReferralMessage}
                             />
                         </Box>
                     );

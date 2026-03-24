@@ -181,7 +181,6 @@ export class RAGIndexerService {
     userId: string,
     profileId: string,
     med: MedicationDto,
-    dependentId?: string,
   ): Promise<void> {
     const content = [
       `Medication: ${med.name}`,
@@ -200,7 +199,6 @@ export class RAGIndexerService {
     await ragService.indexDocument({
       userId,
       profileId,
-      dependentId,
       type: "medication",
       sourceId: med.id,
       content,
@@ -219,7 +217,6 @@ export class RAGIndexerService {
     userId: string,
     profileId: string,
     test: LabReportDto,
-    dependentId?: string,
   ): Promise<void> {
     const biomarkerLines = test.biomarkers
       .map(
@@ -244,7 +241,6 @@ export class RAGIndexerService {
     await ragService.indexDocument({
       userId,
       profileId,
-      dependentId,
       type: "bloodtest",
       sourceId: test.id,
       content,
@@ -275,7 +271,6 @@ export class RAGIndexerService {
     userId: string,
     profileId: string,
     prescription: PrescriptionDto,
-    dependentId?: string,
   ): Promise<void> {
     const medLines = prescription.medications
       .map((m) => {
@@ -309,7 +304,6 @@ export class RAGIndexerService {
     await ragService.indexDocument({
       userId,
       profileId,
-      dependentId,
       type: "prescription",
       sourceId: prescription.id,
       content,

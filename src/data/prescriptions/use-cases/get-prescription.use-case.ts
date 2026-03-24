@@ -14,7 +14,6 @@ export class GetPrescriptionUseCase extends UseCase<
   PrescriptionDto | null
 > {
   constructor(
-    private readonly dependentId?: string,
     private readonly service: PrescriptionService = prescriptionService,
   ) {
     super();
@@ -27,6 +26,6 @@ export class GetPrescriptionUseCase extends UseCase<
   protected async run(
     input: PrescriptionRefInput,
   ): Promise<PrescriptionDto | null> {
-    return this.service.getById(input, this.dependentId);
+    return this.service.getById(input);
   }
 }

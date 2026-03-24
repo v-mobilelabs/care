@@ -6,30 +6,16 @@ import type {
 } from "../models/blood-test.model";
 
 export class BloodTestService {
-  async list(
-    input: ListBloodTestsInput,
-    dependentId?: string,
-  ): Promise<BloodTestDto[]> {
-    return bloodTestRepository.list(input.userId, input.limit, dependentId);
+  async list(input: ListBloodTestsInput): Promise<BloodTestDto[]> {
+    return bloodTestRepository.list(input.userId, input.limit);
   }
 
-  async getById(
-    input: BloodTestRefInput,
-    dependentId?: string,
-  ): Promise<BloodTestDto | null> {
-    return bloodTestRepository.findById(
-      input.userId,
-      input.bloodTestId,
-      dependentId,
-    );
+  async getById(input: BloodTestRefInput): Promise<BloodTestDto | null> {
+    return bloodTestRepository.findById(input.userId, input.bloodTestId);
   }
 
-  async delete(input: BloodTestRefInput, dependentId?: string): Promise<void> {
-    await bloodTestRepository.delete(
-      input.userId,
-      input.bloodTestId,
-      dependentId,
-    );
+  async delete(input: BloodTestRefInput): Promise<void> {
+    await bloodTestRepository.delete(input.userId, input.bloodTestId);
   }
 }
 

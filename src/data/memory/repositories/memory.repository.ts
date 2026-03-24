@@ -5,8 +5,12 @@ import {
 } from "firebase-admin/firestore";
 import { scopedCol } from "@/data/shared/repositories/scoped-col";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
-import type { MemoryDocument, MemoryCategory } from "../models/memory.model";
-import { toMemoryDto, type MemoryDto } from "../models/memory.model";
+import {
+  toMemoryDto,
+  type MemoryDto,
+  type MemoryDocument,
+  type MemoryCategory,
+} from "../models/memory.model";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -59,12 +63,42 @@ export const memoryRepository = {
   ): Promise<MemoryDto[]> {
     let query = memoriesCol(profileId).orderBy("createdAt", "desc");
     if (category) {
-      query = query.where("category", "==", category) as typeof query;
+      query = query.where("category", "==", category);
     }
     const snap = await query.limit(limit).get();
     return snap.docs.map((d: QueryDocumentSnapshot) =>
       toMemoryDto(d.id, d.data() as MemoryDocument),
     );
+  },
+
+  async listAll(profileId: string): Promise<MemoryDto[]> {
+    const snap = await memoriesCol(profileId)
+      .orderBy("createdAt", "desc")
+      .limit(MAX_MEMORIES_PER_PROFILE)
+      .get();
+    return snap.docs.map((d: QueryDocumentSnapshot) =>
+      toMemoryDto(d.id, d.data() as MemoryDocument),
+    );
+  },
+
+  async listAllByCategory(
+    profileId: string,
+    category: MemoryCategory,
+  ): Promise<MemoryDto[]> {
+    const snap = await memoriesCol(profileId)
+      .where("category", "==", category)
+      .limit(MAX_MEMORIES_PER_PROFILE)
+      .get();
+    return snap.docs.map((d: QueryDocumentSnapshot) =>
+      toMemoryDto(d.id, d.data() as MemoryDocument),
+    );
+  },
+
+  async count(profileId: string, category?: MemoryCategory): Promise<number> {
+    const col = memoriesCol(profileId);
+    const query = category ? col.where("category", "==", category) : col;
+    const countSnap = await query.count().get();
+    return countSnap.data().count;
   },
 
   /** Touch `lastAccessedAt` on recalled memories so eviction can use recency. */
@@ -82,6 +116,19 @@ export const memoryRepository = {
 
   async delete(profileId: string, memoryId: string): Promise<void> {
     await memoryDoc(profileId, memoryId).delete();
+  },
+
+  async deleteMany(
+    profileId: string,
+    memoryIds: readonly string[],
+  ): Promise<void> {
+    if (memoryIds.length === 0) return;
+    const col = memoriesCol(profileId);
+    const batch = col.firestore.batch();
+    for (const id of memoryIds) {
+      batch.delete(col.doc(id));
+    }
+    await batch.commit();
   },
 
   async deleteAll(profileId: string): Promise<void> {

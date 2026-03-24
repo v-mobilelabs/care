@@ -6,8 +6,8 @@ import { CacheTags } from "@/data/cached";
 
 // DELETE /api/patient-summary/:summaryId
 export const DELETE = WithContext<{ summaryId: string }>(
-  async ({ user, dependentId }, { summaryId }) => {
-    await new DeletePatientSummaryUseCase(dependentId).execute({
+  async ({ user }, { summaryId }) => {
+    await new DeletePatientSummaryUseCase().execute({
       userId: user.uid,
       summaryId,
     });

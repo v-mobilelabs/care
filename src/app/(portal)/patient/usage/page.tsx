@@ -3,7 +3,7 @@ import { getServerUser } from "@/lib/api/server-prefetch";
 import { getQueryClient } from "@/lib/query/client";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "@/app/(portal)/patient/_keys";
-import { getCachedUsage, getCachedDependents } from "@/data/cached";
+import { getCachedUsage } from "@/data/cached";
 import { UsageContent } from "./_content";
 import UsageLoading from "./loading";
 
@@ -25,10 +25,6 @@ async function UsageData({ userId }: Readonly<{ userId: string }>) {
                 const { GetStorageMetricsUseCase } = await import("@/data/files");
                 return new GetStorageMetricsUseCase().execute({ userId });
             },
-        }),
-        queryClient.prefetchQuery({
-            queryKey: chatKeys.dependents(),
-            queryFn: () => getCachedDependents(userId),
         }),
         queryClient.prefetchQuery({
             queryKey: chatKeys.callMetrics(),

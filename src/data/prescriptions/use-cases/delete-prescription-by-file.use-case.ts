@@ -20,7 +20,6 @@ export class DeletePrescriptionByFileUseCase extends UseCase<
   void
 > {
   constructor(
-    private readonly dependentId?: string,
     private readonly service: PrescriptionService = prescriptionService,
   ) {
     super();
@@ -35,7 +34,6 @@ export class DeletePrescriptionByFileUseCase extends UseCase<
       input.userId,
       input.profileId,
       input.fileId,
-      this.dependentId,
     );
   }
 }

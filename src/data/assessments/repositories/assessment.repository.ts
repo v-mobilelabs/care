@@ -15,14 +15,10 @@ import {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
-const assessmentsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "assessments");
+const assessmentsCol = (userId: string) => scopedCol(userId, "assessments");
 
-const assessmentDoc = (
-  userId: string,
-  assessmentId: string,
-  dependentId?: string,
-) => assessmentsCol(userId, dependentId).doc(assessmentId);
+const assessmentDoc = (userId: string, assessmentId: string) =>
+  assessmentsCol(userId).doc(assessmentId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -30,11 +26,10 @@ export const assessmentRepository = {
   async create(
     userId: string,
     data: Omit<AssessmentDocument, "userId" | "createdAt">,
-    dependentId?: string,
   ): Promise<AssessmentDto> {
     const now = Timestamp.now();
     const doc: AssessmentDocument = { userId, ...data, createdAt: now };
-    const ref = assessmentsCol(userId, dependentId).doc();
+    const ref = assessmentsCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toAssessmentDto(ref.id, doc);
   },
@@ -42,9 +37,8 @@ export const assessmentRepository = {
   async findBySession(
     userId: string,
     sessionId: string,
-    dependentId?: string,
   ): Promise<AssessmentDto | null> {
-    const snap = await assessmentsCol(userId, dependentId)
+    const snap = await assessmentsCol(userId)
       .where("sessionId", "==", sessionId)
       .limit(1)
       .get();
@@ -57,9 +51,8 @@ export const assessmentRepository = {
     userId: string,
     sessionId: string,
     runId: string,
-    dependentId?: string,
   ): Promise<AssessmentDto | null> {
-    const snap = await assessmentsCol(userId, dependentId)
+    const snap = await assessmentsCol(userId)
       .where("sessionId", "==", sessionId)
       .where("runId", "==", runId)
       .limit(1)
@@ -72,11 +65,10 @@ export const assessmentRepository = {
   async findLatestBySession(
     userId: string,
     sessionId: string,
-    dependentId?: string,
   ): Promise<AssessmentDto | null> {
     // Avoid requiring a composite index for where(sessionId)+orderBy(createdAt)
     // by reading a small bounded set and sorting in memory.
-    const snap = await assessmentsCol(userId, dependentId)
+    const snap = await assessmentsCol(userId)
       .where("sessionId", "==", sessionId)
       .limit(20)
       .get();
@@ -99,10 +91,9 @@ export const assessmentRepository = {
         "userId" | "sessionId" | "createdAt" | "updatedAt"
       >
     >,
-    dependentId?: string,
   ): Promise<AssessmentDto> {
     const now = Timestamp.now();
-    const ref = assessmentDoc(userId, assessmentId, dependentId);
+    const ref = assessmentDoc(userId, assessmentId);
     await ref.update(stripUndefined({ ...data, updatedAt: now }));
     const snap = await ref.get();
     return toAssessmentDto(snap.id, snap.data() as AssessmentDocument);
@@ -111,9 +102,8 @@ export const assessmentRepository = {
   async findById(
     userId: string,
     assessmentId: string,
-    dependentId?: string,
   ): Promise<AssessmentDto | null> {
-    const snap = await assessmentDoc(userId, assessmentId, dependentId).get();
+    const snap = await assessmentDoc(userId, assessmentId).get();
     if (!snap.exists) return null;
     return toAssessmentDto(snap.id, snap.data() as AssessmentDocument);
   },
@@ -121,12 +111,8 @@ export const assessmentRepository = {
   async listPaginated(
     userId: string,
     opts: ListAssessmentsInput,
-    dependentId?: string,
   ): Promise<PaginatedAssessments> {
-    let query: Query = assessmentsCol(userId, dependentId).orderBy(
-      "createdAt",
-      "desc",
-    );
+    let query: Query = assessmentsCol(userId).orderBy("createdAt", "desc");
 
     if (opts.cursor) {
       query = query.startAfter(Timestamp.fromDate(new Date(opts.cursor)));
@@ -178,7 +164,7 @@ export const assessmentRepository = {
     let totalCount: number | undefined;
     if (!opts.cursor) {
       if (hasClientFilters) {
-        const allSnap = await assessmentsCol(userId, dependentId).get();
+        const allSnap = await assessmentsCol(userId).get();
         const all = allSnap.docs.map((d: QueryDocumentSnapshot) =>
           toAssessmentDto(d.id, d.data() as AssessmentDocument),
         );
@@ -205,9 +191,7 @@ export const assessmentRepository = {
           return matchesStatus && matchesRisk && matchesAgent && matchesQuery;
         }).length;
       } else {
-        const countSnap = await assessmentsCol(userId, dependentId)
-          .count()
-          .get();
+        const countSnap = await assessmentsCol(userId).count().get();
         totalCount = countSnap.data().count;
       }
     }
@@ -219,11 +203,7 @@ export const assessmentRepository = {
     };
   },
 
-  async delete(
-    userId: string,
-    assessmentId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await assessmentDoc(userId, assessmentId, dependentId).delete();
+  async delete(userId: string, assessmentId: string): Promise<void> {
+    await assessmentDoc(userId, assessmentId).delete();
   },
 };

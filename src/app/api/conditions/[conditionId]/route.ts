@@ -6,8 +6,8 @@ import { CacheTags } from "@/data/cached";
 
 // DELETE /api/conditions/[conditionId]
 export const DELETE = WithContext<{ conditionId: string }>(
-  async ({ user, dependentId }, { conditionId }) => {
-    await new DeleteConditionUseCase(dependentId).execute({
+  async ({ user }, { conditionId }) => {
+    await new DeleteConditionUseCase().execute({
       userId: user.uid,
       conditionId,
     });

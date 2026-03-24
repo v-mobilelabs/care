@@ -20,11 +20,11 @@ export const CacheTags = {
   patient: (userId: string) => `patient:${userId}`,
   medications: (userId: string) => `medications:${userId}`,
   assessments: (userId: string) => `assessments:${userId}`,
-  dependents: (userId: string) => `dependents:${userId}`,
   sessions: (userId: string) => `sessions:${userId}`,
   vitals: (userId: string) => `vitals:${userId}`,
   patientSummaries: (userId: string) => `patient-summaries:${userId}`,
   conditions: (userId: string) => `conditions:${userId}`,
+  referrals: (userId: string) => `referrals:${userId}`,
 } as const;
 
 // ── Cached usage (credits / minutes / storage) ──────────────────────────────
@@ -64,7 +64,11 @@ export async function getCachedFiles(userId: string) {
   cacheLife("minutes"); // stale 5min, revalidate 1min, expire 1hr
 
   const { ListAllFilesUseCase } = await import("@/data/files");
-  return new ListAllFilesUseCase().execute({ userId, limit: 20 });
+  return new ListAllFilesUseCase().execute({
+    userId,
+    profileId: userId,
+    limit: 20,
+  });
 }
 
 // ── Cached memories (formatted for prompt injection) ────────────────────────
@@ -123,17 +127,6 @@ export async function getCachedAssessments(userId: string) {
   return new ListAssessmentsUseCase().execute({ userId, limit: 20 });
 }
 
-// ── Cached dependents ───────────────────────────────────────────────────────
-
-export async function getCachedDependents(userId: string) {
-  "use cache";
-  cacheTag(CacheTags.dependents(userId));
-  cacheLife("minutes");
-
-  const { ListDependentsUseCase } = await import("@/data/dependents");
-  return new ListDependentsUseCase().execute({ ownerId: userId });
-}
-
 // ── Cached sessions ─────────────────────────────────────────────────────────
 
 export async function getCachedSessions(userId: string) {
@@ -155,4 +148,15 @@ export async function getCachedPatientSummaries(userId: string) {
   const { ListPatientSummariesUseCase } =
     await import("@/data/patient-summary");
   return new ListPatientSummariesUseCase().execute({ userId });
+}
+
+// ── Cached referrals ─────────────────────────────────────────────────────────
+
+export async function getCachedReferrals(userId: string) {
+  "use cache";
+  cacheTag(CacheTags.referrals(userId));
+  cacheLife("minutes");
+
+  const { ListReferralsUseCase } = await import("@/data/referrals");
+  return new ListReferralsUseCase().execute({ userId, limit: 20 });
 }

@@ -7,33 +7,16 @@ import type {
 } from "../models/prescription.model";
 
 export class PrescriptionService {
-  async list(
-    input: ListPrescriptionsInput,
-    dependentId?: string,
-  ): Promise<PrescriptionDto[]> {
-    return prescriptionRepository.list(input.userId, input.limit, dependentId);
+  async list(input: ListPrescriptionsInput): Promise<PrescriptionDto[]> {
+    return prescriptionRepository.list(input.userId, input.limit);
   }
 
-  async getById(
-    input: PrescriptionRefInput,
-    dependentId?: string,
-  ): Promise<PrescriptionDto | null> {
-    return prescriptionRepository.findById(
-      input.userId,
-      input.prescriptionId,
-      dependentId,
-    );
+  async getById(input: PrescriptionRefInput): Promise<PrescriptionDto | null> {
+    return prescriptionRepository.findById(input.userId, input.prescriptionId);
   }
 
-  async delete(
-    input: PrescriptionRefInput,
-    dependentId?: string,
-  ): Promise<void> {
-    await prescriptionRepository.delete(
-      input.userId,
-      input.prescriptionId,
-      dependentId,
-    );
+  async delete(input: PrescriptionRefInput): Promise<void> {
+    await prescriptionRepository.delete(input.userId, input.prescriptionId);
   }
 
   /** Find by source file ID, then delete the prescription + remove from RAG index. */
@@ -41,17 +24,15 @@ export class PrescriptionService {
     userId: string,
     profileId: string,
     fileId: string,
-    dependentId?: string,
   ): Promise<void> {
     const prescription = await prescriptionRepository.findByFileId(
       userId,
       fileId,
-      dependentId,
     );
     if (!prescription) return;
 
     await Promise.all([
-      prescriptionRepository.delete(userId, prescription.id, dependentId),
+      prescriptionRepository.delete(userId, prescription.id),
       ragService.removeDocument({
         userId,
         profileId,

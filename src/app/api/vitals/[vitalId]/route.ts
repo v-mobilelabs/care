@@ -4,8 +4,8 @@ import { GetVitalUseCase, DeleteVitalUseCase } from "@/data/vitals";
 
 // GET /api/vitals/[vitalId] — get a single vital reading
 export const GET = WithContext<{ vitalId: string }>(
-  async ({ user, dependentId }, { vitalId }) => {
-    const vital = await new GetVitalUseCase(dependentId).execute({
+  async ({ user }, { vitalId }) => {
+    const vital = await new GetVitalUseCase().execute({
       userId: user.uid,
       vitalId,
     });
@@ -16,8 +16,8 @@ export const GET = WithContext<{ vitalId: string }>(
 
 // DELETE /api/vitals/[vitalId] — delete a vital reading
 export const DELETE = WithContext<{ vitalId: string }>(
-  async ({ user, dependentId }, { vitalId }) => {
-    await new DeleteVitalUseCase(dependentId).execute({
+  async ({ user }, { vitalId }) => {
+    await new DeleteVitalUseCase().execute({
       userId: user.uid,
       vitalId,
     });

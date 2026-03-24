@@ -3,14 +3,12 @@ import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { promptService } from "../service/prompt.service";
 import { profileRepository } from "@/data/profile/repositories/profile.repository";
 import { patientRepository } from "@/data/patients/repositories/patient.repository";
-import { dependentRepository } from "@/data/dependents/repositories/dependent.repository";
 
 // ── Input Schema ──────────────────────────────────────────────────────────────
 
 export const BuildChatPromptSchema = z.object({
   userId: z.string().min(1),
   profileId: z.string().min(1),
-  dependentId: z.string().min(1).optional(),
   userQuery: z.string().min(1),
   hasAttachment: z.boolean(),
 });
@@ -143,36 +141,23 @@ export class BuildChatPromptUseCase extends UseCase<
     // ── 3. Fetch profile + patient data for onboarding check ───────────────
     const profileStart = performance.now();
 
-    // For dependents: DependentDto already includes all health fields.
-    // For the user: ProfileDto is base identity only; health fields live in
+    // ProfileDto is base identity only; health fields live in
     // patients/{userId}. Fetch both in parallel.
     let profileData: Record<string, unknown> | null = null;
     let patientData: Record<string, unknown> | null = null;
 
-    if (input.dependentId) {
-      // Dependents store all fields (base + health) in a single document
-      const dep = await dependentRepository
-        .findById(input.userId, input.dependentId)
-        .catch((err) => {
-          console.error("[BuildChatPrompt] Dependent fetch failed:", err);
-          return null;
-        });
-      profileData = dep as Record<string, unknown> | null;
-      patientData = dep as Record<string, unknown> | null;
-    } else {
-      const [profile, patient] = await Promise.all([
-        profileRepository.get(input.userId).catch((err) => {
-          console.error("[BuildChatPrompt] Profile fetch failed:", err);
-          return null;
-        }),
-        patientRepository.get(input.userId).catch((err) => {
-          console.error("[BuildChatPrompt] Patient fetch failed:", err);
-          return null;
-        }),
-      ]);
-      profileData = profile as Record<string, unknown> | null;
-      patientData = patient as Record<string, unknown> | null;
-    }
+    const [profile, patient] = await Promise.all([
+      profileRepository.get(input.userId).catch((err) => {
+        console.error("[BuildChatPrompt] Profile fetch failed:", err);
+        return null;
+      }),
+      patientRepository.get(input.userId).catch((err) => {
+        console.error("[BuildChatPrompt] Patient fetch failed:", err);
+        return null;
+      }),
+    ]);
+    profileData = profile as Record<string, unknown> | null;
+    patientData = patient as Record<string, unknown> | null;
 
     console.log(
       `[BuildChatPrompt] Profile fetch: ${(performance.now() - profileStart).toFixed(0)}ms`,

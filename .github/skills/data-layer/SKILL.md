@@ -16,6 +16,17 @@ description: "**DATA LAYER SKILL** — Firestore data access patterns: Model, Re
 7. **RAG indexing is automatic** — use the `@Indexable` decorator on create/delete use cases. Never call `ragService` manually from use cases.
 8. **Zod validates at the boundary** — the UseCase base class auto-validates via `static validate()`. Don't validate again in services or repositories.
 
+### SSR List/Discovery Standard (Required)
+
+For all list/discovery experiences (tables, feeds, libraries, history pages):
+
+1. **SSR-first data contract** — implement list APIs for server rendering/hydration first, then client enhancement.
+2. **Server-side query features** — pagination, filters, sorting, and search must execute in the repository/API layer (not client-only filtering of large lists).
+3. **Cursor pagination by default** — use timestamp/document cursors for scalable pagination.
+4. **Accurate counts with Firestore aggregation** — any displayed counts (total, filtered total, status counts) must come from Firestore `count()` (or equivalent aggregate), not `items.length` from loaded pages.
+5. **Cache every SSR-read path** — use `"use cache"` + `cacheTag()` + `cacheLife()` for list/detail reads where correctness allows caching; invalidate via `updateTag()`/`revalidateTag()` after writes.
+6. **Indexes are part of the feature** — if a new/changed filter/sort/search query requires an index, update `firestore.indexes.json` in the same change.
+
 ---
 
 ## Architecture Overview
@@ -839,6 +850,13 @@ Use in a list component:
 - For **reverse chronological** (newest first), the cursor points to the oldest item on the page
 - For **reverse display** (oldest first, like chat messages), reverse after fetching: `page.reverse()`
 
+### Required count behavior (when UI shows counts)
+
+- `totalCount` and any filter-specific counts must come from Firestore aggregation queries.
+- Prefer returning counts from the list API response on first page SSR payload.
+- For filtered views, count must apply the same repository filters as the list query.
+- Never derive canonical counts from client-loaded page size.
+
 ---
 
 ## 8. Search
@@ -900,11 +918,17 @@ async findByFileId(userId: string, fileId: string): Promise<AllergyDto | null> {
 - Case-sensitive unless you store + query on a `nameLower` field
 - Complex text search requires an external service (Algolia, Typesense)
 
+### Search contract for SSR pages
+
+- Accept search input via query params in API routes (e.g., `q`).
+- Execute search matching server-side in repository queries whenever possible.
+- If Firestore cannot support a search mode directly, keep server-returned set bounded and document fallback behavior.
+
 ---
 
 ## 9. Sort
 
-Sorting is **fixed in repositories** — not exposed as an API parameter.
+Sorting should be implemented in repositories and can be exposed through validated API params when the UI supports user-selectable sort.
 
 ### Default Convention
 
@@ -956,6 +980,10 @@ async list(userId: string, limit: number, sortBy: string, sortDir: string) {
   return col.orderBy(sortBy, sortDir).limit(limit).get();
 }
 ```
+
+### Sort + filter parity rule
+
+If the UI exposes sort/filter choices, the API and repository must support the same choices server-side so SSR and client hydration produce identical results.
 
 ---
 
@@ -1017,6 +1045,12 @@ export default async function Layout({ children }) {
 await revalidateAllergies(); // Bust server cache
 queryClient.invalidateQueries({ queryKey: ["allergies"] }); // Bust client cache
 ```
+
+### Cache rule for list pages
+
+- For page-level SSR list data, cache by user/profile and filter envelope via tags.
+- Prefer cache profiles such as `"seconds"` or `"minutes"` for interactive healthcare views unless domain requires stronger freshness.
+- Always pair cache adoption with explicit invalidation paths in server actions/API mutations.
 
 ---
 
@@ -1120,6 +1154,8 @@ Add a composite index whenever a **repository query** uses:
 | Vector KNN query with pre-filters                                                    | **Yes** — include vector config               |
 
 **Rule of thumb**: if a repository method combines fields in a query, add the index. If you get a **gRPC code 9** error at runtime ("The query requires an index"), the missing index must be added here.
+
+**Additional rule**: if you move filtering/sorting/search from client-side to server-side for SSR correctness, add/update all required indexes in the same PR/change.
 
 ### Index Entry Format
 
@@ -1326,6 +1362,8 @@ If the domain supports status filtering:
   ]
 }
 ```
+
+If the domain supports user-selectable sorting and optional specialist/type filters, add corresponding composite indexes for each supported `where + orderBy` shape (for example: `status + createdAt`, `specialist + createdAt`, and `status + specialist + createdAt`).
 
 If the domain uses RAG embeddings:
 

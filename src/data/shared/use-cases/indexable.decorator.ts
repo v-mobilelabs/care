@@ -15,9 +15,8 @@
  *   → calls ragService.removeDocument() using input[sourceIdField]
  *
  * Context is derived automatically:
- *   userId      = input.userId
- *   profileId   = this.dependentId ?? input.profileId ?? input.userId
- *   dependentId = this.dependentId (from use case constructor)
+ *   userId    = input.userId
+ *   profileId = input.profileId ?? input.userId
  */
 import "reflect-metadata";
 import type { DocumentChunk } from "@/data/shared/service/rag/rag.types";

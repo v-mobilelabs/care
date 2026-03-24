@@ -83,11 +83,24 @@ export class ContextCacheService {
     systemPrompt: string,
     toolDeclarations?: GoogleToolDeclaration[],
   ): Promise<string | null> {
+    // Vertex provider currently does not use the AI Studio cachedContents API.
+    // If Vertex env is configured, skip explicit cache creation and rely on
+    // provider/native caching behavior.
+    const usingVertex =
+      !!process.env.GOOGLE_VERTEX_PROJECT ||
+      !!process.env.GOOGLE_VERTEX_LOCATION ||
+      !!process.env.GOOGLE_VERTEX_API_KEY;
+    if (usingVertex) return null;
+
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) return null;
 
     const toolsKey = toolDeclarations?.length
-      ? JSON.stringify(toolDeclarations.map((t) => t.name).sort())
+      ? JSON.stringify(
+          toolDeclarations
+            .map((t) => t.name)
+            .sort((a, b) => a.localeCompare(b)),
+        )
       : "";
     const contentHash = fnv1aHash(systemPrompt + modelId + toolsKey);
     const existing = this.entries.get(agentId);

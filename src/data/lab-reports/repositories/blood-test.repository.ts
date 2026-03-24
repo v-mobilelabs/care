@@ -12,14 +12,10 @@ import {
 
 // ── Collection helpers ────────────────────────────────────────────────────────
 
-const bloodTestsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "blood-tests");
+const bloodTestsCol = (userId: string) => scopedCol(userId, "blood-tests");
 
-const bloodTestDoc = (
-  userId: string,
-  bloodTestId: string,
-  dependentId?: string,
-) => bloodTestsCol(userId, dependentId).doc(bloodTestId);
+const bloodTestDoc = (userId: string, bloodTestId: string) =>
+  bloodTestsCol(userId).doc(bloodTestId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -27,11 +23,10 @@ export const bloodTestRepository = {
   async create(
     userId: string,
     data: Omit<BloodTestDocument, "userId" | "createdAt">,
-    dependentId?: string,
   ): Promise<BloodTestDto> {
     const now = Timestamp.now();
     const doc: BloodTestDocument = { userId, ...data, createdAt: now };
-    const ref = bloodTestsCol(userId, dependentId).doc();
+    const ref = bloodTestsCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toBloodTestDto(ref.id, doc);
   },
@@ -39,9 +34,8 @@ export const bloodTestRepository = {
   async findByFileId(
     userId: string,
     fileId: string,
-    dependentId?: string,
   ): Promise<BloodTestDto | null> {
-    const snap = await bloodTestsCol(userId, dependentId)
+    const snap = await bloodTestsCol(userId)
       .where("fileId", "==", fileId)
       .limit(1)
       .get();
@@ -54,10 +48,9 @@ export const bloodTestRepository = {
     userId: string,
     bloodTestId: string,
     data: Omit<BloodTestDocument, "userId" | "fileId" | "createdAt">,
-    dependentId?: string,
   ): Promise<BloodTestDto> {
     const now = Timestamp.now();
-    const ref = bloodTestDoc(userId, bloodTestId, dependentId);
+    const ref = bloodTestDoc(userId, bloodTestId);
     await ref.update({ ...data, updatedAt: now });
     const snap = await ref.get();
     return toBloodTestDto(snap.id, snap.data() as BloodTestDocument);
@@ -66,19 +59,14 @@ export const bloodTestRepository = {
   async findById(
     userId: string,
     bloodTestId: string,
-    dependentId?: string,
   ): Promise<BloodTestDto | null> {
-    const snap = await bloodTestDoc(userId, bloodTestId, dependentId).get();
+    const snap = await bloodTestDoc(userId, bloodTestId).get();
     if (!snap.exists) return null;
     return toBloodTestDto(snap.id, snap.data() as BloodTestDocument);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<BloodTestDto[]> {
-    const snap = await bloodTestsCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<BloodTestDto[]> {
+    const snap = await bloodTestsCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -87,11 +75,7 @@ export const bloodTestRepository = {
     );
   },
 
-  async delete(
-    userId: string,
-    bloodTestId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await bloodTestDoc(userId, bloodTestId, dependentId).delete();
+  async delete(userId: string, bloodTestId: string): Promise<void> {
+    await bloodTestDoc(userId, bloodTestId).delete();
   },
 };

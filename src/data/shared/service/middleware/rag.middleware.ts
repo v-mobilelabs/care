@@ -23,7 +23,6 @@ export interface RagMiddlewareOptions {
   agentId: string;
   userId: string;
   profileId: string;
-  dependentId?: string;
   userQuery: string;
   needsRag: boolean;
   /** Pre-computed query embedding — avoids duplicate embed call. */
@@ -83,7 +82,6 @@ export function ragMiddleware(
               ragContextBuilder.buildContext({
                 userId: opts.userId,
                 profileId: opts.profileId,
-                dependentId: opts.dependentId,
                 query: opts.userQuery,
                 queryEmbedding,
                 rerank: true,

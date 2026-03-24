@@ -9,10 +9,7 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class DeleteBloodTestUseCase extends UseCase<BloodTestRefInput, void> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: BloodTestService = bloodTestService,
-  ) {
+  constructor(private readonly service: BloodTestService = bloodTestService) {
     super();
   }
 
@@ -21,6 +18,6 @@ export class DeleteBloodTestUseCase extends UseCase<BloodTestRefInput, void> {
   }
 
   protected async run(input: BloodTestRefInput): Promise<void> {
-    return this.service.delete(input, this.dependentId);
+    return this.service.delete(input);
   }
 }

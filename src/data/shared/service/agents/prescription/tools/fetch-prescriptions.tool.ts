@@ -50,8 +50,7 @@ function toSummary(rx: PrescriptionDto): PrescriptionSummary {
 
 export function createFetchPrescriptionsTool(
   userId: string,
-  profileId: string,
-  dependentId?: string,
+  _profileId: string,
 ) {
   return tool({
     description:
@@ -60,11 +59,7 @@ export function createFetchPrescriptionsTool(
       "Returns all prescription records with their medication details.",
     inputSchema: zodSchema(z.object({})),
     execute: async () => {
-      const prescriptions = await prescriptionRepository.list(
-        userId,
-        50,
-        dependentId,
-      );
+      const prescriptions = await prescriptionRepository.list(userId, 50);
       if (prescriptions.length === 0) {
         return {
           found: false,

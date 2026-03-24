@@ -16,12 +16,10 @@ export const prescriptionChatAgent = createAgent({
     submitPrescription: createSubmitPrescriptionTool(
       options.userId,
       options.profileId,
-      options.dependentId,
     ),
     fetchPrescriptions: createFetchPrescriptionsTool(
       options.userId,
       options.profileId,
-      options.dependentId,
     ),
     askQuestion: askQuestionTool,
     logVital: logVitalTool,

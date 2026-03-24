@@ -34,7 +34,6 @@ export interface PreRunContext {
 export interface PrefetchInput {
   userId: string;
   profileId: string;
-  dependentId?: string;
   userQuery: string;
   needsRag: boolean;
   hasAttachment?: boolean;
@@ -62,7 +61,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 export async function prefetchContext(
   input: PrefetchInput,
 ): Promise<PreRunContext> {
-  const { userId, profileId, dependentId, userQuery, needsRag } = input;
+  const { userId, profileId, userQuery, needsRag } = input;
 
   // ── 1. Guardrail (throws on block) ─────────────────────────────────────
   await runGuardrailCheck({ userId, userQuery });
@@ -90,7 +89,6 @@ export async function prefetchContext(
           fetchRagContext({
             userId,
             profileId,
-            dependentId,
             userQuery,
             queryEmbedding: emb,
           }),
@@ -116,7 +114,6 @@ export async function prefetchContext(
 async function fetchRagContext(opts: {
   userId: string;
   profileId: string;
-  dependentId?: string;
   userQuery: string;
   queryEmbedding: number[];
 }): Promise<string | null> {
@@ -124,7 +121,6 @@ async function fetchRagContext(opts: {
     ragContextBuilder.buildContext({
       userId: opts.userId,
       profileId: opts.profileId,
-      dependentId: opts.dependentId,
       query: opts.userQuery,
       queryEmbedding: opts.queryEmbedding,
       rerank: true,

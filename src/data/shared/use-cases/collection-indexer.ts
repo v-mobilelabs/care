@@ -8,13 +8,13 @@
  */
 
 import { embed } from "ai";
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { db } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import type { DocumentChunk } from "@/data/shared/service/rag/rag.types";
 
 const embeddingModel = google.embedding("gemini-embedding-001");
-const EMBEDDING_OPTS = { google: { outputDimensionality: 768 } } as const;
+const EMBEDDING_OPTS = { vertex: { outputDimensionality: 768 } } as const;
 
 /**
  * Embed content and upsert the document in the named collection.

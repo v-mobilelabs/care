@@ -41,11 +41,7 @@ function toSummary(bt: LabReportDto): LabReportSummary {
   };
 }
 
-export function createFetchLabReportsTool(
-  userId: string,
-  profileId: string,
-  dependentId?: string,
-) {
+export function createFetchLabReportsTool(userId: string, _profileId: string) {
   return tool({
     description:
       "Fetch the patient's stored lab report records from their health records. " +
@@ -53,11 +49,7 @@ export function createFetchLabReportsTool(
       "Returns all lab report records with their biomarker details.",
     inputSchema: zodSchema(z.object({})),
     execute: async () => {
-      const labReports = await labReportRepository.list(
-        userId,
-        50,
-        dependentId,
-      );
+      const labReports = await labReportRepository.list(userId, 50);
       if (labReports.length === 0) {
         return {
           found: false,

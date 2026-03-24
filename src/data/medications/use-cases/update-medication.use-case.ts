@@ -13,10 +13,7 @@ export class UpdateMedicationUseCase extends UseCase<
   UpdateMedicationInput,
   MedicationDto
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: MedicationService = medicationService,
-  ) {
+  constructor(private readonly service: MedicationService = medicationService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class UpdateMedicationUseCase extends UseCase<
   }
 
   protected async run(input: UpdateMedicationInput): Promise<MedicationDto> {
-    return this.service.update(input, this.dependentId);
+    return this.service.update(input);
   }
 }

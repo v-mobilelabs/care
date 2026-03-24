@@ -27,15 +27,11 @@ import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
   metadataFields: ["createdAt"],
 })
 export class CreateVitalUseCase extends UseCase<CreateVitalInput, VitalDto> {
-  constructor(private readonly dependentId?: string) {
-    super();
-  }
-
   static validate(input: unknown): CreateVitalInput {
     return CreateVitalSchema.parse(input);
   }
 
   protected async run(input: CreateVitalInput): Promise<VitalDto> {
-    return vitalRepository.create(input.userId, input, this.dependentId);
+    return vitalRepository.create(input.userId, input);
   }
 }

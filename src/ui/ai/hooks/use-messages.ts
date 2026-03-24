@@ -22,7 +22,6 @@ import {
   flattenMessagePages,
 } from "@/ui/ai/query";
 import type { MessageRecord } from "@/ui/ai/query";
-import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
 import { useCurrentProfile } from "@/lib/auth/use-current-profile";
 
 /** Question types that render their own inline answer UI inside the card.
@@ -42,13 +41,15 @@ const INLINE_ANSWER_TYPES = [
 function isLastMessageToolOutputsComplete(messages: UIMessage[]): boolean {
   const lastMsg = messages.at(-1);
   if (!lastMsg || lastMsg.role !== "assistant") return false;
-  let hasToolParts = false;
+  let hasClientToolParts = false;
   for (const part of lastMsg.parts) {
     if (!isToolPart(part)) continue;
-    hasToolParts = true;
+    // Server-executed tools already have their result — skip them.
+    if (part.state === "result") continue;
+    hasClientToolParts = true;
     if (part.state !== "output-available") return false;
   }
-  return hasToolParts;
+  return hasClientToolParts;
 }
 
 // ── useMessages ───────────────────────────────────────────────────────────────
@@ -67,7 +68,6 @@ export function useMessages(sessionId: string) {
   const [pendingAttachments, setPendingAttachments] = useState<
     { url: string; mediaType: string }[]
   >([]);
-  const { activeDependentId } = useActiveProfile();
   const { data: profile } = useCurrentProfile();
   // Dynamic loading hints received from the gateway via response header.
   const [loadingHints, setLoadingHints] = useState<string[]>([]);
@@ -126,14 +126,6 @@ export function useMessages(sessionId: string) {
   const [phraseFading, setPhraseFading] = useState(false);
 
   // ── AI SDK chat ───────────────────────────────────────────────────────────
-  // The `id` changes whenever sessionId or dependent changes, which forces
-  // the Chat instance (and its transport) to be recreated with the fresh
-  // body/headers. Without this, the transport would keep the stale sessionId
-  // from the first render and all messages would be sent to the wrong session.
-  const chatId = activeDependentId
-    ? `${sessionId}:${activeDependentId}`
-    : sessionId;
-
   const {
     messages,
     setMessages,
@@ -145,11 +137,10 @@ export function useMessages(sessionId: string) {
     error,
     regenerate,
   } = useChat({
-    id: chatId,
+    id: sessionId,
     transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { sessionId },
-      headers: activeDependentId ? { "x-dependent-id": activeDependentId } : {},
       // Server-managed persistence — only send the last message.
       // Server loads full conversation history from Firestore.
       // Strip step-start boundaries before sending. These are structural UI
@@ -204,8 +195,10 @@ export function useMessages(sessionId: string) {
     sendAutomaticallyWhen: ({ messages: msgs }) => {
       // Only allow auto-send when the user explicitly provided tool output
       // (not during hydration of old DB messages with completed tool parts).
-      if (!toolOutputPendingRef.current) return false;
-      return isLastMessageToolOutputsComplete(msgs);
+      const pendingGate = toolOutputPendingRef.current;
+      const lastComplete = isLastMessageToolOutputsComplete(msgs);
+      if (!pendingGate) return false;
+      return lastComplete;
     },
   });
 

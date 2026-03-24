@@ -1,11 +1,95 @@
 // AI Service — server-only. Never import in client components.
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { generateText, Output, wrapLanguageModel } from "ai";
 import type { LanguageModel, LanguageModelMiddleware, ModelMessage } from "ai";
 import type { z } from "zod";
 import { UsageService } from "@/data/usage/service/lazy-reset-usage.service";
 import { UsageRepository } from "@/data/usage/repositories/usage.repository";
 import { CreditsExhaustedError } from "@/lib/errors";
+
+// ── Retry helpers ─────────────────────────────────────────────────────────────
+
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const source = error as Record<string, unknown>;
+  const candidates = [
+    source.status,
+    source.statusCode,
+    source.code,
+    source.httpStatus,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "number") return candidate;
+    if (typeof candidate === "string") {
+      const parsed = Number(candidate);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
+function getErrorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "";
+  const source = error as Record<string, unknown>;
+  const message = source.message;
+  if (typeof message === "string") return message;
+  return JSON.stringify(source);
+}
+
+function isRetryableTransientError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
+  if (statusCode !== undefined && RETRYABLE_STATUS_CODES.has(statusCode)) {
+    return true;
+  }
+  const text = getErrorText(error).toLowerCase();
+  if (text.length === 0) return false;
+  return [
+    "resource exhausted",
+    "resource_exhausted",
+    "too many requests",
+    "quota exceeded",
+    "rate limit",
+    "unavailable",
+    "deadline exceeded",
+    "temporarily overloaded",
+  ].some((needle) => text.includes(needle));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function backoffDelayMs(attemptIndex: number): number {
+  // Truncated exponential backoff with jitter:
+  // 1st retry ~400-700ms, 2nd retry ~900-1300ms
+  const base = Math.min(400 * Math.pow(2, attemptIndex), 1_000);
+  const jitter = Math.floor(Math.random() * 300);
+  return base + jitter;
+}
+
+async function runWithTransientRetry<T>(
+  action: () => PromiseLike<T>,
+  opts?: { maxRetries?: number },
+): Promise<T> {
+  const maxRetries = opts?.maxRetries ?? 2;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await action();
+    } catch (error) {
+      if (attempt >= maxRetries || !isRetryableTransientError(error)) {
+        throw error;
+      }
+      await sleep(backoffDelayMs(attempt));
+    }
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,13 +125,13 @@ export interface TokenUsage {
  */
 export class AIService {
   /** @internal Raw pro model — use forUser().chat for credit-gated access. */
-  private readonly _chat = google("gemini-3.1-pro-preview");
+  private readonly _chat = google("gemini-3.1-pro");
 
   /** @internal Raw fast model — use forUser().fast for credit-gated access. */
-  private readonly _fast = google("gemini-3-flash-preview");
+  private readonly _fast = google("gemini-3.1-flash-lite-preview");
 
   /** @internal Lite model for ultra-fast classification tasks (gateway routing). */
-  private readonly _lite = google("gemini-2.5-flash-lite");
+  private readonly _lite = google("gemini-3.1-flash-lite-preview");
 
   private readonly usageService = new UsageService(new UsageRepository());
 
@@ -73,11 +157,11 @@ export class AIService {
       specificationVersion: "v3",
       wrapGenerate: async ({ doGenerate }) => {
         await gate();
-        return doGenerate();
+        return runWithTransientRetry(() => doGenerate());
       },
       wrapStream: async ({ doStream }) => {
         await gate();
-        return doStream();
+        return runWithTransientRetry(() => doStream());
       },
     };
     const wrap = (base: typeof this._chat) =>
@@ -127,12 +211,15 @@ export class AIService {
     else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
     else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
 
-    const result = await generateText({
-      model,
-      output: Output.object({ schema }),
-      messages,
-      temperature: 0,
-    });
+    const result = await runWithTransientRetry(() =>
+      generateText({
+        model,
+        output: Output.object({ schema }),
+        messages,
+        temperature: 0,
+        maxRetries: 0,
+      }),
+    );
 
     // Cast required: TS cannot infer the output shape from a generic schema param.
     const object = (result as unknown as { output?: z.infer<T> }).output;
@@ -176,13 +263,16 @@ export class AIService {
     else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
     else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
 
-    const result = await generateText({
-      model,
-      output: Output.choice({ options: options as unknown as string[] }),
-      messages,
-      temperature: 0,
-      maxOutputTokens: 256,
-    });
+    const result = await runWithTransientRetry(() =>
+      generateText({
+        model,
+        output: Output.choice({ options: options as unknown as string[] }),
+        messages,
+        temperature: 0,
+        maxOutputTokens: 256,
+        maxRetries: 0,
+      }),
+    );
 
     const choice = (result as unknown as { output?: T }).output;
     if (choice === undefined || choice === null) {

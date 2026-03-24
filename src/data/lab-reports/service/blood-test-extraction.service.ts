@@ -79,45 +79,35 @@ export class BloodTestExtractionService {
     const existing = await bloodTestRepository.findByFileId(
       input.userId,
       input.fileId,
-      input.dependentId,
     );
 
     let result: BloodTestDto;
 
     if (existing) {
-      result = await bloodTestRepository.update(
-        input.userId,
-        existing.id,
-        {
-          testName: extracted.testName,
-          labName: extracted.labName,
-          orderedBy: extracted.orderedBy,
-          testDate: extracted.testDate,
-          notes: extracted.notes,
-          biomarkers: extracted.biomarkers,
-        },
-        input.dependentId,
-      );
+      result = await bloodTestRepository.update(input.userId, existing.id, {
+        testName: extracted.testName,
+        labName: extracted.labName,
+        orderedBy: extracted.orderedBy,
+        testDate: extracted.testDate,
+        notes: extracted.notes,
+        biomarkers: extracted.biomarkers,
+      });
     } else {
-      result = await bloodTestRepository.create(
-        input.userId,
-        {
-          fileId: input.fileId,
-          fileUrl: file.downloadUrl ?? undefined,
-          testName: extracted.testName,
-          labName: extracted.labName,
-          orderedBy: extracted.orderedBy,
-          testDate: extracted.testDate,
-          notes: extracted.notes,
-          biomarkers: extracted.biomarkers,
-        },
-        input.dependentId,
-      );
+      result = await bloodTestRepository.create(input.userId, {
+        fileId: input.fileId,
+        fileUrl: file.downloadUrl ?? undefined,
+        testName: extracted.testName,
+        labName: extracted.labName,
+        orderedBy: extracted.orderedBy,
+        testDate: extracted.testDate,
+        notes: extracted.notes,
+        biomarkers: extracted.biomarkers,
+      });
     }
 
     // ✅ Index for RAG (fire-and-forget)
     void ragIndexer
-      .indexLabReport(input.userId, input.profileId, result, input.dependentId)
+      .indexLabReport(input.userId, input.profileId, result)
       .catch((err) => console.error("[RAG] Blood test indexing failed:", err));
 
     return result;

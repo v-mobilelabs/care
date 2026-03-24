@@ -9,8 +9,8 @@ import { CacheTags } from "@/data/cached";
 
 // GET /api/assessments/[assessmentId]
 export const GET = WithContext<{ assessmentId: string }>(
-  async ({ user, dependentId }, { assessmentId }) => {
-    const assessment = await new GetAssessmentUseCase(dependentId).execute({
+  async ({ user }, { assessmentId }) => {
+    const assessment = await new GetAssessmentUseCase().execute({
       userId: user.uid,
       assessmentId,
     });
@@ -21,8 +21,8 @@ export const GET = WithContext<{ assessmentId: string }>(
 
 // DELETE /api/assessments/[assessmentId]
 export const DELETE = WithContext<{ assessmentId: string }>(
-  async ({ user, dependentId }, { assessmentId }) => {
-    await new DeleteAssessmentUseCase(dependentId).execute({
+  async ({ user }, { assessmentId }) => {
+    await new DeleteAssessmentUseCase().execute({
       userId: user.uid,
       assessmentId,
     });

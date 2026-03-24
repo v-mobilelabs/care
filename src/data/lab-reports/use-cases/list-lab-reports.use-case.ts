@@ -13,10 +13,7 @@ export class ListLabReportsUseCase extends UseCase<
   ListLabReportsInput,
   LabReportDto[]
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: LabReportService = labReportService,
-  ) {
+  constructor(private readonly service: LabReportService = labReportService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class ListLabReportsUseCase extends UseCase<
   }
 
   protected async run(input: ListLabReportsInput): Promise<LabReportDto[]> {
-    return this.service.list(input, this.dependentId);
+    return this.service.list(input);
   }
 }

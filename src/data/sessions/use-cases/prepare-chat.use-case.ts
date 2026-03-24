@@ -1,4 +1,4 @@
-import { isToolUIPart, safeValidateUIMessages, getToolName } from "ai";
+import { safeValidateUIMessages } from "ai";
 import type { UIMessage, Agent, ToolSet } from "ai";
 import { z } from "zod";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
@@ -44,7 +44,6 @@ import { toUIMessage } from "../models/message.model";
 const PrepareChatSchema = z.object({
   userId: z.string().min(1),
   profileId: z.string().min(1),
-  dependentId: z.string().min(1).optional(),
   // One-cycle payload: client sends exactly ONE UIMessage object under `message`
   // (server-managed persistence pattern). Using .strict() rejects the legacy
   // `messages: UIMessage[]` array format with a clear validation error.
@@ -61,6 +60,226 @@ const PrepareChatSchema = z.object({
 });
 
 export type PrepareChatInput = z.infer<typeof PrepareChatSchema>;
+
+type ReportHandoffSignal = {
+  nextSpecialist: string;
+  autoRoute: boolean;
+  reason?: string;
+  reportLabel?: string;
+};
+
+type ToolPartLike = {
+  type: string;
+  state?: string;
+  toolCallId?: string;
+  input?: unknown;
+  output?: unknown;
+};
+
+type ToolOutputPart = UIMessage["parts"][number] & {
+  state: "output-available";
+};
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
+function isToolPartLike(part: unknown): part is ToolPartLike {
+  const p = asObject(part);
+  return Boolean(p && typeof p.type === "string" && p.type.startsWith("tool-"));
+}
+
+function getToolPartName(part: unknown): string | null {
+  if (!isToolPartLike(part)) return null;
+  return part.type.slice(5);
+}
+
+function collectOutputAvailableToolParts(
+  parts: UIMessage["parts"],
+): ToolOutputPart[] {
+  return parts.filter(
+    (p): p is ToolOutputPart =>
+      isToolPartLike(p) && p.state === "output-available",
+  );
+}
+
+function mergeToolOutputsIntoAssistantParts(
+  targetParts: UIMessage["parts"],
+  incomingToolOutputs: ToolOutputPart[],
+): {
+  mergedParts: UIMessage["parts"];
+  mergedById: number;
+  mergedByFallback: number;
+  unresolved: number;
+} {
+  if (incomingToolOutputs.length === 0) {
+    return {
+      mergedParts: targetParts,
+      mergedById: 0,
+      mergedByFallback: 0,
+      unresolved: 0,
+    };
+  }
+
+  const mergedParts = [...targetParts];
+  const consumedTargetIdx = new Set<number>();
+  const consumedOutputIdx = new Set<number>();
+
+  let mergedById = 0;
+  let mergedByFallback = 0;
+
+  // Pass 1: strict toolCallId match.
+  for (let i = 0; i < incomingToolOutputs.length; i += 1) {
+    const out = incomingToolOutputs[i];
+    const outputId = (out as { toolCallId?: string }).toolCallId ?? "";
+    if (!outputId) continue;
+
+    const targetIdx = mergedParts.findIndex((p, idx) => {
+      if (!isToolPartLike(p)) return false;
+      if (consumedTargetIdx.has(idx)) return false;
+      return (p.toolCallId ?? "") === outputId;
+    });
+
+    if (targetIdx >= 0) {
+      mergedParts[targetIdx] = out;
+      consumedTargetIdx.add(targetIdx);
+      consumedOutputIdx.add(i);
+      mergedById += 1;
+    }
+  }
+
+  // Pass 2: fallback by tool name to handle empty/missing toolCallId.
+  for (let i = 0; i < incomingToolOutputs.length; i += 1) {
+    if (consumedOutputIdx.has(i)) continue;
+    const out = incomingToolOutputs[i];
+    const outName = getToolPartName(out);
+    if (!outName) continue;
+
+    const targetIdx = mergedParts.findIndex((p, idx) => {
+      if (!isToolPartLike(p)) return false;
+      if (consumedTargetIdx.has(idx)) return false;
+      if (getToolPartName(p) !== outName) return false;
+      // Prefer open/pending tool states that are waiting for client output.
+      return (
+        p.state === "input-available" ||
+        p.state === "approval-requested" ||
+        p.state === "input-streaming"
+      );
+    });
+
+    if (targetIdx >= 0) {
+      mergedParts[targetIdx] = out;
+      consumedTargetIdx.add(targetIdx);
+      consumedOutputIdx.add(i);
+      mergedByFallback += 1;
+    }
+  }
+
+  return {
+    mergedParts,
+    mergedById,
+    mergedByFallback,
+    unresolved: incomingToolOutputs.length - consumedOutputIdx.size,
+  };
+}
+
+function readReportHandoffFromPart(
+  part: UIMessage["parts"][number],
+): ReportHandoffSignal | null {
+  if (!isToolPartLike(part)) return null;
+
+  const toolName = getToolPartName(part);
+
+  // Explicit referral request tool is the strongest handoff signal.
+  if (toolName === "submitReferralRequest") {
+    const input = asObject(part.input);
+    const nextSpecialistRaw = input?.nextSpecialist;
+    if (
+      typeof nextSpecialistRaw !== "string" ||
+      nextSpecialistRaw.trim().length === 0
+    ) {
+      return null;
+    }
+
+    const reasonRaw = input?.reason;
+    const reportLabelRaw = input?.reportLabel;
+    const result: ReportHandoffSignal = {
+      nextSpecialist: nextSpecialistRaw.trim(),
+      autoRoute: true,
+      reason: typeof reasonRaw === "string" ? reasonRaw : undefined,
+      reportLabel:
+        typeof reportLabelRaw === "string" ? reportLabelRaw : undefined,
+    };
+
+    console.log(`[readReportHandoffFromPart] Found: ${JSON.stringify(result)}`);
+    return result;
+  }
+
+  // Fallback: legacy/implicit handoff encoded in submitReport input/output.
+  if (toolName !== "submitReport") return null;
+
+  const input = asObject(part.input);
+  const output = asObject(part.output);
+  const handoff = asObject(input?.handoff);
+
+  const nextSpecialistRaw =
+    handoff?.nextSpecialist ??
+    input?.suggestedNextSpecialist ??
+    output?.nextSpecialist;
+  if (
+    typeof nextSpecialistRaw !== "string" ||
+    nextSpecialistRaw.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const autoRouteRaw = handoff?.autoRoute ?? output?.autoRoute;
+  const reasonRaw = handoff?.reason ?? output?.handoffReason;
+  const reportLabelRaw = input?.reportLabel ?? output?.reportLabel;
+
+  const result: ReportHandoffSignal = {
+    nextSpecialist: nextSpecialistRaw.trim(),
+    autoRoute: typeof autoRouteRaw === "boolean" ? autoRouteRaw : true,
+    reason: typeof reasonRaw === "string" ? reasonRaw : undefined,
+    reportLabel:
+      typeof reportLabelRaw === "string" ? reportLabelRaw : undefined,
+  };
+
+  console.log(`[readReportHandoffFromPart] Found: ${JSON.stringify(result)}`);
+  return result;
+}
+
+function findLatestReportHandoff(
+  messages: ReadonlyArray<UIMessage>,
+): ReportHandoffSignal | undefined {
+  console.log(
+    `[findLatestReportHandoff] Searching through ${messages.length} messages`,
+  );
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    console.log(
+      `[findLatestReportHandoff] Checking message ${i}: role=${message.role}, parts=${message.parts.length}`,
+    );
+    if (message.role !== "assistant") continue;
+
+    for (let j = message.parts.length - 1; j >= 0; j -= 1) {
+      const part = message.parts[j];
+      console.log(
+        `[findLatestReportHandoff] Checking part ${j}: type=${(part as { type?: string }).type}`,
+      );
+      const handoff = readReportHandoffFromPart(part);
+      if (handoff && handoff.autoRoute) {
+        console.log(
+          `[PrepareChatUseCase] Found report handoff: nextSpecialist=${handoff.nextSpecialist}, reason=${handoff.reason}, label=${handoff.reportLabel}`,
+        );
+        return handoff;
+      }
+    }
+  }
+  console.log("[findLatestReportHandoff] No handoff found in any message");
+  return undefined;
+}
 
 // ── Output ────────────────────────────────────────────────────────────────────
 
@@ -115,7 +334,7 @@ export class PrepareChatUseCase extends UseCase<
 
   // eslint-disable-next-line max-lines-per-function
   protected async run(input: PrepareChatInput): Promise<PrepareChatResult> {
-    const { userId, profileId, dependentId, body } = input;
+    const { userId, profileId, body } = input;
 
     // ── 1. Validate the single incoming message ────────────────────────────
     // The client sends only the latest message (server-managed persistence).
@@ -152,23 +371,26 @@ export class PrepareChatUseCase extends UseCase<
       // tool output parts into the history version.
       const existingIdx = history.findIndex((m) => m.id === incomingMessage.id);
       if (existingIdx >= 0) {
-        const toolOutputs = new Map(
-          incomingMessage.parts
-            .filter((p) => isToolUIPart(p) && p.state === "output-available")
-            .map((p) => [isToolUIPart(p) ? p.toolCallId : "", p]),
+        const incomingToolOutputs = collectOutputAvailableToolParts(
+          incomingMessage.parts,
         );
-        if (toolOutputs.size > 0) {
-          history[existingIdx] = {
-            ...history[existingIdx],
-            parts: history[existingIdx].parts.map((p) => {
-              if (!isToolUIPart(p)) return p;
-              return toolOutputs.get(p.toolCallId) ?? p;
-            }),
-          };
+        if (incomingToolOutputs.length > 0) {
+          const mergeResult = mergeToolOutputsIntoAssistantParts(
+            history[existingIdx].parts,
+            incomingToolOutputs,
+          );
+          console.log(
+            `[PrepareChatUseCase] Merge(existing assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
+          );
+          // Capture the merged content for Firestore persistence, then replace
+          // the history slot with the live SDK-structured incomingMessage so the
+          // model sees a fresh "tool output just arrived" signal (not a plain-JSON
+          // DB reconstruction which loses SDK runtime metadata).
           toolOutputMerge = {
             messageId: history[existingIdx].id,
-            content: JSON.stringify(history[existingIdx].parts),
+            content: JSON.stringify(mergeResult.mergedParts),
           };
+          history[existingIdx] = incomingMessage;
         }
         messages = history;
       } else if (incomingMessage.role === "assistant") {
@@ -178,23 +400,24 @@ export class PrepareChatUseCase extends UseCase<
           (m) => m.role === "assistant",
         );
         if (lastAsstIdx >= 0) {
-          const toolOutputs = new Map(
-            incomingMessage.parts
-              .filter((p) => isToolUIPart(p) && p.state === "output-available")
-              .map((p) => [isToolUIPart(p) ? p.toolCallId : "", p]),
+          const incomingToolOutputs = collectOutputAvailableToolParts(
+            incomingMessage.parts,
           );
-          if (toolOutputs.size > 0) {
-            history[lastAsstIdx] = {
-              ...history[lastAsstIdx],
-              parts: history[lastAsstIdx].parts.map((p) => {
-                if (!isToolUIPart(p)) return p;
-                return toolOutputs.get(p.toolCallId) ?? p;
-              }),
-            };
+          if (incomingToolOutputs.length > 0) {
+            const mergeResult = mergeToolOutputsIntoAssistantParts(
+              history[lastAsstIdx].parts,
+              incomingToolOutputs,
+            );
+            console.log(
+              `[PrepareChatUseCase] Merge(last assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
+            );
+            // Capture merged content for persistence; replace slot with the live
+            // SDK-structured incomingMessage for correct model continuation.
             toolOutputMerge = {
               messageId: history[lastAsstIdx].id,
-              content: JSON.stringify(history[lastAsstIdx].parts),
+              content: JSON.stringify(mergeResult.mergedParts),
             };
+            history[lastAsstIdx] = incomingMessage;
           }
           messages = history;
         } else {
@@ -210,6 +433,36 @@ export class PrepareChatUseCase extends UseCase<
     // ── 3. Extract message context ────────────────────────────────────────
     const ctxStart = performance.now();
     const ctx = extractMessageContext(messages, body.attachmentUrls);
+
+    // On continuation turns (tool-output auto-send), the last "user" message
+    // is a stale query from the original turn. Override userQuery with the
+    // actual content that was just answered so gateway routing + RAG are
+    // semantically current.
+    if (incomingMessage.role === "assistant") {
+      const answeredParts = collectOutputAvailableToolParts(
+        incomingMessage.parts,
+      );
+      if (answeredParts.length > 0) {
+        const qaPairs = answeredParts
+          .map((p) => {
+            const tPart = p as ToolPartLike;
+            const input = asObject(tPart.input);
+            const output = asObject(tPart.output);
+            const toolName = getToolPartName(p);
+            if (toolName === "askQuestion") {
+              const q = typeof input?.question === "string" ? input.question : "";
+              const a = typeof output?.answer === "string" ? output.answer : JSON.stringify(output);
+              return q ? `Question: ${q}\nAnswer: ${a}` : null;
+            }
+            return null;
+          })
+          .filter(Boolean);
+        if (qaPairs.length > 0) {
+          ctx.userQuery = qaPairs.join("\n\n");
+        }
+      }
+    }
+
     console.log(
       `[PrepareChatUseCase] Context extraction: ${(performance.now() - ctxStart).toFixed(0)}ms`,
     );
@@ -219,12 +472,7 @@ export class PrepareChatUseCase extends UseCase<
 
     // ── 5. Gateway routing ────────────────────────────────────────────────
     const gatewayStart = performance.now();
-    const recentMessages = messages
-      .filter((m) => m.role === "user")
-      .slice(-4)
-      .map((m) => m.parts.find((p) => p.type === "text"))
-      .filter((p): p is { type: "text"; text: string } => p?.type === "text")
-      .map((p) => p.text);
+    const isContinuationTurn = incomingMessage.role === "assistant";
 
     // Load persisted agent type for cross-worker session affinity
     let lastAgentType: string | undefined;
@@ -237,16 +485,63 @@ export class PrepareChatUseCase extends UseCase<
       lastAgentType = session?.lastAgentType;
     }
 
-    const gatewayDecision = await gatewayAgent.decide({
-      userQuery: ctx.userQuery,
-      hasAttachment: ctx.hasAttachment,
-      recentMessages: recentMessages.length > 1 ? recentMessages : undefined,
-      userId,
-      sessionId,
-      lastAgentType,
-    });
+    // Fast-path: continuation turns (askQuestion answers) stay with the same
+    // specialist. Skip gateway LLM routing, skip RAG (answer context is
+    // already in the conversation), use low thinking (acknowledge + next Q).
+    let agentType: AgentType;
+    let needsRag: boolean;
+    let thinkingLevel: "low" | "medium" | "high";
+    let gatewayReasoning: string;
+    let loadingHints: string[];
 
-    const agentType = gatewayDecision.agent;
+    if (isContinuationTurn && lastAgentType) {
+      agentType = lastAgentType as AgentType;
+      needsRag = false;
+      thinkingLevel = "low";
+      gatewayReasoning = "continuation-fast-path";
+      loadingHints = ["Continuing assessment..."];
+      console.log(
+        `[PrepareChatUseCase] Continuation fast-path → ${agentType} (skip gateway + RAG)`,
+      );
+    } else {
+      const recentMessages = messages
+        .filter((m) => m.role === "user")
+        .slice(-4)
+        .map((m) => m.parts.find((p) => p.type === "text"))
+        .filter((p): p is { type: "text"; text: string } => p?.type === "text")
+        .map((p) => p.text);
+
+      const attachmentMetadata = ctx.storableParts
+        .filter(
+          (p) =>
+            (p.type as string) === "file" || (p.type as string) === "image",
+        )
+        .map((p) => ({
+          url: (p.url as string) ?? "",
+          mediaType: (p.mediaType as string) ?? "application/octet-stream",
+          fileName: (p.fileName as string | undefined) ?? undefined,
+        }));
+
+      const reportHandoff = findLatestReportHandoff(messages);
+
+      const gatewayDecision = await gatewayAgent.decide({
+        userQuery: ctx.userQuery,
+        hasAttachment: ctx.hasAttachment,
+        attachmentMetadata:
+          attachmentMetadata.length > 0 ? attachmentMetadata : undefined,
+        reportHandoff,
+        recentMessages: recentMessages.length > 1 ? recentMessages : undefined,
+        userId,
+        sessionId,
+        lastAgentType,
+      });
+
+      agentType = gatewayDecision.agent;
+      needsRag = gatewayDecision.needsRag;
+      thinkingLevel = gatewayDecision.thinkingLevel;
+      gatewayReasoning = gatewayDecision.reasoning;
+      loadingHints = gatewayDecision.loadingHints;
+    }
 
     // ── 6. Prefetch context (guardrail + credit + memory + RAG) ───────────
     // Runs all expensive operations once before the agent streams.
@@ -254,46 +549,44 @@ export class PrepareChatUseCase extends UseCase<
     const preContext: PreRunContext = await prefetchContext({
       userId,
       profileId,
-      dependentId,
       userQuery: ctx.userQuery,
-      needsRag: gatewayDecision.needsRag,
+      needsRag,
       hasAttachment: ctx.hasAttachment,
     });
 
     console.log(
-      `[PrepareChatUseCase] Gateway + prefetch: ${agentType} (thinking: ${gatewayDecision.thinkingLevel}, rag: ${gatewayDecision.needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
+      `[PrepareChatUseCase] Gateway + prefetch: ${agentType} (thinking: ${thinkingLevel}, rag: ${needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
     );
     console.log(
-      `[PrepareChatUseCase] Gateway reasoning: ${gatewayDecision.reasoning}`,
+      `[PrepareChatUseCase] Gateway reasoning: ${gatewayReasoning}`,
     );
 
     // ── 7. Resolve agent (needed before sanitization to know valid tools) ─
     const agent = AGENTS[agentType] ?? triageNurseAgent;
 
     // ── 8. Sanitize messages ──────────────────────────────────────────────
-    // Strip incomplete tool invocations AND tool parts for tools not in the
-    // selected agent's toolset (e.g. submitDailyPlan parts when routing to
-    // clinical agent after a diet planner conversation).
-    const agentToolNames = new Set(Object.keys(agent.tools ?? {}));
-    // eslint-disable-next-line max-lines-per-function
+    // Strip open/incomplete tool calls (input-available, approval-requested).
+    // output-available parts are kept unconditionally — they are completed
+    // historical context the model must see to continue correctly.
     const sanitizedMessages: UIMessage[] = messages.map((m) => {
       if (m.role !== "assistant") return m;
+      // Only strip "open" tool call states (input-available, approval-requested).
+      // output-available parts represent completed historical tool results and
+      // must be preserved regardless of which agent is now handling the session —
+      // stripping them would remove the tool answer context the model needs to
+      // continue (e.g. referral confirmed → dentistry continuation).
       const needsFilter = m.parts.some(
         (p) =>
-          isToolUIPart(p) &&
-          (p.state === "input-available" ||
-            p.state === "approval-requested" ||
-            !agentToolNames.has(getToolName(p))),
+          isToolPartLike(p) &&
+          (p.state === "input-available" || p.state === "approval-requested"),
       );
       if (!needsFilter) return m;
       return {
         ...m,
         parts: m.parts.filter(
           (p) =>
-            !isToolUIPart(p) ||
-            (p.state !== "input-available" &&
-              p.state !== "approval-requested" &&
-              agentToolNames.has(getToolName(p))),
+            !isToolPartLike(p) ||
+            (p.state !== "input-available" && p.state !== "approval-requested"),
         ),
       };
     });
@@ -305,17 +598,14 @@ export class PrepareChatUseCase extends UseCase<
     const options: AgentCallOptions = {
       userId,
       profileId,
-      dependentId,
       userQuery: ctx.userQuery,
       sessionId,
       hasAttachment: ctx.hasAttachment,
       queryEmbedding: preContext.queryEmbedding,
-      thinkingLevel: gatewayDecision.thinkingLevel,
-      needsRag: gatewayDecision.needsRag,
+      thinkingLevel,
+      needsRag,
       preContext,
     };
-
-    const loadingHints = gatewayDecision.loadingHints;
 
     return {
       agent,

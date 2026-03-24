@@ -13,10 +13,7 @@ export class GetLabReportUseCase extends UseCase<
   LabReportRefInput,
   LabReportDto | null
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: LabReportService = labReportService,
-  ) {
+  constructor(private readonly service: LabReportService = labReportService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class GetLabReportUseCase extends UseCase<
   }
 
   protected async run(input: LabReportRefInput): Promise<LabReportDto | null> {
-    return this.service.getById(input, this.dependentId);
+    return this.service.getById(input);
   }
 }

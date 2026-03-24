@@ -10,7 +10,7 @@ import { tool, zodSchema } from "ai";
 import { z } from "zod";
 import { medicationRepository } from "@/data/medications/repositories/medication.repository";
 
-export function createGetMedicationsTool(userId: string, dependentId?: string) {
+export function createGetMedicationsTool(userId: string) {
   return tool({
     description:
       "Fetch the patient's medication records (name, dosage, form, frequency, duration, " +
@@ -19,11 +19,7 @@ export function createGetMedicationsTool(userId: string, dependentId?: string) {
       "what they are taking, or drug interactions.",
     inputSchema: zodSchema(z.object({})),
     execute: async () => {
-      const medications = await medicationRepository.list(
-        userId,
-        100,
-        dependentId,
-      );
+      const medications = await medicationRepository.list(userId, 100);
       if (medications.length === 0) {
         return {
           found: false,

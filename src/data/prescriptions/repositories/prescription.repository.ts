@@ -12,14 +12,10 @@ import {
 
 // ── Collection helpers ────────────────────────────────────────────────────────
 
-const prescriptionsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "prescriptions");
+const prescriptionsCol = (userId: string) => scopedCol(userId, "prescriptions");
 
-const prescriptionDoc = (
-  userId: string,
-  prescriptionId: string,
-  dependentId?: string,
-) => prescriptionsCol(userId, dependentId).doc(prescriptionId);
+const prescriptionDoc = (userId: string, prescriptionId: string) =>
+  prescriptionsCol(userId).doc(prescriptionId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -27,11 +23,10 @@ export const prescriptionRepository = {
   async create(
     userId: string,
     data: Omit<PrescriptionDocument, "userId" | "createdAt">,
-    dependentId?: string,
   ): Promise<PrescriptionDto> {
     const now = Timestamp.now();
     const doc: PrescriptionDocument = { userId, ...data, createdAt: now };
-    const ref = prescriptionsCol(userId, dependentId).doc();
+    const ref = prescriptionsCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toPrescriptionDto(ref.id, doc);
   },
@@ -39,9 +34,8 @@ export const prescriptionRepository = {
   async findByFileId(
     userId: string,
     fileId: string,
-    dependentId?: string,
   ): Promise<PrescriptionDto | null> {
-    const snap = await prescriptionsCol(userId, dependentId)
+    const snap = await prescriptionsCol(userId)
       .where("fileId", "==", fileId)
       .limit(1)
       .get();
@@ -53,23 +47,14 @@ export const prescriptionRepository = {
   async findById(
     userId: string,
     prescriptionId: string,
-    dependentId?: string,
   ): Promise<PrescriptionDto | null> {
-    const snap = await prescriptionDoc(
-      userId,
-      prescriptionId,
-      dependentId,
-    ).get();
+    const snap = await prescriptionDoc(userId, prescriptionId).get();
     if (!snap.exists) return null;
     return toPrescriptionDto(snap.id, snap.data() as PrescriptionDocument);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<PrescriptionDto[]> {
-    const snap = await prescriptionsCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<PrescriptionDto[]> {
+    const snap = await prescriptionsCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -78,21 +63,16 @@ export const prescriptionRepository = {
     );
   },
 
-  async delete(
-    userId: string,
-    prescriptionId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await prescriptionDoc(userId, prescriptionId, dependentId).delete();
+  async delete(userId: string, prescriptionId: string): Promise<void> {
+    await prescriptionDoc(userId, prescriptionId).delete();
   },
 
   async patchSessionId(
     userId: string,
     prescriptionId: string,
     sessionId: string,
-    dependentId?: string,
   ): Promise<PrescriptionDto> {
-    const ref = prescriptionDoc(userId, prescriptionId, dependentId);
+    const ref = prescriptionDoc(userId, prescriptionId);
     await ref.update({ sessionId });
     const snap = await ref.get();
     return toPrescriptionDto(snap.id, snap.data() as PrescriptionDocument);

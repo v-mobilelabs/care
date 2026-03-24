@@ -12,7 +12,6 @@ export interface DocumentChunk {
   id: string;
   userId: string;
   profileId: string;
-  dependentId?: string;
   /** Document type for filtering */
   type:
     | "condition"
@@ -50,7 +49,6 @@ export interface SearchResult {
 
 export interface SearchOptions {
   userId: string;
-  dependentId?: string;
   /** Filter by document types */
   types?: DocumentChunk["type"][];
   /** Pre-computed query embedding vector (768-dim). Skips internal embed call when provided. */

@@ -7,11 +7,8 @@ import type {
 } from "../models/condition.model";
 
 export class ConditionService {
-  async create(
-    input: CreateConditionInput,
-    dependentId?: string,
-  ): Promise<ConditionDto> {
-    return conditionRepository.create(input.userId, dependentId, {
+  async create(input: CreateConditionInput): Promise<ConditionDto> {
+    return conditionRepository.create(input.userId, {
       sessionId: input.sessionId,
       name: input.name,
       icd10: input.icd10,
@@ -22,22 +19,12 @@ export class ConditionService {
     });
   }
 
-  async list(
-    input: ListConditionsInput,
-    dependentId?: string,
-  ): Promise<ConditionDto[]> {
-    return conditionRepository.list(input.userId, input.limit, dependentId);
+  async list(input: ListConditionsInput): Promise<ConditionDto[]> {
+    return conditionRepository.list(input.userId, input.limit);
   }
 
-  async delete(
-    input: DeleteConditionInput,
-    dependentId?: string,
-  ): Promise<void> {
-    await conditionRepository.delete(
-      input.userId,
-      input.conditionId,
-      dependentId,
-    );
+  async delete(input: DeleteConditionInput): Promise<void> {
+    await conditionRepository.delete(input.userId, input.conditionId);
   }
 }
 

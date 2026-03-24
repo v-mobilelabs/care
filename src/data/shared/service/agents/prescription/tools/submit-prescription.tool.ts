@@ -66,7 +66,6 @@ export type SubmitPrescriptionInput = z.infer<typeof SubmitPrescriptionSchema>;
 export function createSubmitPrescriptionTool(
   userId: string,
   profileId: string,
-  dependentId?: string,
 ) {
   return tool({
     description:
@@ -77,21 +76,17 @@ export function createSubmitPrescriptionTool(
       const prescription = rx as SubmitPrescriptionInput;
 
       // Persist to the prescriptions collection
-      const saved = await prescriptionRepository.create(
-        userId,
-        {
-          source: "generated",
-          medications: prescription.medications as PrescriptionMedication[],
-          generalInstructions: prescription.generalInstructions,
-          followUp: prescription.followUp,
-          urgent: prescription.urgent,
-        },
-        dependentId,
-      );
+      const saved = await prescriptionRepository.create(userId, {
+        source: "generated",
+        medications: prescription.medications as PrescriptionMedication[],
+        generalInstructions: prescription.generalInstructions,
+        followUp: prescription.followUp,
+        urgent: prescription.urgent,
+      });
 
       // Index for RAG (fire-and-forget)
       void ragIndexer
-        .indexPrescription(userId, profileId, saved, dependentId)
+        .indexPrescription(userId, profileId, saved)
         .catch((err) =>
           console.error("[RAG] Prescription indexing failed:", err),
         );

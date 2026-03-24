@@ -89,48 +89,38 @@ export class LabReportExtractionService {
     const existing = await labReportRepository.findByFileId(
       input.userId,
       input.fileId,
-      input.dependentId,
     );
 
     let result: LabReportDto;
 
     if (existing) {
-      result = await labReportRepository.update(
-        input.userId,
-        existing.id,
-        {
-          testName: extracted.testName,
-          labName: extracted.labName,
-          labAddress: extracted.labAddress,
-          orderedBy: extracted.orderedBy,
-          testDate: extracted.testDate,
-          notes: extracted.notes,
-          biomarkers: extracted.biomarkers,
-        },
-        input.dependentId,
-      );
+      result = await labReportRepository.update(input.userId, existing.id, {
+        testName: extracted.testName,
+        labName: extracted.labName,
+        labAddress: extracted.labAddress,
+        orderedBy: extracted.orderedBy,
+        testDate: extracted.testDate,
+        notes: extracted.notes,
+        biomarkers: extracted.biomarkers,
+      });
     } else {
-      result = await labReportRepository.create(
-        input.userId,
-        {
-          fileId: input.fileId,
-          fileUrl: file.downloadUrl ?? undefined,
-          fileMimeType: file.mimeType,
-          testName: extracted.testName,
-          labName: extracted.labName,
-          labAddress: extracted.labAddress,
-          orderedBy: extracted.orderedBy,
-          testDate: extracted.testDate,
-          notes: extracted.notes,
-          biomarkers: extracted.biomarkers,
-        },
-        input.dependentId,
-      );
+      result = await labReportRepository.create(input.userId, {
+        fileId: input.fileId,
+        fileUrl: file.downloadUrl ?? undefined,
+        fileMimeType: file.mimeType,
+        testName: extracted.testName,
+        labName: extracted.labName,
+        labAddress: extracted.labAddress,
+        orderedBy: extracted.orderedBy,
+        testDate: extracted.testDate,
+        notes: extracted.notes,
+        biomarkers: extracted.biomarkers,
+      });
     }
 
     // ✅ Index for RAG (fire-and-forget)
     void ragIndexer
-      .indexLabReport(input.userId, input.profileId, result, input.dependentId)
+      .indexLabReport(input.userId, input.profileId, result)
       .catch((err) => console.error("[RAG] Lab report indexing failed:", err));
 
     return result;

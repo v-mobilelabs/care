@@ -8,7 +8,7 @@
  */
 
 import { embed } from "ai";
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { db } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { VectorQuery, VectorQuerySnapshot } from "@google-cloud/firestore";
@@ -27,7 +27,7 @@ import {
 } from "../models/knowledge-base.model";
 
 const embeddingModel = google.embedding("gemini-embedding-001");
-const EMBEDDING_OPTS = { google: { outputDimensionality: 768 } } as const;
+const EMBEDDING_OPTS = { vertex: { outputDimensionality: 768 } } as const;
 
 export interface KBSearchResult {
   entry: KnowledgeBaseDto;

@@ -3,6 +3,7 @@ import {
   type Query,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
+import { randomUUID } from "node:crypto";
 import { db, bucket } from "@/lib/firebase/admin";
 import { stripUndefined } from "@/data/shared/repositories/strip-undefined";
 import type {
@@ -22,8 +23,24 @@ const fileDoc = (profileId: string, fileId: string) =>
   filesCol(profileId).doc(fileId);
 
 /** GCS object path for a file */
-const gcStoragePath = (profileId: string, fileId: string, name: string) =>
-  `profiles/${profileId}/files/${fileId}/${name}`;
+const gcStoragePath = (profileId: string, fileId: string, objectName: string) =>
+  `profiles/${profileId}/files/${fileId}/${objectName}`;
+
+const MIME_EXTENSION_MAP: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+};
+
+function buildStorageObjectName(mimeType: string): string {
+  const extension = MIME_EXTENSION_MAP[mimeType] ?? "bin";
+  return `${randomUUID()}.${extension}`;
+}
 
 /** GCS object path for a thumbnail */
 const gcThumbnailPath = (profileId: string, fileId: string) =>
@@ -50,7 +67,8 @@ export const fileRepository = {
     // 1. Reserve a Firestore doc ID so we can embed it in the storage path.
     const ref = filesCol(profileId).doc();
     const fileId = ref.id;
-    const gcsPath = gcStoragePath(profileId, fileId, data.name);
+    const objectName = buildStorageObjectName(data.mimeType);
+    const gcsPath = gcStoragePath(profileId, fileId, objectName);
 
     // 2. Upload to Cloud Storage.
     const gcsFile = bucket.file(gcsPath);
@@ -233,7 +251,10 @@ export const fileRepository = {
     profileId: string,
     fileId: string,
     data: Partial<
-      Pick<FileDocument, "extractedData" | "label" | "labelConfidence" | "thumbnailPath">
+      Pick<
+        FileDocument,
+        "extractedData" | "label" | "labelConfidence" | "thumbnailPath"
+      >
     >,
   ): Promise<void> {
     await fileDoc(profileId, fileId).update(data as Record<string, unknown>);

@@ -8,7 +8,7 @@ import {
 import { CacheTags } from "@/data/cached";
 
 // GET /api/assessments — list all assessments for the authenticated user
-export const GET = WithContext(async ({ user, dependentId, req }) => {
+export const GET = WithContext(async ({ user, req }) => {
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") ?? undefined;
   const q = url.searchParams.get("q") ?? undefined;
@@ -38,7 +38,7 @@ export const GET = WithContext(async ({ user, dependentId, req }) => {
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? Number(limitParam) : undefined;
 
-  const assessments = await new ListAssessmentsUseCase(dependentId).execute({
+  const assessments = await new ListAssessmentsUseCase().execute({
     userId: user.uid,
     ...(cursor ? { cursor } : {}),
     ...(q ? { q } : {}),
@@ -53,9 +53,9 @@ export const GET = WithContext(async ({ user, dependentId, req }) => {
 });
 
 // POST /api/assessments — create a new assessment
-export const POST = WithContext(async ({ user, req, dependentId }) => {
+export const POST = WithContext(async ({ user, req }) => {
   const body = (await req.json()) as Record<string, unknown>;
-  const assessment = await new CreateAssessmentUseCase(dependentId).execute({
+  const assessment = await new CreateAssessmentUseCase().execute({
     ...body,
     userId: user.uid,
   });

@@ -21,7 +21,6 @@ export class CreatePatientSummaryUseCase extends UseCase<
   PatientSummaryDto
 > {
   constructor(
-    private readonly dependentId?: string,
     private readonly service: PatientSummaryService = patientSummaryService,
   ) {
     super();
@@ -34,6 +33,6 @@ export class CreatePatientSummaryUseCase extends UseCase<
   protected async run(
     input: CreatePatientSummaryInput,
   ): Promise<PatientSummaryDto> {
-    return this.service.create(input, this.dependentId);
+    return this.service.create(input);
   }
 }

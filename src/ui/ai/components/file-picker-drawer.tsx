@@ -311,6 +311,7 @@ export function FilePickerDrawer({ opened, onClose, onConfirm }: Readonly<FilePi
         q: debouncedSearch,
         label: labelFilter,
         limit: 21,
+        enabled: opened,
     });
 
     const { ref: loadMoreRef, entry } = useIntersection({

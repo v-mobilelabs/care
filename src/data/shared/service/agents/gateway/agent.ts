@@ -556,6 +556,17 @@ function buildLoadingHints(
 type GatewayDecisionInput = {
   userQuery: string;
   hasAttachment?: boolean;
+  attachmentMetadata?: Array<{
+    url: string;
+    mediaType: string;
+    fileName?: string;
+  }>;
+  reportHandoff?: {
+    nextSpecialist: string;
+    autoRoute?: boolean;
+    reason?: string;
+    reportLabel?: string;
+  };
   recentMessages?: string[];
   userId: string;
   sessionId?: string;
@@ -585,6 +596,16 @@ export class GatewayAgent {
     const context = this.buildDecisionContext(input);
     console.log(buildRoutingLogPrefix(input));
 
+    // Check for attachment classification first — medical images and lab reports
+    // need intelligent routing based on content analysis
+    if (input.hasAttachment) {
+      const attachmentRoute = await this.resolveAttachmentRoute(context);
+      if (attachmentRoute) return attachmentRoute;
+    }
+
+    const reportHandoffRoute = this.resolveReportHandoff(context);
+    if (reportHandoffRoute) return reportHandoffRoute;
+
     return (
       this.resolveKeywordRoute(context) ??
       this.resolveCachedRoute(context) ??
@@ -600,6 +621,180 @@ export class GatewayAgent {
       thinkingLevel: inferThinkingLevel(input.userQuery, input.hasAttachment),
       needsRag: inferNeedsRag(input.userQuery, input.hasAttachment),
     };
+  }
+
+  /**
+   * Classify attachments and route intelligently.
+   * - Medical images → radiology (for diagnostic reporting)
+   * - Lab reports → specialist inferred from results type
+   * - Other → pass through to normal routing
+   */
+  private async resolveAttachmentRoute(
+    context: DecisionContext,
+  ): Promise<ClinicalRouting | null> {
+    const { attachmentMetadata, userQuery } = context.input;
+
+    // If attachment but no metadata, can't classify — return null to continue normal routing
+    if (!attachmentMetadata || attachmentMetadata.length === 0) return null;
+
+    // Check MIME types for quick classification
+    const isImageAttachment = attachmentMetadata.some((a) =>
+      a.mediaType.startsWith("image/"),
+    );
+
+    if (isImageAttachment) {
+      // Medical images route to radiology for first-pass diagnostic analysis.
+      // Skip RAG here by default to reduce latency and avoid injecting unrelated
+      // patient records into the primary image interpretation.
+      const reasoning =
+        "Image attachment detected — routing to radiology for diagnostic analysis";
+      this.cacheResolvedAgent(context.input.sessionId, "radiology");
+      return this.finishDecision(
+        context,
+        "radiology",
+        reasoning,
+        false,
+        "attachment-image",
+      );
+    }
+
+    // For PDF/documents, try to infer if lab report or other
+    const isPdfAttachment = attachmentMetadata.some(
+      (a) => a.mediaType === "application/pdf",
+    );
+
+    if (isPdfAttachment) {
+      // Check filename and query for lab report indicators
+      const fileName = attachmentMetadata
+        .map((a) => a.fileName?.toLowerCase() ?? "")
+        .join(" ");
+      const isLabReport =
+        fileName.includes("lab") ||
+        fileName.includes("blood") ||
+        fileName.includes("test") ||
+        fileName.includes("result") ||
+        userQuery.toLowerCase().includes("blood test") ||
+        userQuery.toLowerCase().includes("lab result");
+
+      if (isLabReport) {
+        // Use LLM to infer which specialist should analyze these results
+        const specialist = await this.inferLabReportSpecialist(
+          userQuery,
+          context.input.userId,
+        );
+        const reasoning = `Lab report attachment detected — routing to ${specialist} specialist for analysis`;
+        this.cacheResolvedAgent(context.input.sessionId, specialist);
+        return this.finishDecision(
+          context,
+          specialist,
+          reasoning,
+          true,
+          "attachment-lab-report",
+        );
+      }
+    }
+
+    // Couldn't classify — fall through to normal routing
+    return null;
+  }
+
+  private resolveReportHandoff(
+    context: DecisionContext,
+  ): ClinicalRouting | null {
+    const handoff = context.input.reportHandoff;
+    if (!handoff) {
+      console.log("[GatewayAgent] No report handoff found in input");
+      return null;
+    }
+    if (handoff.autoRoute === false) {
+      console.log("[GatewayAgent] Report handoff has autoRoute=false");
+      return null;
+    }
+
+    const parsedAgent = AgentType.safeParse(handoff.nextSpecialist);
+    if (!parsedAgent.success) {
+      console.log(
+        `[GatewayAgent] Invalid specialist: ${handoff.nextSpecialist}`,
+        parsedAgent.error,
+      );
+      return null;
+    }
+
+    const reasonSuffix = handoff.reason ? ` (${handoff.reason})` : "";
+    const labelPrefix =
+      handoff.reportLabel && handoff.reportLabel.trim().length > 0
+        ? `${handoff.reportLabel.trim()} handoff`
+        : "Report handoff";
+    const reasoning = `${labelPrefix} auto-route to ${parsedAgent.data}${reasonSuffix}`;
+
+    console.log(
+      `[GatewayAgent] Routing via report handoff to ${parsedAgent.data}`,
+    );
+
+    this.cacheResolvedAgent(context.input.sessionId, parsedAgent.data);
+    return this.finishDecision(
+      context,
+      parsedAgent.data,
+      reasoning,
+      context.needsRag,
+      "report-handoff",
+    );
+  }
+
+  /**
+   * Infer which specialist should analyze the lab report based on query.
+   * Uses keyword hints to determine the most likely specialty.
+   */
+  private async inferLabReportSpecialist(
+    query: string,
+    _userId: string,
+  ): Promise<AgentType> {
+    const lower = query.toLowerCase();
+
+    // Quick keyword matches for common lab types
+    if (
+      lower.includes("troponin") ||
+      lower.includes("bnp") ||
+      lower.includes("ecg") ||
+      lower.includes("cardiac")
+    ) {
+      return "cardiology";
+    }
+    if (
+      lower.includes("glucose") ||
+      lower.includes("hba1c") ||
+      lower.includes("insulin") ||
+      lower.includes("thyroid") ||
+      lower.includes("tsh")
+    ) {
+      return "endocrinology";
+    }
+    if (
+      lower.includes("hemoglobin") ||
+      lower.includes("wbc") ||
+      lower.includes("platelet") ||
+      lower.includes("cbc")
+    ) {
+      return "generalMedicine"; // or hematology-specialized agent if available
+    }
+    if (
+      lower.includes("kidney") ||
+      lower.includes("creatinine") ||
+      lower.includes("bun")
+    ) {
+      return "nephrology";
+    }
+    if (
+      lower.includes("liver") ||
+      lower.includes("ast") ||
+      lower.includes("alt") ||
+      lower.includes("bilirubin")
+    ) {
+      return "generalMedicine"; // or gastroenterology
+    }
+
+    // Fall back to labReport agent for generic analysis
+    return "labReport";
   }
 
   private resolveKeywordRoute(

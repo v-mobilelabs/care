@@ -1,6 +1,8 @@
 import type { UserKind } from "@/lib/auth/jwt";
 import {
     IconAi,
+    IconArrowForwardUp,
+    IconBrain,
     IconClipboardHeart,
     IconBook2,
     IconCalendarStats,
@@ -162,9 +164,19 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 href: "/patient/assessments",
             },
             {
+                label: "Memories",
+                icon: <IconBrain size={ICON_SIZE} />,
+                href: "/patient/memories",
+            },
+            {
                 label: "Lab Reports",
                 icon: <IconDroplet size={ICON_SIZE} />,
                 href: "/patient/lab-reports",
+            },
+            {
+                label: "Referrals",
+                icon: <IconArrowForwardUp size={ICON_SIZE} />,
+                href: "/patient/referrals",
             },
             {
                 label: "Files",

@@ -49,11 +49,6 @@ export async function revalidateAssessments() {
   updateTag(CacheTags.assessments(uid));
 }
 
-export async function revalidateDependents() {
-  const uid = await requireUserId();
-  updateTag(CacheTags.dependents(uid));
-}
-
 export async function revalidateSessions() {
   const uid = await requireUserId();
   updateTag(CacheTags.sessions(uid));
@@ -62,4 +57,9 @@ export async function revalidateSessions() {
 export async function revalidateVitals() {
   const uid = await requireUserId();
   updateTag(CacheTags.vitals(uid));
+}
+
+export async function revalidateReferrals() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.referrals(uid));
 }

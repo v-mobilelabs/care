@@ -9,9 +9,9 @@ import { CacheTags } from "@/data/cached";
 
 // PATCH /api/medications/[medicationId] — update a medication
 export const PATCH = WithContext<{ medicationId: string }>(
-  async ({ user, req, dependentId }, { medicationId }) => {
+  async ({ user, req }, { medicationId }) => {
     const body = (await req.json()) as unknown;
-    const medication = await new UpdateMedicationUseCase(dependentId).execute({
+    const medication = await new UpdateMedicationUseCase().execute({
       ...(body as object),
       userId: user.uid,
       medicationId,
@@ -23,8 +23,8 @@ export const PATCH = WithContext<{ medicationId: string }>(
 
 // DELETE /api/medications/[medicationId]
 export const DELETE = WithContext<{ medicationId: string }>(
-  async ({ user, dependentId }, { medicationId }) => {
-    await new DeleteMedicationUseCase(dependentId).execute({
+  async ({ user }, { medicationId }) => {
+    await new DeleteMedicationUseCase().execute({
       userId: user.uid,
       medicationId,
     });

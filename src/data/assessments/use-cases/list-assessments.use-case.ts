@@ -13,10 +13,7 @@ export class ListAssessmentsUseCase extends UseCase<
   ListAssessmentsInput,
   PaginatedAssessments
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: AssessmentService = assessmentService,
-  ) {
+  constructor(private readonly service: AssessmentService = assessmentService) {
     super();
   }
 
@@ -27,6 +24,6 @@ export class ListAssessmentsUseCase extends UseCase<
   protected async run(
     input: ListAssessmentsInput,
   ): Promise<PaginatedAssessments> {
-    return this.service.list(input, this.dependentId);
+    return this.service.list(input);
   }
 }

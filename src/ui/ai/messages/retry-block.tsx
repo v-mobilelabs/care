@@ -46,6 +46,38 @@ export function RetryBlock({ error, onRetry }: Readonly<{ error?: Error | null; 
         );
     }
 
+    if (code === "RATE_LIMITED") {
+        return (
+            <Group align="flex-start" gap="xs" wrap="nowrap">
+                <Avatar size={28} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 2 }}>
+                    <IconHeartbeat size={16} />
+                </Avatar>
+                <Stack gap={6}>
+                    <Alert
+                        icon={<IconAlertCircle size={16} />}
+                        color="orange"
+                        radius="md"
+                        variant="light"
+                        title="AI is busy right now"
+                        style={{ flex: 1 }}
+                    >
+                        <Text size="sm">{message}</Text>
+                    </Alert>
+                    <Button
+                        variant="default"
+                        size="xs"
+                        radius="xl"
+                        leftSection={<IconRefresh size={13} />}
+                        onClick={onRetry}
+                        style={{ alignSelf: "flex-start", fontWeight: 500 }}
+                    >
+                        Try again
+                    </Button>
+                </Stack>
+            </Group>
+        );
+    }
+
     return (
         <Group align="flex-start" gap="xs" wrap="nowrap">
             <Avatar size={28} radius="xl" color="primary" variant="light" style={{ flexShrink: 0, marginTop: 2 }}>

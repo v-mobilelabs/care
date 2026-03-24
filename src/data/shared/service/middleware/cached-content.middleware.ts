@@ -23,7 +23,7 @@ import {
 // ── Strip middleware ──────────────────────────────────────────────────────────
 
 /**
- * When `providerOptions.google.cachedContent` is present, strips system
+ * When `providerOptions.vertex.cachedContent` is present, strips system
  * messages, tools, and toolChoice from the request so the Google API
  * accepts it alongside the cached content resource.
  */
@@ -31,10 +31,13 @@ export const cachedContentMiddleware: LanguageModelMiddleware = {
   specificationVersion: "v3" as const,
 
   transformParams: async ({ params }) => {
+    const vertexOpts = params.providerOptions?.vertex as
+      | Record<string, unknown>
+      | undefined;
     const googleOpts = params.providerOptions?.google as
       | Record<string, unknown>
       | undefined;
-    if (!googleOpts?.cachedContent) return params;
+    if (!vertexOpts?.cachedContent && !googleOpts?.cachedContent) return params;
 
     return {
       ...params,

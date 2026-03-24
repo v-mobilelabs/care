@@ -35,7 +35,6 @@ import {
     IconSun,
     IconTrash,
     IconUser,
-    IconUsers,
     IconVideo,
     IconX,
 } from "@tabler/icons-react";
@@ -153,12 +152,6 @@ const ACCOUNT_APPS: AppDef[] = [
         label: "Insurance",
         href: "/chat/insurance",
         match: (p) => p.startsWith("/chat/insurance"),
-    },
-    {
-        icon: <IconUsers size={ICON_SIZE} style={{ color: APP_ICON_COLOR }} stroke={1.5} />,
-        label: "Family",
-        href: "/chat/family-members",
-        match: (p) => p.startsWith("/chat/family-members"),
     },
     {
         icon: <IconGauge size={ICON_SIZE} style={{ color: APP_ICON_COLOR }} stroke={1.5} />,

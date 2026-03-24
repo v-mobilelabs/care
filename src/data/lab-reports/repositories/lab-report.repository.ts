@@ -12,14 +12,10 @@ import {
 
 // ── Collection helpers ────────────────────────────────────────────────────────
 
-const labReportsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "blood-tests");
+const labReportsCol = (userId: string) => scopedCol(userId, "blood-tests");
 
-const labReportDoc = (
-  userId: string,
-  labReportId: string,
-  dependentId?: string,
-) => labReportsCol(userId, dependentId).doc(labReportId);
+const labReportDoc = (userId: string, labReportId: string) =>
+  labReportsCol(userId).doc(labReportId);
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -27,11 +23,10 @@ export const labReportRepository = {
   async create(
     userId: string,
     data: Omit<LabReportDocument, "userId" | "createdAt">,
-    dependentId?: string,
   ): Promise<LabReportDto> {
     const now = Timestamp.now();
     const doc: LabReportDocument = { userId, ...data, createdAt: now };
-    const ref = labReportsCol(userId, dependentId).doc();
+    const ref = labReportsCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toLabReportDto(ref.id, doc);
   },
@@ -39,9 +34,8 @@ export const labReportRepository = {
   async findByFileId(
     userId: string,
     fileId: string,
-    dependentId?: string,
   ): Promise<LabReportDto | null> {
-    const snap = await labReportsCol(userId, dependentId)
+    const snap = await labReportsCol(userId)
       .where("fileId", "==", fileId)
       .limit(1)
       .get();
@@ -54,10 +48,9 @@ export const labReportRepository = {
     userId: string,
     labReportId: string,
     data: Omit<LabReportDocument, "userId" | "fileId" | "createdAt">,
-    dependentId?: string,
   ): Promise<LabReportDto> {
     const now = Timestamp.now();
-    const ref = labReportDoc(userId, labReportId, dependentId);
+    const ref = labReportDoc(userId, labReportId);
     await ref.update({ ...data, updatedAt: now });
     const snap = await ref.get();
     return toLabReportDto(snap.id, snap.data() as LabReportDocument);
@@ -66,19 +59,14 @@ export const labReportRepository = {
   async findById(
     userId: string,
     labReportId: string,
-    dependentId?: string,
   ): Promise<LabReportDto | null> {
-    const snap = await labReportDoc(userId, labReportId, dependentId).get();
+    const snap = await labReportDoc(userId, labReportId).get();
     if (!snap.exists) return null;
     return toLabReportDto(snap.id, snap.data() as LabReportDocument);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<LabReportDto[]> {
-    const snap = await labReportsCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<LabReportDto[]> {
+    const snap = await labReportsCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -91,19 +79,14 @@ export const labReportRepository = {
     userId: string,
     labReportId: string,
     sessionId: string,
-    dependentId?: string,
   ): Promise<LabReportDto> {
-    const ref = labReportDoc(userId, labReportId, dependentId);
+    const ref = labReportDoc(userId, labReportId);
     await ref.update({ sessionId });
     const snap = await ref.get();
     return toLabReportDto(snap.id, snap.data() as LabReportDocument);
   },
 
-  async delete(
-    userId: string,
-    labReportId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await labReportDoc(userId, labReportId, dependentId).delete();
+  async delete(userId: string, labReportId: string): Promise<void> {
+    await labReportDoc(userId, labReportId).delete();
   },
 };

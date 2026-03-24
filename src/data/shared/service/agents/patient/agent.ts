@@ -13,10 +13,7 @@ export const patientAgent = createAgent({
   buildSystemPrompt: () => buildPatientPrompt(),
   buildTools: (options) => ({
     getPatient: createGetPatientTool(options.userId),
-    getMedications: createGetMedicationsTool(
-      options.userId,
-      options.dependentId,
-    ),
+    getMedications: createGetMedicationsTool(options.userId),
     askQuestion: askQuestionTool,
     logVital: logVitalTool,
     startAssessment: startAssessmentTool,

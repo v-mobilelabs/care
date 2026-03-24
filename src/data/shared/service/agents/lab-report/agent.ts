@@ -16,7 +16,6 @@ export const labReportChatAgent = createAgent({
     fetchLabReports: createFetchLabReportsTool(
       options.userId,
       options.profileId,
-      options.dependentId,
     ),
     submitLabReportAnalysis: createSubmitLabReportAnalysisTool(),
     askQuestion: askQuestionTool,

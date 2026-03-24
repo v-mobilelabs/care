@@ -7,15 +7,11 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class ListVitalsUseCase extends UseCase<ListVitalsInput, VitalDto[]> {
-  constructor(private readonly dependentId?: string) {
-    super();
-  }
-
   static validate(input: unknown): ListVitalsInput {
     return ListVitalsSchema.parse(input);
   }
 
   protected async run(input: ListVitalsInput): Promise<VitalDto[]> {
-    return vitalRepository.list(input.userId, input.limit, this.dependentId);
+    return vitalRepository.list(input.userId, input.limit);
   }
 }

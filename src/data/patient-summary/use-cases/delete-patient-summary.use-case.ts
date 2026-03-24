@@ -15,7 +15,6 @@ export class DeletePatientSummaryUseCase extends UseCase<
   void
 > {
   constructor(
-    private readonly dependentId?: string,
     private readonly service: PatientSummaryService = patientSummaryService,
   ) {
     super();
@@ -26,6 +25,6 @@ export class DeletePatientSummaryUseCase extends UseCase<
   }
 
   protected async run(input: DeletePatientSummaryInput): Promise<void> {
-    await this.service.delete(input, this.dependentId);
+    await this.service.delete(input);
   }
 }

@@ -7,9 +7,8 @@ import type { CollectionReference } from "firebase-admin/firestore";
  * All health data lives directly under the top-level `profiles` collection:
  *   `profiles/{profileId}/{collection}`
  *
- * `profileId` is the Firebase Auth UID of the profile — for the owner's own
- * data it equals `user.uid`; for a dependent it equals the dependent's UID.
- * Callers can derive it as `dependentId ?? userId`.
+ * `profileId` is the Firebase Auth UID of the profile — for patient portal
+ * flows this is the authenticated user's own UID.
  */
 export function scopedCol(
   profileId: string,

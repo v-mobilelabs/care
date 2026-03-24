@@ -18,8 +18,10 @@
  *  5. Delegates to a fresh ToolLoopAgent for the actual LLM streaming loop
  */
 
-import { google } from "@ai-sdk/google";
-import type { GoogleLanguageModelOptions } from "@ai-sdk/google";
+import {
+  google,
+  type VertexLanguageModelOptions,
+} from "@/data/shared/service/vertex-provider";
 import {
   ToolLoopAgent,
   stepCountIs,
@@ -49,6 +51,8 @@ import { preContextMiddleware } from "@/data/shared/service/middleware/pre-conte
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
 import { actionCard } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
+import { submitReportTool } from "@/data/shared/service/agents/base/tools/submit-report.tool";
+import { submitReferralRequestTool } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
 import { GetProfileUseCase, type ProfileDto } from "@/data/profile";
 
 // ── Prune helper ──────────────────────────────────────────────────────────────
@@ -139,10 +143,8 @@ function buildProfileContext(profile: ProfileDto): string {
 export interface AgentCallOptions {
   /** The authenticated user's UID */
   userId: string;
-  /** Active profile ID (primary patient or dependent) */
+  /** Active profile ID (self profile in patient portal) */
   profileId: string;
-  /** Dependent patient ID — undefined for the primary user */
-  dependentId?: string;
   /** Latest user message text — used as the semantic search query for RAG */
   userQuery: string;
   /** Current chat session ID */
@@ -176,9 +178,9 @@ export interface AgentConfig {
   model?: LanguageModel;
   /** Model ID string for context cache key. Default: "gemini-3.1-pro-preview". */
   modelId?: string;
-  /** Fast LLM model for low-thinking queries. Default: gemini-3-flash-preview. */
+  /** Fast LLM model for low-thinking queries. Default: gemini-3.1-flash-lite-preview. */
   fastModel?: LanguageModel;
-  /** Fast model ID for context cache key. Default: "gemini-3-flash-preview". */
+  /** Fast model ID for context cache key. Default: "gemini-3.1-flash-lite-preview". */
   fastModelId?: string;
   /** Whether to enable thinking mode. Default: true. */
   useThinking?: boolean;
@@ -188,6 +190,8 @@ export interface AgentConfig {
   temperature?: number;
   /** Maximum output tokens per LLM call. Default: 65536. */
   maxOutputTokens?: number;
+  /** Whether to inject global actionCard tool. Default: true. */
+  allowActionCard?: boolean;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -214,12 +218,13 @@ export function createAgent(
     buildDynamicContext,
     model = google("gemini-3.1-pro-preview"),
     modelId = "gemini-3.1-pro-preview",
-    fastModel = google("gemini-3-flash-preview"),
-    fastModelId = "gemini-3-flash-preview",
+    fastModel = google("gemini-3.1-flash-lite-preview"),
+    fastModelId = "gemini-3.1-flash-lite-preview",
     useThinking = true,
     maxSteps = 10,
     temperature,
     maxOutputTokens = 65536,
+    allowActionCard = true,
   } = config;
 
   const agent: Agent<AgentCallOptions, ToolSet> = {
@@ -237,7 +242,9 @@ export function createAgent(
         sessionId: "",
       } as AgentCallOptions),
       memory: createMemoryTool("", "", ""),
-      actionCard,
+      ...(allowActionCard ? { actionCard } : {}),
+      submitReport: submitReportTool,
+      submitReferralRequest: submitReferralRequestTool,
     },
 
     async generate(
@@ -298,7 +305,9 @@ export function createAgent(
             options.profileId,
             options.sessionId,
           ),
-          actionCard,
+          ...(allowActionCard ? { actionCard } : {}),
+          submitReport: submitReportTool,
+          submitReferralRequest: submitReferralRequestTool,
         } as ToolSet),
         new GetProfileUseCase()
           .execute({ userId: options.profileId })
@@ -338,9 +347,16 @@ export function createAgent(
           `[${id}] Thinking level: ${thinkingLevel}${useFast ? ` (using ${activeModelId})` : ""}`,
         );
 
-      const googleOptions: GoogleLanguageModelOptions = {
-        ...(thinkingLevel && {
-          thinkingConfig: { thinkingLevel, includeThoughts: true },
+      const vertexThinkingLevel =
+        thinkingLevel === "low" ||
+        thinkingLevel === "medium" ||
+        thinkingLevel === "high"
+          ? thinkingLevel
+          : undefined;
+
+      const vertexOptions: VertexLanguageModelOptions = {
+        ...(vertexThinkingLevel && {
+          thinkingConfig: { thinkingLevel: vertexThinkingLevel },
         }),
         ...(cacheName && { cachedContent: cacheName }),
       };
@@ -390,8 +406,8 @@ export function createAgent(
         ...(maxOutputTokens !== undefined && { maxOutputTokens }),
         stopWhen: stepCountIs(maxSteps),
         providerOptions:
-          Object.keys(googleOptions).length > 0
-            ? { google: googleOptions satisfies GoogleLanguageModelOptions }
+          Object.keys(vertexOptions).length > 0
+            ? { vertex: vertexOptions }
             : undefined,
         prepareStep: ({ messages }) => ({
           messages: pruneKeepingToolCallReasoning(messages),

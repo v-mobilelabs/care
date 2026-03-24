@@ -12,7 +12,7 @@
  */
 
 import { embed, embedMany } from "ai";
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { db } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { rerankingService } from "./reranking.service";
@@ -24,7 +24,7 @@ import type { DocumentChunk, SearchResult, SearchOptions } from "./rag.types";
 // ── Embedding Model ───────────────────────────────────────────────────────────
 // gemini-embedding-001 defaults to 3072 dims; truncate to 768 to match Firestore index.
 const embeddingModel = google.embedding("gemini-embedding-001");
-const EMBEDDING_OPTS = { google: { outputDimensionality: 768 } } as const;
+const EMBEDDING_OPTS = { vertex: { outputDimensionality: 768 } } as const;
 
 // ── Firestore Collection ──────────────────────────────────────────────────────
 
@@ -58,7 +58,6 @@ export class RAGService {
   async indexDocument(params: {
     userId: string;
     profileId: string;
-    dependentId?: string;
     type: DocumentChunk["type"];
     sourceId: string;
     content: string;
@@ -81,9 +80,6 @@ export class RAGService {
         id: docRef.id,
         userId: params.userId,
         profileId: params.profileId,
-        ...(params.dependentId !== undefined && {
-          dependentId: params.dependentId,
-        }),
         type: params.type,
         sourceId: params.sourceId,
         content: chunks[i],
@@ -156,10 +152,6 @@ export class RAGService {
       options.userId,
     );
 
-    if (options.dependentId) {
-      baseQuery = baseQuery.where("dependentId", "==", options.dependentId);
-    }
-
     if (options.types && options.types.length > 0) {
       baseQuery = baseQuery.where("type", "in", options.types);
     }
@@ -174,7 +166,7 @@ export class RAGService {
     const minScore = options.minScore ?? (rerank ? 0.4 : 0.5);
 
     // 3. Try native vector search (firebase-admin >= 12.6.0)
-    // Uses composite vector indexes: userId+type+embedding and userId+dependentId+type+embedding
+    // Uses composite vector indexes: userId+type+embedding
     // so Firestore handles filtering server-side.
     try {
       const vectorQuery = (baseQuery as any).findNearest(

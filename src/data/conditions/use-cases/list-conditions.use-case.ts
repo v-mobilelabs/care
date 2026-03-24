@@ -13,10 +13,7 @@ export class ListConditionsUseCase extends UseCase<
   ListConditionsInput,
   ConditionDto[]
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: ConditionService = conditionService,
-  ) {
+  constructor(private readonly service: ConditionService = conditionService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class ListConditionsUseCase extends UseCase<
   }
 
   protected async run(input: ListConditionsInput): Promise<ConditionDto[]> {
-    return this.service.list(input, this.dependentId);
+    return this.service.list(input);
   }
 }

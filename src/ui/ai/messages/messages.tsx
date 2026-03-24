@@ -16,7 +16,7 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
         messages, messageTimestamps, messageUsage, messageAgentTypes,
         isLoading, chatStatus,
         userPhotoURL, userInitials, answeredIds, editingId, editingText,
-        phraseIdx, phraseFading, loadingHints, agentType, onAnswer, onApproval,
+        phraseIdx, phraseFading, loadingHints, agentType, sessionId, onSendReferralMessage, onAnswer, onApproval,
         onEditStart, onEditChange, onEditKeyDown, onEditCancel, onEditSubmit,
         onLearnMore, error, onRetry, preparingLabel, hasNextPage,
         isFetchingNextPage, onLoadMore, isNewMessage,
@@ -54,6 +54,8 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
                     onEditCancel={onEditCancel}
                     onEditSubmit={onEditSubmit}
                     onLearnMore={onLearnMore}
+                    sessionId={sessionId}
+                    onSendReferralMessage={onSendReferralMessage}
                 />
             ))}
 

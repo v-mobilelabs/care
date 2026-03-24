@@ -14,12 +14,9 @@ const tracer = trace.getTracer("careai.api");
 export interface ApiContext {
   user: SessionPayload;
   req: NextRequest;
-  /** Raw dependent ID from the X-Dependent-Id header. Undefined for the user's own profile. */
-  dependentId?: string;
   /**
-   * Resolved profile ID used as the Firestore path segment:
-   *   profiles/{profileId}/sessions/…
-   * Equals `dependentId` when viewing a dependent, or `user.uid` for self.
+   * Resolved profile ID used as the Firestore path segment.
+   * Dependent flow removed — always equals `user.uid`.
    */
   profileId: string;
 }
@@ -231,19 +228,14 @@ function makeRouteHandler<
           }
         }
 
-        // ── 1c. Extract optional dependent header ─────────────────────────────────
-        const dependentId = req.headers.get("x-dependent-id") ?? undefined;
-        const profileId = dependentId ?? user.uid;
-
-        if (dependentId) {
-          span.setAttribute("profile.dependent_id", dependentId);
-        }
+        // ── 1c. Dependent flow removed: always use self profile ───────────────────
+        const profileId = user.uid;
         span.setAttribute("profile.id", profileId);
 
         // ── 2. Invoke handler ─────────────────────────────────────────────────────
         try {
           const response = await handler(
-            { user, req, dependentId, profileId },
+            { user, req, profileId },
             resolvedParams,
           );
 

@@ -4,7 +4,6 @@ import { IconGauge } from "@tabler/icons-react";
 
 import { CreditsCard } from "./_credits-card";
 import { StorageCard } from "./_storage-card";
-import { ProfilesCard } from "./_profiles-card";
 import { CallsCard } from "./_calls-card";
 import { UsageKpiCard } from "./_kpi-card";
 
@@ -26,7 +25,6 @@ export function UsageContent() {
                     <UsageKpiCard />
                     <CreditsCard />
                     <StorageCard />
-                    <ProfilesCard />
                     <CallsCard />
                 </SimpleGrid>
             </Stack>

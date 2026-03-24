@@ -13,10 +13,7 @@ export class GetBloodTestUseCase extends UseCase<
   BloodTestRefInput,
   BloodTestDto | null
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: BloodTestService = bloodTestService,
-  ) {
+  constructor(private readonly service: BloodTestService = bloodTestService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class GetBloodTestUseCase extends UseCase<
   }
 
   protected async run(input: BloodTestRefInput): Promise<BloodTestDto | null> {
-    return this.service.getById(input, this.dependentId);
+    return this.service.getById(input);
   }
 }

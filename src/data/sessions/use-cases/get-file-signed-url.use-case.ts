@@ -8,7 +8,6 @@ import { fileRepository } from "@/data/sessions/repositories/file.repository";
 const GetFileSignedUrlInputSchema = z.object({
   userId: z.string().min(1),
   profileId: z.string().min(1),
-  dependentId: z.string().optional(),
   fileId: z.string().min(1),
 });
 

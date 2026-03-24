@@ -13,7 +13,6 @@ export class DeletePrescriptionUseCase extends UseCase<
   void
 > {
   constructor(
-    private readonly dependentId?: string,
     private readonly service: PrescriptionService = prescriptionService,
   ) {
     super();
@@ -24,6 +23,6 @@ export class DeletePrescriptionUseCase extends UseCase<
   }
 
   protected async run(input: PrescriptionRefInput): Promise<void> {
-    return this.service.delete(input, this.dependentId);
+    return this.service.delete(input);
   }
 }

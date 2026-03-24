@@ -4,8 +4,8 @@ import { DeleteDietPlanUseCase } from "@/data/diet-plans";
 
 // DELETE /api/diet-plans/[planId]
 export const DELETE = WithContext<{ planId: string }>(
-  async ({ user, dependentId }, { planId }) => {
-    await new DeleteDietPlanUseCase(dependentId).execute({
+  async ({ user }, { planId }) => {
+    await new DeleteDietPlanUseCase().execute({
       userId: user.uid,
       planId,
     });

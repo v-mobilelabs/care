@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { generateText, Output, NoObjectGeneratedError } from "ai";
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 

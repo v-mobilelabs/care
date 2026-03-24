@@ -8,11 +8,8 @@ import type {
 } from "../models/medication.model";
 
 export class MedicationService {
-  async create(
-    input: CreateMedicationInput,
-    dependentId?: string,
-  ): Promise<MedicationDto> {
-    return medicationRepository.create(input.userId, dependentId, {
+  async create(input: CreateMedicationInput): Promise<MedicationDto> {
+    return medicationRepository.create(input.userId, {
       sessionId: input.sessionId,
       prescriptionId: input.prescriptionId,
       name: input.name,
@@ -26,30 +23,17 @@ export class MedicationService {
     });
   }
 
-  async list(
-    input: ListMedicationsInput,
-    dependentId?: string,
-  ): Promise<MedicationDto[]> {
-    return medicationRepository.list(input.userId, input.limit, dependentId);
+  async list(input: ListMedicationsInput): Promise<MedicationDto[]> {
+    return medicationRepository.list(input.userId, input.limit);
   }
 
-  async update(
-    input: UpdateMedicationInput,
-    dependentId?: string,
-  ): Promise<MedicationDto> {
+  async update(input: UpdateMedicationInput): Promise<MedicationDto> {
     const { userId, medicationId, ...rest } = input;
-    return medicationRepository.update(userId, medicationId, rest, dependentId);
+    return medicationRepository.update(userId, medicationId, rest);
   }
 
-  async delete(
-    input: DeleteMedicationInput,
-    dependentId?: string,
-  ): Promise<void> {
-    await medicationRepository.delete(
-      input.userId,
-      input.medicationId,
-      dependentId,
-    );
+  async delete(input: DeleteMedicationInput): Promise<void> {
+    await medicationRepository.delete(input.userId, input.medicationId);
   }
 }
 

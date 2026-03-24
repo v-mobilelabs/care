@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { generateText } from "ai";
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 import { aiService } from "@/data/shared/service/ai.service";
@@ -64,7 +64,7 @@ export class LookupClinicUseCase extends UseCase<
 
     const { text } = await generateText({
       model: aiService.forUser(input.userId).fast,
-      tools: { googleSearch: google.tools.googleSearch({}) },
+      tools: { googleSearch: google.tools.googleSearch({}) as any },
       system: systemPrompt,
       prompt: userPrompt,
     });

@@ -12,10 +12,7 @@ export class DeleteConditionUseCase extends UseCase<
   DeleteConditionInput,
   void
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: ConditionService = conditionService,
-  ) {
+  constructor(private readonly service: ConditionService = conditionService) {
     super();
   }
 
@@ -24,6 +21,6 @@ export class DeleteConditionUseCase extends UseCase<
   }
 
   protected async run(input: DeleteConditionInput): Promise<void> {
-    await this.service.delete(input, this.dependentId);
+    await this.service.delete(input);
   }
 }

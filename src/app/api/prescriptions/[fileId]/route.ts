@@ -21,12 +21,11 @@ export const GET = WithContext<{ fileId: string }>(
 // DELETE /api/prescriptions/[fileId]
 // The param doubles as a prescriptionId for delete operations.
 export const DELETE = WithContext<{ fileId: string }>(
-  async ({ user, profileId, dependentId }, { fileId: prescriptionId }) => {
+  async ({ user, profileId }, { fileId: prescriptionId }) => {
     // Look up the prescription to find its backing file (if any)
     const prescription = await prescriptionRepository.findById(
       user.uid,
       prescriptionId,
-      dependentId,
     );
     if (!prescription) throw ApiError.notFound("Prescription not found.");
 
@@ -41,7 +40,7 @@ export const DELETE = WithContext<{ fileId: string }>(
 
     // Delete prescription doc + remove from RAG index
     await Promise.all([
-      new DeletePrescriptionUseCase(dependentId).execute({
+      new DeletePrescriptionUseCase().execute({
         userId: user.uid,
         prescriptionId,
       }),
@@ -62,14 +61,13 @@ export const DELETE = WithContext<{ fileId: string }>(
 
 // PATCH /api/prescriptions/[fileId] — link a chat session ID
 export const PATCH = WithContext<{ fileId: string }>(
-  async ({ user, dependentId, req }, { fileId }) => {
+  async ({ user, req }, { fileId }) => {
     const body = (await req.json().catch(() => ({}))) as { sessionId?: string };
     if (!body.sessionId) throw ApiError.badRequest("sessionId is required.");
     const updated = await prescriptionRepository.patchSessionId(
       user.uid,
       fileId,
       body.sessionId,
-      dependentId,
     );
     return NextResponse.json(updated);
   },

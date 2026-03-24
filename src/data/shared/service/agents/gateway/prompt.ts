@@ -105,20 +105,27 @@ const BASE_PROMPT_SECTIONS = [
 ] as const;
 
 const OUTPUT_FORMAT_SECTION = [
-  "## OUTPUT FORMAT",
+  "## DECISION",
   "",
-  "Return a structured decision with:",
-  "- **agent**: The chosen agent type (triageNurse | generalMedicine | neurology | cardiology | mentalHealth | dermatology | pediatrics | womensHealth | orthopedics | gastroenterology | endocrinology | urology | radiology | dentistry | nutrition | immunology | ent | ophthalmology | nephrology | dietPlanner | prescription | labReport | patient)",
-  "- **reasoning**: Why you chose this agent (1-2 sentences)",
-  "- Prefer any clear specialist or **generalMedicine** over **triageNurse**.",
-  "- Choose **triageNurse** only if the request is too vague to route safely.",
+  "Return ONLY the agent name — nothing else.",
+  "Prefer any specialist or **generalMedicine** over **triageNurse**.",
+  "Use **triageNurse** only if impossible to route safely.",
 ] as const;
 
 function buildAttachmentSection(hasAttachment?: boolean): string[] {
   if (!hasAttachment) return [];
   return [
-    "📎 **Attachments Present**: User uploaded files (likely lab reports or images)",
-    "   → Lean toward **generalMedicine** unless clear specialist intent",
+    "📎 **Attachments Present**: User uploaded files (medical images or lab reports)",
+    "   **Attachment Routing Logic:**",
+    "   - Medical images (X-Ray, CT, ultrasound, DICOM) → **radiology** (for diagnostic report)",
+    "   - Lab reports (blood tests, pathology) → Route to specialist based on result type:",
+    "     • Cardiac markers, BNP, ECG → **cardiology**",
+    "     • Glucose, HbA1c, TSH, thyroid → **endocrinology**",
+    "     • CBC, WBC abnormalities → **generalMedicine**",
+    "     • Kidney function (creatinine, BUN) → **nephrology**",
+    "     • Liver enzymes (AST, ALT, bilirubin) → **generalMedicine** or specialist",
+    "     • Generic lab results → **labReport** agent for detailed analysis",
+    "   - Other documents → Route based on content and user query",
     "",
   ];
 }

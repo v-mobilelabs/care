@@ -6,7 +6,6 @@ import {
     IconLogout,
     IconPlus,
     IconUser,
-    IconUsersGroup,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -93,7 +92,6 @@ export function ChatHeader() {
                             </Menu.Label>
                             <Menu.Divider />
                             <Menu.Item leftSection={<IconUser size={16} />} onClick={() => router.push("/profile")}>Profile</Menu.Item>
-                            <Menu.Item leftSection={<IconUsersGroup size={16} />} onClick={() => router.push("/chat/family-members")}>Family</Menu.Item>
                             <Menu.Divider />
                             <Menu.Item leftSection={<IconGauge size={16} />} onClick={() => router.push("/patient/usage")}>Usage</Menu.Item>
                             <Menu.Divider />

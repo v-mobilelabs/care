@@ -88,46 +88,35 @@ function mapAssessmentBase(input: CreateAssessmentInput) {
   };
 }
 
-async function findExistingAssessment(
-  input: CreateAssessmentInput,
-  dependentId?: string,
-) {
+async function findExistingAssessment(input: CreateAssessmentInput) {
   if (input.runId) {
     return assessmentRepository.findBySessionAndRunId(
       input.userId,
       input.sessionId,
       input.runId,
-      dependentId,
     );
   }
 
   return assessmentRepository.findLatestBySession(
     input.userId,
     input.sessionId,
-    dependentId,
   );
 }
 
 async function createAssessment(
   input: CreateAssessmentInput,
-  dependentId?: string,
 ): Promise<AssessmentDto> {
-  return assessmentRepository.create(
-    input.userId,
-    {
-      sessionId: input.sessionId,
-      runId: input.runId,
-      ...mapAssessmentBase(input),
-      qa: dedupeQa(input.qa ?? []),
-    },
-    dependentId,
-  );
+  return assessmentRepository.create(input.userId, {
+    sessionId: input.sessionId,
+    runId: input.runId,
+    ...mapAssessmentBase(input),
+    qa: dedupeQa(input.qa ?? []),
+  });
 }
 
 async function updateAssessment(
   existing: AssessmentDto,
   input: CreateAssessmentInput,
-  dependentId?: string,
 ): Promise<AssessmentDto> {
   const mergedGuidelines = dedupeGuidelines([
     ...(existing.guidelinesFollowed ?? []),
@@ -141,19 +130,14 @@ async function updateAssessment(
     ...(input.actionCards ?? []),
   ]);
 
-  return assessmentRepository.update(
-    input.userId,
-    existing.id,
-    {
-      ...mapAssessmentBase(input),
-      guideline: input.guideline ?? existing.guideline,
-      guidelinesFollowed: mergedGuidelines,
-      specialtyAgent: input.specialtyAgent ?? existing.specialtyAgent,
-      actionCards: mergedActionCards,
-      qa: dedupeQa([...(existing.qa ?? []), ...(input.qa ?? [])]),
-    },
-    dependentId,
-  );
+  return assessmentRepository.update(input.userId, existing.id, {
+    ...mapAssessmentBase(input),
+    guideline: input.guideline ?? existing.guideline,
+    guidelinesFollowed: mergedGuidelines,
+    specialtyAgent: input.specialtyAgent ?? existing.specialtyAgent,
+    actionCards: mergedActionCards,
+    qa: dedupeQa([...(existing.qa ?? []), ...(input.qa ?? [])]),
+  });
 }
 
 export class AssessmentService {
@@ -166,41 +150,26 @@ export class AssessmentService {
    */
   async upsertBySessionRun(
     input: CreateAssessmentInput,
-    dependentId?: string,
   ): Promise<AssessmentDto> {
-    const existing = await findExistingAssessment(input, dependentId);
+    const existing = await findExistingAssessment(input);
 
     if (existing) {
-      return updateAssessment(existing, input, dependentId);
+      return updateAssessment(existing, input);
     }
 
-    return createAssessment(input, dependentId);
+    return createAssessment(input);
   }
 
-  async getById(
-    input: AssessmentRefInput,
-    dependentId?: string,
-  ): Promise<AssessmentDto | null> {
-    return assessmentRepository.findById(
-      input.userId,
-      input.assessmentId,
-      dependentId,
-    );
+  async getById(input: AssessmentRefInput): Promise<AssessmentDto | null> {
+    return assessmentRepository.findById(input.userId, input.assessmentId);
   }
 
-  async list(
-    input: ListAssessmentsInput,
-    dependentId?: string,
-  ): Promise<PaginatedAssessments> {
-    return assessmentRepository.listPaginated(input.userId, input, dependentId);
+  async list(input: ListAssessmentsInput): Promise<PaginatedAssessments> {
+    return assessmentRepository.listPaginated(input.userId, input);
   }
 
-  async delete(input: AssessmentRefInput, dependentId?: string): Promise<void> {
-    await assessmentRepository.delete(
-      input.userId,
-      input.assessmentId,
-      dependentId,
-    );
+  async delete(input: AssessmentRefInput): Promise<void> {
+    await assessmentRepository.delete(input.userId, input.assessmentId);
   }
 }
 

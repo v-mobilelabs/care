@@ -27,10 +27,7 @@ export class CreateAssessmentUseCase extends UseCase<
   CreateAssessmentInput,
   AssessmentDto
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: AssessmentService = assessmentService,
-  ) {
+  constructor(private readonly service: AssessmentService = assessmentService) {
     super();
   }
 
@@ -39,6 +36,6 @@ export class CreateAssessmentUseCase extends UseCase<
   }
 
   protected async run(input: CreateAssessmentInput): Promise<AssessmentDto> {
-    return this.service.upsertBySessionRun(input, this.dependentId);
+    return this.service.upsertBySessionRun(input);
   }
 }

@@ -8,17 +8,17 @@ import {
 import { CacheTags } from "@/data/cached";
 
 // GET /api/medications — list all medications for the authenticated user
-export const GET = WithContext(async ({ user, dependentId }) => {
-  const medications = await new ListMedicationsUseCase(dependentId).execute({
+export const GET = WithContext(async ({ user }) => {
+  const medications = await new ListMedicationsUseCase().execute({
     userId: user.uid,
   });
   return NextResponse.json(medications);
 });
 
 // POST /api/medications — add a new medication
-export const POST = WithContext(async ({ user, req, dependentId }) => {
+export const POST = WithContext(async ({ user, req }) => {
   const body = (await req.json()) as unknown;
-  const medication = await new CreateMedicationUseCase(dependentId).execute({
+  const medication = await new CreateMedicationUseCase().execute({
     ...(body as object),
     userId: user.uid,
   });

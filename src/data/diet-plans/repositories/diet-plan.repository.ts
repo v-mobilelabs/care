@@ -12,8 +12,7 @@ import {
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
-const dietPlansCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "diet-plans");
+const dietPlansCol = (userId: string) => scopedCol(userId, "diet-plans");
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -21,11 +20,10 @@ export const dietPlanRepository = {
   async create(
     userId: string,
     data: Omit<DietPlanDocument, "userId" | "createdAt">,
-    dependentId?: string,
   ): Promise<DietPlanDto> {
     const now = Timestamp.now();
     const doc: DietPlanDocument = { userId, ...data, createdAt: now };
-    const ref = dietPlansCol(userId, dependentId).doc();
+    const ref = dietPlansCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toDietPlanDto(ref.id, doc);
   },
@@ -34,9 +32,8 @@ export const dietPlanRepository = {
     userId: string,
     planId: string,
     data: Partial<Omit<DietPlanDocument, "userId" | "createdAt">>,
-    dependentId?: string,
   ): Promise<DietPlanDto> {
-    const ref = dietPlansCol(userId, dependentId).doc(planId);
+    const ref = dietPlansCol(userId).doc(planId);
     const cleanData = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== undefined),
     );
@@ -49,17 +46,15 @@ export const dietPlanRepository = {
     userId: string,
     sessionId: string,
     data: Omit<DietPlanDocument, "userId" | "createdAt" | "sessionId">,
-    dependentId?: string,
   ): Promise<DietPlanDto> {
-    const existing = await dietPlansCol(userId, dependentId)
+    const existing = await dietPlansCol(userId)
       .where("sessionId", "==", sessionId)
       .limit(1)
       .get();
 
     if (!existing.empty) {
       const existingDoc = existing.docs[0];
-      if (!existingDoc)
-        return this.create(userId, { ...data, sessionId }, dependentId);
+      if (!existingDoc) return this.create(userId, { ...data, sessionId });
       const docRef = existingDoc.ref;
       const cleanData = Object.fromEntries(
         Object.entries(data).filter(([, v]) => v !== undefined),
@@ -69,15 +64,11 @@ export const dietPlanRepository = {
       return toDietPlanDto(docRef.id, updated.data() as DietPlanDocument);
     }
 
-    return this.create(userId, { ...data, sessionId }, dependentId);
+    return this.create(userId, { ...data, sessionId });
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<DietPlanDto[]> {
-    const snap = await dietPlansCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<DietPlanDto[]> {
+    const snap = await dietPlansCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -86,11 +77,7 @@ export const dietPlanRepository = {
     );
   },
 
-  async delete(
-    userId: string,
-    planId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await dietPlansCol(userId, dependentId).doc(planId).delete();
+  async delete(userId: string, planId: string): Promise<void> {
+    await dietPlansCol(userId).doc(planId).delete();
   },
 };

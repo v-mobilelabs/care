@@ -11,8 +11,8 @@ import {
 // ── GET /api/lab-reports/[recordId] — fetch a single lab report record ─────────
 
 export const GET = WithContext<{ recordId: string }>(
-  async ({ user, dependentId }, { recordId }) => {
-    const record = await new GetLabReportUseCase(dependentId).execute({
+  async ({ user }, { recordId }) => {
+    const record = await new GetLabReportUseCase().execute({
       userId: user.uid,
       labReportId: recordId,
     });
@@ -24,14 +24,14 @@ export const GET = WithContext<{ recordId: string }>(
 // ── DELETE /api/lab-reports/[recordId] — delete record + underlying file ───────
 
 export const DELETE = WithContext<{ recordId: string }>(
-  async ({ user, dependentId, profileId }, { recordId }) => {
-    const record = await new GetLabReportUseCase(dependentId).execute({
+  async ({ user, profileId }, { recordId }) => {
+    const record = await new GetLabReportUseCase().execute({
       userId: user.uid,
       labReportId: recordId,
     });
     if (!record) throw ApiError.notFound("Lab report record not found.");
 
-    await new DeleteLabReportUseCase(dependentId).execute({
+    await new DeleteLabReportUseCase().execute({
       userId: user.uid,
       labReportId: recordId,
     });
@@ -55,8 +55,8 @@ export const DELETE = WithContext<{ recordId: string }>(
 );
 
 export const PATCH = WithContext<{ recordId: string }>(
-  async ({ user, dependentId, profileId, req }, { recordId }) => {
-    const record = await new GetLabReportUseCase(dependentId).execute({
+  async ({ user, profileId, req }, { recordId }) => {
+    const record = await new GetLabReportUseCase().execute({
       userId: user.uid,
       labReportId: recordId,
     });
@@ -70,7 +70,6 @@ export const PATCH = WithContext<{ recordId: string }>(
         user.uid,
         recordId,
         body.sessionId,
-        dependentId,
       );
       return NextResponse.json(updated);
     }
@@ -79,7 +78,6 @@ export const PATCH = WithContext<{ recordId: string }>(
     const updated = await new ExtractLabReportUseCase().execute({
       userId: user.uid,
       profileId,
-      dependentId,
       fileId: record.fileId,
     });
     return NextResponse.json(updated);

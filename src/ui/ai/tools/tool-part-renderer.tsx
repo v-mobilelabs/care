@@ -1,6 +1,9 @@
 "use client";
 import { Group, Loader, Paper, Text, ThemeIcon } from "@mantine/core";
 import { IconExclamationCircle } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { useState } from "react";
+import type { ReactElement } from "react";
 import type { UIMessagePart, UIDataTypes, UITools } from "ai";
 import { isToolPart, getToolPartName, getToolPartState, extractToolInput } from "@/ui/ai/types";
 import type { AskQuestionInput, StartAssessmentInput } from "@/ui/ai/types";
@@ -10,9 +13,16 @@ import { ApprovalCard } from "./approval-card";
 import { DietDayCard } from "./diet-day-card";
 import { PrescriptionCard } from "./prescription-card";
 import { QuestionCard } from "./question-card";
+import { ReportCard } from "./report-card";
+import { ReferralCard } from "./referral-card";
 import type { ActionCardInput } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import type { EnhancedDietDay } from "@/data/diet-plans/models/nutrition.model";
 import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
+import type { SubmitReportInput } from "@/data/shared/service/agents/base/tools/submit-report.tool";
+import type { SubmitReferralRequestInput } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
+import { confirmReferral, dismissReferral } from "@/data/referrals/actions";
+import { colors } from "@/ui/tokens";
+
 
 // ── Friendly tool name mapping ────────────────────────────────────────────────
 
@@ -32,6 +42,8 @@ export interface ToolPartRendererProps {
     answeredIds: ReadonlyMap<string, string>;
     isLoading: boolean;
     onLearnMore?: (text: string) => void;
+    sessionId?: string;
+    onSendReferralMessage?: (text: string) => Promise<void>;
 }
 
 function ToolErrorCard({ toolName }: Readonly<{ toolName: string | null }>) {
@@ -66,17 +78,143 @@ function renderApproval(part: UIMessagePart<UIDataTypes, UITools>, toolName: str
     return <ApprovalCard approval={approval} input={input} onApproval={onApproval} />;
 }
 
-export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLoading }: Readonly<ToolPartRendererProps>) {
-    const state = getToolPartState(part);
-    const toolName = getToolPartName(part);
-    const toolCallId = (part as unknown as { toolCallId?: string }).toolCallId ?? "";
+// ── Helper functions for referral handling ────────────────────────────────────
 
-    if (state === "input-streaming") return <ToolStreamingCard toolName={toolName} />;
+function showReferralConfirmedNotification(targetSpecialist: string): void {
+    notifications.show({
+        title: "Confirmed",
+        message: `Connecting to ${targetSpecialist} specialist...`,
+        color: colors.success,
+    });
+}
 
-    if (!isToolPart(part)) return null;
+function showErrorNotification(error?: string): void {
+    notifications.show({
+        title: "Error",
+        message: error || "An operation failed",
+        color: colors.danger,
+    });
+}
 
-    // Render display-only tools from their input data even when state is
-    // "output-error" — the input is fully available even if execute was aborted.
+function showSessionClosedNotification(): void {
+    notifications.show({
+        title: "Thank You",
+        message: "Session closed. Thank you for using CareAI.",
+        color: colors.success,
+    });
+}
+
+async function executeReferralAction<T extends { ok: boolean; error?: string }>(
+    action: () => Promise<T>,
+    onSuccess: () => void,
+    onError?: (err?: string) => void,
+    setLoading?: (loading: boolean) => void,
+): Promise<void> {
+    setLoading?.(true);
+    try {
+        const result = await action();
+        if (result.ok) onSuccess();
+        else (onError || showErrorNotification)(result.error);
+    } catch {
+        (onError || showErrorNotification)("Unexpected error");
+    } finally {
+        setLoading?.(false);
+    }
+}
+
+function buildReferralContinuationMessage(
+    specialist: string,
+    reason?: string,
+    reportLabel?: string,
+): string {
+    const reportPart = reportLabel ? `my ${reportLabel}` : "my recent imaging";
+    const reasonPart = reason ? ` The radiologist noted: ${reason}.` : "";
+    return `I have been referred to you from radiology after reviewing ${reportPart}.${reasonPart} Please begin my ${specialist} consultation.`;
+}
+
+type ReferralConfirmOptions = Readonly<{
+    sessionId?: string;
+    specialist: string;
+    reason?: string;
+    reportLabel?: string;
+    setReferralLoading: (loading: boolean) => void;
+    onSendMessage?: (text: string) => Promise<void>;
+}>;
+
+async function handleReferralConfirm(opts: ReferralConfirmOptions): Promise<void> {
+    const { sessionId, specialist, reason, reportLabel, setReferralLoading, onSendMessage } = opts;
+    if (sessionId === undefined) {
+        showErrorNotification("Session ID missing");
+        return;
+    }
+    await executeReferralAction(
+        () => confirmReferral(sessionId, specialist, reason ?? "", reportLabel),
+        async () => {
+            showReferralConfirmedNotification(specialist);
+            // Auto-send clinically-rich message so specialist agent starts consultation
+            try {
+                const msg = buildReferralContinuationMessage(specialist, reason, reportLabel);
+                await onSendMessage?.(msg);
+            } catch {
+                // Silently fail — referral was already confirmed
+            }
+        },
+        showErrorNotification,
+        setReferralLoading,
+    );
+}
+
+async function handleReferralThankYou(
+    sessionId: string | undefined,
+    specialist: string,
+    reason: string | undefined,
+    reportLabel: string | undefined,
+    setReferralLoading: (loading: boolean) => void,
+): Promise<void> {
+    if (!sessionId) {
+        showErrorNotification("Session ID missing");
+        return;
+    }
+    await executeReferralAction(
+        () => dismissReferral(sessionId, specialist, reason ?? "", reportLabel),
+        showSessionClosedNotification,
+        showErrorNotification,
+        setReferralLoading,
+    );
+}
+
+function renderReferralPart(
+    part: UIMessagePart<UIDataTypes, UITools>,
+    sessionId: string | undefined,
+    onSendReferralMessage: ((text: string) => Promise<void>) | undefined,
+    referralLoading: boolean,
+    setReferralLoading: (loading: boolean) => void,
+): ReactElement | null {
+    const referral = extractToolInput<SubmitReferralRequestInput>(part, "submitReferralRequest");
+    if (!referral?.nextSpecialist) return null;
+
+    return (
+        <ReferralCard
+            data={referral}
+            onConfirm={async () => {
+                await handleReferralConfirm({
+                    sessionId,
+                    specialist: referral.nextSpecialist,
+                    reason: referral.reason,
+                    reportLabel: referral.reportLabel,
+                    setReferralLoading,
+                    onSendMessage: onSendReferralMessage,
+                });
+            }}
+            onThankYou={async () => {
+                await handleReferralThankYou(sessionId, referral.nextSpecialist, referral.reason, referral.reportLabel, setReferralLoading);
+            }}
+            isLoading={referralLoading}
+        />
+    );
+}
+
+function renderDisplayOnlyTool(part: UIMessagePart<UIDataTypes, UITools>): ReactElement | null {
     const actionCardData = extractToolInput<ActionCardInput>(part, "actionCard");
     if (actionCardData) return <ActionCardCard data={actionCardData} />;
 
@@ -86,7 +224,25 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
     const prescription = extractToolInput<SubmitPrescriptionInput>(part, "submitPrescription");
     if (prescription?.medications) return <PrescriptionCard data={prescription} />;
 
-    // For all other tools, surface the error card if execution failed.
+    const report = extractToolInput<SubmitReportInput>(part, "submitReport");
+    if (report?.specialty && report?.reportType && report?.title) return <ReportCard data={report} />;
+
+    return null;
+}
+
+type InteractiveToolRenderOptions = Readonly<{
+    part: UIMessagePart<UIDataTypes, UITools>;
+    state: string | null;
+    toolName: string | null;
+    toolCallId: string;
+    answeredIds: ReadonlyMap<string, string>;
+    isLoading: boolean;
+    onAnswer: ToolPartRendererProps["onAnswer"];
+    onApproval: ToolPartRendererProps["onApproval"];
+}>;
+
+function renderInteractiveTool(opts: InteractiveToolRenderOptions): ReactElement | null {
+    const { part, state, toolName, toolCallId, answeredIds, isLoading, onAnswer, onApproval } = opts;
     if (state === "output-error") return <ToolErrorCard toolName={toolName} />;
 
     const assessmentPreface = extractToolInput<StartAssessmentInput>(part, "startAssessment");
@@ -96,6 +252,24 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
     if (question) return <QuestionCard data={question} toolCallId={toolCallId} isAnswered={answeredIds.has(toolCallId)} answeredValue={answeredIds.get(toolCallId)} isLoading={isLoading} onAnswer={onAnswer} />;
 
     if (state === "approval-requested") return renderApproval(part, toolName, onApproval);
-
     return null;
+}
+
+export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLoading, sessionId, onSendReferralMessage }: Readonly<ToolPartRendererProps>) {
+    const [referralLoading, setReferralLoading] = useState(false);
+    const state = getToolPartState(part);
+    const toolName = getToolPartName(part);
+    const toolCallId = (part as unknown as { toolCallId?: string }).toolCallId ?? "";
+
+    if (state === "input-streaming") return <ToolStreamingCard toolName={toolName} />;
+
+    if (!isToolPart(part)) return null;
+
+    const displayOnlyCard = renderDisplayOnlyTool(part);
+    if (displayOnlyCard) return displayOnlyCard;
+
+    const referralCard = renderReferralPart(part, sessionId, onSendReferralMessage, referralLoading, setReferralLoading);
+    if (referralCard) return referralCard;
+
+    return renderInteractiveTool({ part, state, toolName, toolCallId, answeredIds, isLoading, onAnswer, onApproval });
 }

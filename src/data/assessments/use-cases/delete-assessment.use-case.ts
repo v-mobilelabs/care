@@ -11,10 +11,7 @@ import { Indexable } from "@/data/shared/use-cases/indexable.decorator";
 
 @Indexable({ sourceIdField: "assessmentId", remove: true })
 export class DeleteAssessmentUseCase extends UseCase<AssessmentRefInput, void> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: AssessmentService = assessmentService,
-  ) {
+  constructor(private readonly service: AssessmentService = assessmentService) {
     super();
   }
 
@@ -23,6 +20,6 @@ export class DeleteAssessmentUseCase extends UseCase<AssessmentRefInput, void> {
   }
 
   protected async run(input: AssessmentRefInput): Promise<void> {
-    await this.service.delete(input, this.dependentId);
+    await this.service.delete(input);
   }
 }

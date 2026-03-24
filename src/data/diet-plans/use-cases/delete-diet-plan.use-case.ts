@@ -9,10 +9,7 @@ import {
 import { UseCase } from "@/data/shared/use-cases/base.use-case";
 
 export class DeleteDietPlanUseCase extends UseCase<DeleteDietPlanInput, void> {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: DietPlanService = dietPlanService,
-  ) {
+  constructor(private readonly service: DietPlanService = dietPlanService) {
     super();
   }
 
@@ -21,6 +18,6 @@ export class DeleteDietPlanUseCase extends UseCase<DeleteDietPlanInput, void> {
   }
 
   protected async run(input: DeleteDietPlanInput): Promise<void> {
-    await this.service.delete(input, this.dependentId);
+    await this.service.delete(input);
   }
 }

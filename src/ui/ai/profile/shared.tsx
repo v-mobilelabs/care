@@ -19,7 +19,35 @@ import {
 import { useForm } from "@mantine/form";
 import { DateInput } from "@mantine/dates";
 import { IconCheck } from "@tabler/icons-react";
-import type { DependentRecord, Relationship } from "@/ui/ai/query";
+
+export type Relationship =
+    | "Spouse / Partner"
+    | "Child"
+    | "Parent"
+    | "Sibling"
+    | "Grandparent"
+    | "Grandchild"
+    | "Other";
+
+export interface DependentRecord {
+    id: string;
+    ownerId: string;
+    firstName: string;
+    lastName: string;
+    relationship: Relationship;
+    dateOfBirth?: string;
+    sex?: "male" | "female";
+    height?: number;
+    weight?: number;
+    waistCm?: number;
+    neckCm?: number;
+    hipCm?: number;
+    activityLevel?: "sedentary" | "light" | "moderate" | "active" | "very_active";
+    country?: string;
+    city?: string;
+    createdAt: string;
+    updatedAt: string;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

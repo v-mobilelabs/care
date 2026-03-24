@@ -170,6 +170,7 @@ export type ListFilesInput = z.infer<typeof ListFilesSchema>;
 
 export const ListAllFilesSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
+  profileId: z.string().min(1, { message: "profileId is required" }),
   limit: z.number().int().min(1).max(100).optional().default(20),
   cursor: z.string().optional(),
   /** Filter by AI-assigned label. */

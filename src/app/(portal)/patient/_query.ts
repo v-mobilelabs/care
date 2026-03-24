@@ -7,7 +7,6 @@
  * TanStack Query since it is a persistent streaming transport.
  */
 
-import { useSyncExternalStore } from "react";
 import {
   keepPreviousData,
   useInfiniteQuery,
@@ -287,36 +286,15 @@ export interface DietPlanRecord {
 
 // ── Active profile state (module-level — shared across all hooks) ─────────────
 
-/** The currently active dependent ID. `undefined` = the user's own profile ("self"). */
-let _activeDependentId: string | undefined;
-const _profileListeners = new Set<() => void>();
-
-/** Called by ActiveProfileContext when the user switches profiles. */
-export function setActiveDependentId(id: string | undefined) {
-  _activeDependentId = id;
-  _profileListeners.forEach((fn) => fn());
-}
-
 /** Reactive hook — causes query keys to update when the active profile changes. */
-function useActiveDependentId() {
-  return useSyncExternalStore(
-    (fn) => {
-      _profileListeners.add(fn);
-      return () => {
-        _profileListeners.delete(fn);
-      };
-    },
-    () => _activeDependentId,
-    () => undefined,
-  );
+function useActiveProfileScope() {
+  return undefined;
 }
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers ?? {});
-  if (_activeDependentId) headers.set("x-dependent-id", _activeDependentId);
-  const res = await fetch(input, { ...init, headers });
+  const res = await fetch(input, init);
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as {
       error?: { message?: string };
@@ -330,7 +308,7 @@ async function apiFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 
 /** Reactive list of sessions for the authenticated user, sorted newest-first. */
 export function useSessionsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.sessions(), pid],
     queryFn: () => apiFetch<SessionSummary[]>("/api/sessions"),
@@ -340,7 +318,7 @@ export function useSessionsQuery() {
 
 /** Paginated sessions for the history page with lazy loading. */
 export function useInfiniteSessionsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useInfiniteQuery({
     queryKey: [...chatKeys.sessions(), "paginated", pid],
     queryFn: ({ pageParam }) => {
@@ -411,7 +389,7 @@ export function useMessagesQuery(sessionId: string) {
 /** Delete a session (cascade-deletes messages + files on the server). */
 export function useDeleteSessionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const infiniteKey = [...chatKeys.sessions(), "paginated", pid] as const;
   return useMutation({
     mutationFn: (id: string) =>
@@ -442,7 +420,7 @@ export function useDeleteSessionMutation() {
  */
 export function useCreateSessionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const sessKey = [...chatKeys.sessions(), pid] as const;
   return useMutation({
     mutationFn: ({ id, title }: { id: string; title?: string }) =>
@@ -470,7 +448,7 @@ export function useCreateSessionMutation() {
  */
 export function useInvalidateSessions() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return () =>
     qc.invalidateQueries({ queryKey: [...chatKeys.sessions(), pid] });
 }
@@ -482,21 +460,15 @@ export function useUploadFileMutation() {
     mutationFn: async ({
       sessionId,
       file,
-      dependentId,
     }: {
       sessionId?: string;
       file: File;
-      /** Pass activeDependentId from useActiveProfile() at the call site. */
-      dependentId?: string;
     }): Promise<FileRecord> => {
       const formData = new FormData();
       formData.append("file", file);
       if (sessionId) formData.append("sessionId", sessionId);
-      const headers: HeadersInit = {};
-      if (dependentId) headers["x-dependent-id"] = dependentId;
       const res = await fetch("/api/files", {
         method: "POST",
-        headers,
         body: formData,
       });
       if (!res.ok) {
@@ -651,7 +623,7 @@ export function useExtractPersonFromFileMutation() {
 
 /** Fetch all prescription records for the authenticated user (or active dependent). */
 export function usePrescriptionsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.prescriptions(), pid],
     queryFn: () => apiFetch<PrescriptionRecord[]>("/api/prescriptions"),
@@ -669,7 +641,7 @@ export function usePrescriptionQuery(prescriptionId: string) {
 /** Upload a prescription image, then auto-extract medications. */
 export function useUploadPrescriptionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useMutation({
     mutationFn: async ({
       file,
@@ -679,7 +651,6 @@ export function useUploadPrescriptionMutation() {
       sessionId?: string;
     }): Promise<PrescriptionRecord> => {
       const tag = sessionId ?? "prescriptions";
-      const headers: HeadersInit = pid ? { "x-dependent-id": pid } : {};
 
       // Step 1 — upload file via the generic files API
       const formData = new FormData();
@@ -688,7 +659,6 @@ export function useUploadPrescriptionMutation() {
       const uploadRes = await fetch("/api/files", {
         method: "POST",
         body: formData,
-        headers,
       });
       if (!uploadRes.ok) {
         const body = (await uploadRes.json().catch(() => ({}))) as {
@@ -703,7 +673,7 @@ export function useUploadPrescriptionMutation() {
       // Step 2 — extract prescription data from the uploaded file
       const extractRes = await fetch("/api/prescriptions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileId: uploaded.id }),
       });
       if (!extractRes.ok) {
@@ -731,7 +701,7 @@ export function useUploadPrescriptionMutation() {
 /** Delete a prescription — optimistically removes it from the cache. */
 export function useDeletePrescriptionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const prescKey = [...chatKeys.prescriptions(), pid] as const;
   return useMutation({
     mutationFn: ({ prescriptionId }: { prescriptionId: string }) =>
@@ -758,7 +728,7 @@ export function useDeletePrescriptionMutation() {
 /** Re-extract medication details from a prescription image using AI. */
 export function useExtractPrescriptionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useMutation({
     mutationFn: ({ fileId }: { fileId: string }) =>
       apiFetch<PrescriptionRecord>(`/api/prescriptions/${fileId}/extract`, {
@@ -787,7 +757,7 @@ export function useExtractPrescriptionMutation() {
 /** Link a chat session to a prescription for AI follow-up. */
 export function useLinkPrescriptionSessionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const prescKey = [...chatKeys.prescriptions(), pid] as const;
   return useMutation({
     mutationFn: ({
@@ -822,7 +792,7 @@ export function useLinkPrescriptionSessionMutation() {
 // ── Medications ───────────────────────────────────────────────────────────────
 
 export function useMedicationsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.medications(), pid],
     queryFn: () => apiFetch<MedicationRecord[]>("/api/medications"),
@@ -845,7 +815,7 @@ export interface AddMedicationPayload {
 /** Add a new medication to the user's list. */
 export function useAddMedicationMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.medications(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddMedicationPayload) =>
@@ -908,7 +878,7 @@ export interface UpdateMedicationPayload {
 /** Update an existing medication. */
 export function useUpdateMedicationMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.medications(), pid] as const;
   return useMutation({
     mutationFn: ({ medicationId, ...rest }: UpdateMedicationPayload) =>
@@ -937,7 +907,7 @@ export function useUpdateMedicationMutation() {
 /** Delete a medication — optimistically removes it from the list cache. */
 export function useDeleteMedicationMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.medications(), pid] as const;
   return useMutation({
     mutationFn: (medicationId: string) =>
@@ -965,7 +935,7 @@ export function useDeleteMedicationMutation() {
 
 /** Fetch all saved diet plans for the authenticated user. */
 export function useDietPlansQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.dietPlans(), pid],
     queryFn: () => apiFetch<DietPlanRecord[]>("/api/diet-plans"),
@@ -976,7 +946,7 @@ export function useDietPlansQuery() {
 /** Invalidate the diet plans cache. */
 export function useInvalidateDietPlans() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return () =>
     qc.invalidateQueries({ queryKey: [...chatKeys.dietPlans(), pid] });
 }
@@ -996,7 +966,7 @@ export interface AddDietPlanPayload {
 /** Save a diet plan generated by the AI. */
 export function useAddDietPlanMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.dietPlans(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddDietPlanPayload) =>
@@ -1045,7 +1015,7 @@ export function useAddDietPlanMutation() {
 /** Delete a diet plan — optimistically removes it from the list cache. */
 export function useDeleteDietPlanMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.dietPlans(), pid] as const;
   return useMutation({
     mutationFn: (planId: string) =>
@@ -1280,7 +1250,7 @@ function removeAssessmentFromPaginatedCache(
 
 /** Fetch all AI assessments for the authenticated user, newest-first. */
 export function useAssessmentsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.assessments(), pid],
     queryFn: async () => {
@@ -1295,7 +1265,7 @@ export function useAssessmentsQuery() {
 
 /** Paginated assessments with optional server-side filtering and search. */
 export function useAssessmentsInfiniteQuery(filters?: AssessmentsFilters) {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const params = new URLSearchParams();
   if (filters?.q) params.set("q", filters.q);
   if (filters?.status) params.set("status", filters.status);
@@ -1321,7 +1291,7 @@ export function useAssessmentsInfiniteQuery(filters?: AssessmentsFilters) {
 
 /** Fetch a single assessment by ID. */
 export function useAssessmentQuery(assessmentId: string) {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.assessment(assessmentId), pid],
     queryFn: () =>
@@ -1334,7 +1304,7 @@ export function useAssessmentQuery(assessmentId: string) {
 /** Invalidate the assessments cache — call after a message finishes streaming. */
 export function useInvalidateAssessments() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return () =>
     qc.invalidateQueries({ queryKey: [...chatKeys.assessments(), pid] });
 }
@@ -1342,7 +1312,7 @@ export function useInvalidateAssessments() {
 /** Delete an assessment — optimistically removes it from the list cache. */
 export function useDeleteAssessmentMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.assessments(), pid] as const;
   const paginatedKeyPrefix = [
     ...chatKeys.assessments(),
@@ -1386,6 +1356,180 @@ export function useDeleteAssessmentMutation() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: paginatedKeyPrefix });
+    },
+  });
+}
+
+// ── Memories ─────────────────────────────────────────────────────────────────
+
+export type MemoryCategory =
+  | "medical"
+  | "preference"
+  | "lifestyle"
+  | "allergy"
+  | "summary";
+
+export type MemorySortBy = "lastAccessedAt" | "createdAt" | "category";
+export type SortDirection = "asc" | "desc";
+
+export interface MemoryRecord {
+  id: string;
+  userId: string;
+  category: MemoryCategory;
+  content: string;
+  sessionId?: string;
+  lastAccessedAt: string;
+  createdAt: string;
+}
+
+export interface PaginatedMemoriesResponse {
+  memories: MemoryRecord[];
+  nextCursor: string | null;
+  totalCount: number;
+}
+
+export interface MemoriesFilters {
+  q?: string;
+  category?: MemoryCategory;
+  sortBy?: MemorySortBy;
+  sortDir?: SortDirection;
+}
+
+function removeMemoriesFromPaginatedCache(
+  old:
+    | {
+        pages: PaginatedMemoriesResponse[];
+        pageParams: (string | undefined)[];
+      }
+    | undefined,
+  memoryIds: readonly string[],
+) {
+  if (!old) return old;
+  const toDelete = new Set(memoryIds);
+  const pages = old.pages.map((page) => ({
+    ...page,
+    memories: page.memories.filter((m) => !toDelete.has(m.id)),
+    totalCount: Math.max(0, page.totalCount - toDelete.size),
+  }));
+
+  return {
+    ...old,
+    pages,
+  };
+}
+
+/** Paginated memories with optional search/filter/sort controls. */
+export function useMemoriesInfiniteQuery(filters?: MemoriesFilters) {
+  const pid = useActiveProfileScope();
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.category) params.set("category", filters.category);
+  if (filters?.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters?.sortDir) params.set("sortDir", filters.sortDir);
+  params.set("limit", "20");
+  const qs = params.toString();
+
+  return useInfiniteQuery({
+    queryKey: [...chatKeys.memories(), "paginated", pid, qs],
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams(params);
+      if (pageParam) p.set("cursor", pageParam);
+      return apiFetch<PaginatedMemoriesResponse>(
+        `/api/memories?${p.toString()}`,
+      );
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 30_000,
+  });
+}
+
+/** Delete a single memory — optimistic remove from all paginated memory queries. */
+export function useDeleteMemoryMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  const paginatedKeyPrefix = [
+    ...chatKeys.memories(),
+    "paginated",
+    pid,
+  ] as const;
+
+  return useMutation({
+    mutationFn: (memoryId: string) =>
+      apiFetch<{ ok: boolean }>(`/api/memories/${memoryId}`, {
+        method: "DELETE",
+      }),
+    onMutate: async (memoryId) => {
+      await qc.cancelQueries({ queryKey: paginatedKeyPrefix });
+      const paginatedSnapshot = qc.getQueriesData<{
+        pages: PaginatedMemoriesResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix });
+
+      qc.setQueriesData<{
+        pages: PaginatedMemoriesResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix }, (old) =>
+        removeMemoriesFromPaginatedCache(old, [memoryId]),
+      );
+
+      return { paginatedSnapshot };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.paginatedSnapshot) {
+        for (const [queryKey, data] of ctx.paginatedSnapshot) {
+          qc.setQueryData(queryKey, data);
+        }
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: paginatedKeyPrefix });
+    },
+  });
+}
+
+/** Delete many memories — optimistic remove from all paginated memory queries. */
+export function useDeleteManyMemoriesMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  const paginatedKeyPrefix = [
+    ...chatKeys.memories(),
+    "paginated",
+    pid,
+  ] as const;
+
+  return useMutation({
+    mutationFn: (memoryIds: string[]) =>
+      apiFetch<{ ok: boolean }>("/api/memories/delete-many", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memoryIds }),
+      }),
+    onMutate: async (memoryIds) => {
+      await qc.cancelQueries({ queryKey: paginatedKeyPrefix });
+      const paginatedSnapshot = qc.getQueriesData<{
+        pages: PaginatedMemoriesResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix });
+
+      qc.setQueriesData<{
+        pages: PaginatedMemoriesResponse[];
+        pageParams: (string | undefined)[];
+      }>({ queryKey: paginatedKeyPrefix }, (old) =>
+        removeMemoriesFromPaginatedCache(old, memoryIds),
+      );
+
+      return { paginatedSnapshot };
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.paginatedSnapshot) {
+        for (const [queryKey, data] of ctx.paginatedSnapshot) {
+          qc.setQueryData(queryKey, data);
+        }
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: paginatedKeyPrefix });
     },
   });
@@ -1529,171 +1673,6 @@ export function useUpdateIdentityMutation() {
   });
 }
 
-// ── Dependents ────────────────────────────────────────────────────────────────
-
-export type Relationship =
-  | "Spouse / Partner"
-  | "Child"
-  | "Parent"
-  | "Sibling"
-  | "Grandparent"
-  | "Grandchild"
-  | "Other";
-
-export interface DependentRecord {
-  id: string;
-  ownerId: string;
-  firstName: string;
-  lastName: string;
-  relationship: Relationship;
-  dateOfBirth?: string;
-  sex?: Sex;
-  height?: number;
-  weight?: number;
-  waistCm?: number;
-  neckCm?: number;
-  hipCm?: number;
-  activityLevel?: ActivityLevel;
-  country?: string;
-  city?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateDependentPayload {
-  firstName: string;
-  lastName?: string;
-  relationship: Relationship;
-  dateOfBirth?: string;
-  sex?: Sex;
-  height?: number;
-  weight?: number;
-  waistCm?: number;
-  neckCm?: number;
-  hipCm?: number;
-  activityLevel?: ActivityLevel;
-  country?: string;
-  city?: string;
-}
-
-export interface UpdateDependentPayload extends Partial<CreateDependentPayload> {
-  dependentId: string;
-}
-
-export function useDependentsQuery() {
-  return useQuery({
-    queryKey: chatKeys.dependents(),
-    queryFn: () => apiFetch<DependentRecord[]>("/api/dependents"),
-    staleTime: 60_000,
-  });
-}
-
-export function useCreateDependentMutation() {
-  const qc = useQueryClient();
-  const key = chatKeys.dependents();
-  return useMutation({
-    mutationFn: (data: CreateDependentPayload) =>
-      apiFetch<DependentRecord>("/api/dependents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    onMutate: async (data) => {
-      await qc.cancelQueries({ queryKey: key });
-      const snapshot = qc.getQueryData<DependentRecord[]>(key);
-      const now = new Date().toISOString();
-      const optimistic: DependentRecord = {
-        id: `__optimistic__${Date.now()}`,
-        ownerId: "",
-        firstName: data.firstName,
-        lastName: data.lastName ?? "",
-        relationship: data.relationship,
-        dateOfBirth: data.dateOfBirth,
-        sex: data.sex,
-        height: data.height,
-        weight: data.weight,
-        waistCm: data.waistCm,
-        neckCm: data.neckCm,
-        hipCm: data.hipCm,
-        activityLevel: data.activityLevel,
-        country: data.country,
-        city: data.city,
-        createdAt: now,
-        updatedAt: now,
-      };
-      qc.setQueryData<DependentRecord[]>(key, (old = []) => [
-        ...old,
-        optimistic,
-      ]);
-      return { snapshot };
-    },
-    onSuccess: (newRecord) => {
-      qc.setQueryData<DependentRecord[]>(key, (old = []) =>
-        old.map((d) => (d.id.startsWith("__optimistic__") ? newRecord : d)),
-      );
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: key });
-    },
-  });
-}
-
-export function useUpdateDependentMutation() {
-  const qc = useQueryClient();
-  const key = chatKeys.dependents();
-  return useMutation({
-    mutationFn: ({ dependentId, ...data }: UpdateDependentPayload) =>
-      apiFetch<DependentRecord>(`/api/dependents/${dependentId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }),
-    onMutate: async ({ dependentId, ...updates }) => {
-      await qc.cancelQueries({ queryKey: key });
-      const snapshot = qc.getQueryData<DependentRecord[]>(key);
-      qc.setQueryData<DependentRecord[]>(key, (old = []) =>
-        old.map((d) => (d.id === dependentId ? { ...d, ...updates } : d)),
-      );
-      return { snapshot };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: key });
-    },
-  });
-}
-
-export function useDeleteDependentMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (dependentId: string) =>
-      apiFetch<{ ok: boolean }>(`/api/dependents/${dependentId}`, {
-        method: "DELETE",
-      }),
-    onMutate: async (dependentId) => {
-      await qc.cancelQueries({ queryKey: chatKeys.dependents() });
-      const snapshot = qc.getQueryData<DependentRecord[]>(
-        chatKeys.dependents(),
-      );
-      qc.setQueryData<DependentRecord[]>(chatKeys.dependents(), (old = []) =>
-        old.filter((d) => d.id !== dependentId),
-      );
-      return { snapshot };
-    },
-    onError: (_err, _id, ctx) => {
-      if (ctx?.snapshot) qc.setQueryData(chatKeys.dependents(), ctx.snapshot);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: chatKeys.dependents() });
-    },
-  });
-}
-
 // ── Lab Reports ───────────────────────────────────────────────────────────────
 
 export type BiomarkerStatus = "normal" | "low" | "high" | "critical";
@@ -1726,7 +1705,7 @@ export interface LabReportRecord {
 
 /** Fetch all lab report records for the authenticated user (or active dependent). */
 export function useLabReportsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.labReports(), pid],
     queryFn: () => apiFetch<LabReportRecord[]>("/api/lab-reports"),
@@ -1749,17 +1728,14 @@ export function useLabReportQuery(recordId: string) {
  */
 export function useUploadLabReportMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useMutation({
     mutationFn: async (file: File): Promise<LabReportRecord> => {
       const formData = new FormData();
       formData.append("file", file);
-      const headers = new Headers();
-      if (pid) headers.set("x-dependent-id", pid);
       const res = await fetch("/api/lab-reports", {
         method: "POST",
         body: formData,
-        headers,
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -1778,7 +1754,7 @@ export function useUploadLabReportMutation() {
 /** Delete a lab report record (and its underlying file). Optimistic update. */
 export function useDeleteLabReportMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const lrKey = [...chatKeys.labReports(), pid] as const;
   return useMutation({
     mutationFn: (recordId: string) =>
@@ -1805,7 +1781,7 @@ export function useDeleteLabReportMutation() {
 /** Re-run AI extraction for an existing lab report record. */
 export function useReExtractLabReportMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useMutation({
     mutationFn: (recordId: string) =>
       apiFetch<LabReportRecord>(`/api/lab-reports/${recordId}`, {
@@ -1823,7 +1799,7 @@ export function useReExtractLabReportMutation() {
 /** Link a chat session to a lab report (or update if already linked). */
 export function useLinkLabReportSessionMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useMutation({
     mutationFn: ({
       recordId,
@@ -1898,7 +1874,7 @@ export interface AddVitalPayload {
 }
 
 export function useVitalsQuery() {
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.vitals(), pid],
     queryFn: () => apiFetch<VitalRecord[]>("/api/vitals"),
@@ -1908,7 +1884,7 @@ export function useVitalsQuery() {
 
 export function useAddVitalMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.vitals(), pid] as const;
   return useMutation({
     mutationFn: (payload: AddVitalPayload) =>
@@ -1946,9 +1922,69 @@ export function useAddVitalMutation() {
   });
 }
 
+// ── Referrals ─────────────────────────────────────────────────────────────────
+
+export type ReferralStatus = "pending" | "accepted" | "dismissed" | "completed";
+
+export interface ReferralRecord {
+  id: string;
+  userId: string;
+  sessionId: string;
+  specialist: string;
+  reason: string;
+  reportLabel?: string;
+  status: ReferralStatus;
+  acceptedAt?: string;
+  dismissedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PaginatedReferralsResponse {
+  referrals: ReferralRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+
+export interface ReferralsFilters {
+  status?: ReferralStatus;
+  specialist?: string;
+}
+
+/** Paginated referrals with optional status/specialist filtering. */
+export function useReferralsInfiniteQuery(filters?: ReferralsFilters) {
+  const pid = useActiveProfileScope();
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.specialist) params.set("specialist", filters.specialist);
+  params.set("limit", "20");
+  const qs = params.toString();
+
+  return useInfiniteQuery({
+    queryKey: [...chatKeys.referrals(), "paginated", pid, qs],
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams(params);
+      if (pageParam) p.set("cursor", pageParam);
+      return apiFetch<PaginatedReferralsResponse>(
+        `/api/referrals?${p.toString()}`,
+      );
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 30_000,
+  });
+}
+
+/** Invalidate the referrals cache — call after confirm/dismiss actions. */
+export function useInvalidateReferrals() {
+  const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: chatKeys.referrals() });
+}
+
 export function useDeleteVitalMutation() {
   const qc = useQueryClient();
-  const pid = useActiveDependentId();
+  const pid = useActiveProfileScope();
   const key = [...chatKeys.vitals(), pid] as const;
   return useMutation({
     mutationFn: (vitalId: string) =>

@@ -201,17 +201,36 @@ interface FileMessageProps {
     isUser: boolean;
 }
 
+function extractFileIdFromGcsUri(url: string): string | null {
+    const match = /^gs:\/\/[^/]+\/profiles\/[^/]+\/files\/([^/]+)\//.exec(url);
+    return match?.[1] ?? null;
+}
+
+function resolveFileDisplayUrl(url: string): string {
+    if (!url.startsWith("gs://")) {
+        return url;
+    }
+
+    const fileId = extractFileIdFromGcsUri(url);
+    if (!fileId) {
+        return url;
+    }
+
+    return `/api/files/${fileId}`;
+}
+
 export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
     const isPdf = part.mediaType === "application/pdf";
     const isWord = part.mediaType.includes("word") || part.mediaType.includes("officedocument.wordprocessing");
     const isImage = part.mediaType.startsWith("image/");
     const [lightboxOpen, { open: openLightbox, close: closeLightbox }] = useDisclosure(false);
+    const displayUrl = resolveFileDisplayUrl(part.url);
 
     function handleClick() {
         if (isImage) {
             openLightbox();
         } else {
-            window.open(part.url, "_blank", "noopener,noreferrer");
+            window.open(displayUrl, "_blank", "noopener,noreferrer");
         }
     }
 
@@ -225,7 +244,7 @@ export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
                             style={{ cursor: "zoom-in", borderRadius: "var(--mantine-radius-md)", overflow: "hidden", display: "inline-block", position: "relative" }}
                         >
                             <Image
-                                src={part.url}
+                                src={displayUrl}
                                 maw={280}
                                 mah={320}
                                 radius="md"
@@ -256,7 +275,7 @@ export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
                                         color="gray"
                                         variant="light"
                                         component="a"
-                                        href={part.url}
+                                        href={displayUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         aria-label="Open in new tab"
@@ -276,7 +295,7 @@ export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
                                 </ActionIcon>
                             </Group>
                             <Image
-                                src={part.url}
+                                src={displayUrl}
                                 alt="attachment preview"
                                 fit="contain"
                                 radius="md"

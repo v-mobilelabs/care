@@ -30,10 +30,7 @@ export class CreateMedicationUseCase extends UseCase<
   CreateMedicationInput,
   MedicationDto
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: MedicationService = medicationService,
-  ) {
+  constructor(private readonly service: MedicationService = medicationService) {
     super();
   }
 
@@ -42,6 +39,6 @@ export class CreateMedicationUseCase extends UseCase<
   }
 
   protected async run(input: CreateMedicationInput): Promise<MedicationDto> {
-    return this.service.create(input, this.dependentId);
+    return this.service.create(input);
   }
 }

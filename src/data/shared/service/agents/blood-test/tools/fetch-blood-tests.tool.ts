@@ -41,11 +41,7 @@ function toSummary(bt: BloodTestDto): BloodTestSummary {
   };
 }
 
-export function createFetchBloodTestsTool(
-  userId: string,
-  profileId: string,
-  dependentId?: string,
-) {
+export function createFetchBloodTestsTool(userId: string, _profileId: string) {
   return tool({
     description:
       "Fetch the patient's stored blood test records from their health records. " +
@@ -53,11 +49,7 @@ export function createFetchBloodTestsTool(
       "Returns all blood test records with their biomarker details.",
     inputSchema: zodSchema(z.object({})),
     execute: async () => {
-      const bloodTests = await bloodTestRepository.list(
-        userId,
-        50,
-        dependentId,
-      );
+      const bloodTests = await bloodTestRepository.list(userId, 50);
       if (bloodTests.length === 0) {
         return {
           found: false,

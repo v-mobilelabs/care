@@ -10,10 +10,6 @@ export class CreatePrescriptionUseCase extends UseCase<
   CreatePrescriptionInput,
   PrescriptionDto
 > {
-  constructor(private readonly dependentId?: string) {
-    super();
-  }
-
   static validate(input: unknown): CreatePrescriptionInput {
     return CreatePrescriptionSchema.parse(input);
   }
@@ -21,19 +17,14 @@ export class CreatePrescriptionUseCase extends UseCase<
   protected async run(
     input: CreatePrescriptionInput,
   ): Promise<PrescriptionDto> {
-    const { userId, dependentId: inputDependentId, profileId, ...data } = input;
-    const depId = this.dependentId ?? inputDependentId;
+    const { userId, profileId, ...data } = input;
 
-    return prescriptionRepository.create(
-      userId,
-      {
-        ...data,
-        medications: data.medications.map((m) => ({
-          ...m,
-          form: m.form,
-        })),
-      },
-      depId,
-    );
+    return prescriptionRepository.create(userId, {
+      ...data,
+      medications: data.medications.map((m) => ({
+        ...m,
+        form: m.form,
+      })),
+    });
   }
 }

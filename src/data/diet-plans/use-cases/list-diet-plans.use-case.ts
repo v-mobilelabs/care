@@ -13,10 +13,7 @@ export class ListDietPlansUseCase extends UseCase<
   ListDietPlansInput,
   DietPlanDto[]
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: DietPlanService = dietPlanService,
-  ) {
+  constructor(private readonly service: DietPlanService = dietPlanService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class ListDietPlansUseCase extends UseCase<
   }
 
   protected async run(input: ListDietPlansInput): Promise<DietPlanDto[]> {
-    return this.service.list(input, this.dependentId);
+    return this.service.list(input);
   }
 }

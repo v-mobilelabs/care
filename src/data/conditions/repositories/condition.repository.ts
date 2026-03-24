@@ -10,28 +10,22 @@ import {
   type ConditionDto,
 } from "../models/condition.model";
 
-const conditionsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "conditions");
+const conditionsCol = (userId: string) => scopedCol(userId, "conditions");
 
 export const conditionRepository = {
   async create(
     userId: string,
-    dependentId: string | undefined,
     data: Omit<ConditionDocument, "userId" | "createdAt" | "updatedAt">,
   ): Promise<ConditionDto> {
-    const ref = conditionsCol(userId, dependentId).doc();
+    const ref = conditionsCol(userId).doc();
     const now = Timestamp.now();
     const clean = { ...data, userId, createdAt: now, updatedAt: now };
     await ref.set(stripUndefined(clean));
     return toConditionDto(ref.id, clean);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<ConditionDto[]> {
-    const snap = await conditionsCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<ConditionDto[]> {
+    const snap = await conditionsCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -40,11 +34,7 @@ export const conditionRepository = {
     );
   },
 
-  async delete(
-    userId: string,
-    conditionId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await conditionsCol(userId, dependentId).doc(conditionId).delete();
+  async delete(userId: string, conditionId: string): Promise<void> {
+    await conditionsCol(userId).doc(conditionId).delete();
   },
 };

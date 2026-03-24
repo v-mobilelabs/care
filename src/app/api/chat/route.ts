@@ -172,11 +172,73 @@ function extractAnsweredQaPairs(parts: unknown[]) {
   return out;
 }
 
-// eslint-disable-next-line max-lines-per-function
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+
+  const source = error as Record<string, unknown>;
+  const candidates = [
+    source.status,
+    source.statusCode,
+    source.code,
+    source.httpStatus,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "number") return candidate;
+    if (typeof candidate === "string") {
+      const parsed = Number(candidate);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function getErrorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "";
+  const source = error as Record<string, unknown>;
+  const message = source.message;
+  if (typeof message === "string") return message;
+  return JSON.stringify(source);
+}
+
+function isProviderRateLimitError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
+  if (statusCode === 429) return true;
+
+  const text = getErrorText(error).toLowerCase();
+  if (text.length === 0) return false;
+
+  return [
+    "resource exhausted",
+    "resource_exhausted",
+    "too many requests",
+    "rate limit",
+    "rate-limit",
+    "quota exceeded",
+    "error code 429",
+  ].some((needle) => text.includes(needle));
+}
+
+function parseStoredParts(content: string | undefined): unknown[] {
+  if (!content) return [];
+  try {
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasPartsDelta(previous: unknown[], next: unknown[]): boolean {
+  return JSON.stringify(previous) !== JSON.stringify(next);
+}
+
 async function syncAssessmentsFromAssistantParts(args: {
   userId: string;
   sessionId: string;
-  dependentId?: string;
   specialtyAgent?: string;
   parts: unknown[];
 }) {
@@ -199,7 +261,7 @@ async function syncAssessmentsFromAssistantParts(args: {
     latestGuideline = start.guideline;
     latestEstimatedQuestions = start.estimatedQuestions;
     latestEstimatedMinutes = start.estimatedMinutes;
-    const saved = await new CreateAssessmentUseCase(args.dependentId).execute({
+    const saved = await new CreateAssessmentUseCase().execute({
       userId: args.userId,
       sessionId: args.sessionId,
       ...(start.runId ? { runId: start.runId } : {}),
@@ -218,7 +280,7 @@ async function syncAssessmentsFromAssistantParts(args: {
   }
 
   if (qa.length > 0 || actionCards.length > 0) {
-    await new CreateAssessmentUseCase(args.dependentId).execute({
+    await new CreateAssessmentUseCase().execute({
       userId: args.userId,
       sessionId: args.sessionId,
       ...(activeRunId ? { runId: activeRunId } : {}),
@@ -242,7 +304,7 @@ export const maxDuration = 180;
 
 export const POST = WithContext(
   // eslint-disable-next-line max-lines-per-function
-  async ({ user, dependentId, profileId, req }) => {
+  async ({ user, profileId, req }) => {
     console.log("[Chat API] Request started");
 
     const body = await req.json();
@@ -262,7 +324,6 @@ export const POST = WithContext(
     } = await new PrepareChatUseCase().execute({
       userId: user.uid,
       profileId,
-      dependentId,
       body,
     });
 
@@ -357,7 +418,6 @@ export const POST = WithContext(
         await syncAssessmentsFromAssistantParts({
           userId: user.uid,
           sessionId,
-          dependentId,
           specialtyAgent: agentType,
           parts: persistPayload.responseParts,
         });
@@ -431,13 +491,21 @@ export const POST = WithContext(
           error: { code: error.code, message: error.toResponseMessage() },
         });
       }
+      if (isProviderRateLimitError(error)) {
+        return JSON.stringify({
+          error: {
+            code: "RATE_LIMITED",
+            message:
+              "The AI provider is temporarily busy (429 Resource Exhausted). Please retry in a few seconds.",
+          },
+        });
+      }
       return "An error occurred while generating the response.";
     }
 
     const generateMessageId = createIdGenerator({ prefix: "msg", size: 16 });
 
     const stream = createUIMessageStream({
-      // eslint-disable-next-line max-lines-per-function
       execute: async ({ writer }) => {
         writer.write({
           type: "data-progress",
@@ -467,22 +535,29 @@ export const POST = WithContext(
           >[0]["originalMessages"],
           generateMessageId,
           onStepFinish: handleStepFinish,
-          // eslint-disable-next-line max-lines-per-function
           onFinish: ({ responseMessage, finishReason }) => {
-            console.log(`[Chat API] Stream finished. Reason: ${finishReason}`);
+            const storableParts = responseMessage.parts.filter(
+              (p: { type: string }) => p.type !== "step-start",
+            );
             // Only persist if the response has meaningful content — step-start
             // parts are always present even when the model returns 0 tokens.
-            const hasMeaningfulContent = responseMessage.parts?.some(
+            const hasMeaningfulContent = storableParts.some(
               (p: { type: string; text?: string }) =>
                 (p.type === "text" &&
                   typeof p.text === "string" &&
                   p.text.trim().length > 0) ||
                 p.type.startsWith("tool-"),
             );
-            if (hasMeaningfulContent) {
-              const storableParts = responseMessage.parts.filter(
-                (p: { type: string }) => p.type !== "step-start",
-              );
+
+            const isContinuationTurn = !isUserTurn && Boolean(toolOutputMerge);
+            const continuationHasDelta = !isContinuationTurn
+              ? true
+              : hasPartsDelta(
+                  parseStoredParts(toolOutputMerge?.content),
+                  storableParts,
+                );
+
+            if (hasMeaningfulContent && continuationHasDelta) {
               persistPayload = {
                 responseParts: storableParts,
                 userContent:
@@ -498,9 +573,18 @@ export const POST = WithContext(
                     : undefined,
               };
             } else {
+              const emptyReason = !hasMeaningfulContent
+                ? "no meaningful parts"
+                : "no continuation delta";
+              const previousParts = parseStoredParts(toolOutputMerge?.content);
               console.warn(
-                `[Chat API] Empty model response (0 meaningful parts). finishReason: ${finishReason}, ` +
+                `[Chat API] Empty model response (${emptyReason}). finishReason: ${finishReason}, ` +
                   `totalOutput: ${totalOutputTokens}, zeroOutputSteps: ${zeroOutputSteps}`,
+              );
+              console.warn(
+                `[Chat API] Continuation diagnostics: isContinuation=${isContinuationTurn}, ` +
+                  `prevParts=${previousParts.length}, newParts=${storableParts.length}, ` +
+                  `hasMeaningfulContent=${hasMeaningfulContent}, hasDelta=${continuationHasDelta}`,
               );
               // Invalidate the context cache for this agent — a stale cache may
               // have caused the model to produce no output.

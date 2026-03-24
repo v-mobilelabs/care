@@ -10,28 +10,22 @@ import {
   type MedicationDto,
 } from "../models/medication.model";
 
-const medicationsCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "medications");
+const medicationsCol = (userId: string) => scopedCol(userId, "medications");
 
 export const medicationRepository = {
   async create(
     userId: string,
-    dependentId: string | undefined,
     data: Omit<MedicationDocument, "userId" | "createdAt" | "updatedAt">,
   ): Promise<MedicationDto> {
-    const ref = medicationsCol(userId, dependentId).doc();
+    const ref = medicationsCol(userId).doc();
     const now = Timestamp.now();
     const clean = { ...data, userId, createdAt: now, updatedAt: now };
     await ref.set(stripUndefined(clean));
     return toMedicationDto(ref.id, clean);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<MedicationDto[]> {
-    const snap = await medicationsCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<MedicationDto[]> {
+    const snap = await medicationsCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -46,9 +40,8 @@ export const medicationRepository = {
     data: Partial<
       Omit<MedicationDocument, "userId" | "createdAt" | "updatedAt">
     >,
-    dependentId?: string,
   ): Promise<MedicationDto> {
-    const ref = medicationsCol(userId, dependentId).doc(medicationId);
+    const ref = medicationsCol(userId).doc(medicationId);
     const now = Timestamp.now();
     const clean = Object.fromEntries(
       Object.entries({ ...data, updatedAt: now }).filter(
@@ -60,11 +53,7 @@ export const medicationRepository = {
     return toMedicationDto(snap.id, snap.data() as MedicationDocument);
   },
 
-  async delete(
-    userId: string,
-    medicationId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await medicationsCol(userId, dependentId).doc(medicationId).delete();
+  async delete(userId: string, medicationId: string): Promise<void> {
+    await medicationsCol(userId).doc(medicationId).delete();
   },
 };

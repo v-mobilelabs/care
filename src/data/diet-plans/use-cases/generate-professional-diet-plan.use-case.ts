@@ -60,10 +60,6 @@ export class GenerateProfessionalDietPlanUseCase extends UseCase<
   GenerateProfessionalDietPlanInput,
   DietPlanDto
 > {
-  constructor(private readonly dependentId?: string) {
-    super();
-  }
-
   static validate(input: unknown): GenerateProfessionalDietPlanInput {
     return GenerateProfessionalDietPlanSchema.parse(input);
   }

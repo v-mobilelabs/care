@@ -65,8 +65,8 @@ async function parseUploadedFile(req: Request) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-// GET /api/files — paginated list of all user files with optional filters
-export const GET = WithContext(async ({ user, req }) => {
+// GET /api/files — paginated list of files for the active profile with optional filters
+export const GET = WithContext(async ({ user, profileId, req }) => {
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") ?? undefined;
   const limitParam = url.searchParams.get("limit");
@@ -81,6 +81,7 @@ export const GET = WithContext(async ({ user, req }) => {
 
   const result = await new ListAllFilesUseCase().execute({
     userId: user.uid,
+    profileId,
     ...(cursor && { cursor }),
     ...(limit && { limit }),
     ...(label && { label }),

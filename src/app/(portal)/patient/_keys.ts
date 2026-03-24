@@ -20,10 +20,10 @@ export const chatKeys = {
   doctorInvites: () => ["doctor-invites"] as const,
   usage: () => ["chat", "usage"] as const,
   assessments: () => ["chat", "assessments"] as const,
+  memories: () => ["chat", "memories"] as const,
   assessment: (assessmentId: string) =>
     ["chat", "assessments", assessmentId] as const,
   profile: () => ["chat", "profile"] as const,
-  dependents: () => ["chat", "dependents"] as const,
   labReports: () => ["chat", "lab-reports"] as const,
   bloodTests: () => ["chat", "blood-tests"] as const,
   callMetrics: () => ["chat", "call-metrics"] as const,
@@ -31,4 +31,5 @@ export const chatKeys = {
   patientDetails: () => ["patient", "details"] as const,
   patientSummaries: () => ["chat", "patient-summaries"] as const,
   callHistory: () => ["meet", "history"] as const,
+  referrals: () => ["chat", "referrals"] as const,
 } as const;

@@ -13,10 +13,7 @@ export class CreateConditionUseCase extends UseCase<
   CreateConditionInput,
   ConditionDto
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: ConditionService = conditionService,
-  ) {
+  constructor(private readonly service: ConditionService = conditionService) {
     super();
   }
 
@@ -25,6 +22,6 @@ export class CreateConditionUseCase extends UseCase<
   }
 
   protected async run(input: CreateConditionInput): Promise<ConditionDto> {
-    return this.service.create(input, this.dependentId);
+    return this.service.create(input);
   }
 }

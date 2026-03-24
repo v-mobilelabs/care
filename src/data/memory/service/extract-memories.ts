@@ -7,7 +7,7 @@
  * `addMemories(messages)` pattern.
  */
 
-import { google } from "@ai-sdk/google";
+import { google } from "@/data/shared/service/vertex-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { revalidateTag } from "next/cache";

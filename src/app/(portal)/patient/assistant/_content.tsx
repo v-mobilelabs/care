@@ -6,11 +6,46 @@ import { Messages } from "@/ui/ai/messages";
 import { useUploadFileMutation, useProfileQuery, type FileRecord } from "@/app/(portal)/patient/_query";
 import { getInitials } from "@/lib/get-initials";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { useActiveProfile } from "@/ui/ai/context/active-profile-context";
 import { useChatContext, useMessagesContext } from "@/ui/ai/context/chat-context";
 import { InputBar } from "@/ui/ai/components/input-bar";
 import { StarterCards } from "./_components/starter-cards";
 import { ChatSkeleton } from "./_chat-skeleton";
+
+const FIREBASE_STORAGE_BUCKET =
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+
+function normalizeStoragePath(path: string): string {
+    let current = path;
+    for (let i = 0; i < 3; i++) {
+        try {
+            const decoded = decodeURIComponent(current);
+            if (decoded === current) {
+                return current;
+            }
+            current = decoded;
+        } catch {
+            // Keep original path if decoding fails (malformed escape sequence).
+            return current;
+        }
+    }
+    return current;
+}
+
+function buildGcsFilePart(
+    file: Pick<FileRecord, "mimeType" | "storagePath">,
+): { type: "file"; url: string; mediaType: string } | null {
+    if (!FIREBASE_STORAGE_BUCKET || !file.storagePath) {
+        return null;
+    }
+
+    const normalizedStoragePath = normalizeStoragePath(file.storagePath);
+
+    return {
+        type: "file",
+        url: `gs://${FIREBASE_STORAGE_BUCKET}/${normalizedStoragePath}`,
+        mediaType: file.mimeType,
+    };
+}
 
 
 // ── Chat content (client) ─────────────────────────────────────────────────────
@@ -43,7 +78,6 @@ export function ChatContent() {
     };
 
     const { sessionId } = useChatContext();
-    const { activeDependentId } = useActiveProfile();
     const uploadFile = useUploadFileMutation();
     const { data: profile } = useProfileQuery();
     const { data: user } = useCurrentUser();
@@ -67,7 +101,6 @@ export function ChatContent() {
         fetchNextPage, hasNextPage, isFetchingNextPage,
         error, regenerate,
     } = useMessagesContext();
-    console.log("ChatContent render", { messages, messagesLength: messages?.length });
     // ── Input (lifted so Messages onStarterSelect can set it) ─────────────────
     const [input, setInput] = useState("");
     // True while file uploads are in-flight (before the AI stream starts).
@@ -93,15 +126,12 @@ export function ChatContent() {
                     setIsUploading(true);
                     const results = await Promise.all(
                         Array.from(files).map(async (f) => {
-                            return uploadFile.mutateAsync({ sessionId, file: f, dependentId: activeDependentId });
+                            return uploadFile.mutateAsync({ sessionId, file: f });
                         })
                     ).catch(() => []);
                     setIsUploading(false);
-                    for (const r of results) {
-                        if (r.downloadUrl) {
-                            fileParts.push({ type: "file", url: r.downloadUrl, mediaType: r.mimeType });
-                        }
-                    }
+                    const resolvedParts = results.map((file) => buildGcsFilePart(file));
+                    fileParts.push(...resolvedParts.filter((part) => part !== null));
                 }
                 await sendMessage({ text, ...(fileParts.length > 0 && { files: fileParts }) });
             })();
@@ -116,22 +146,16 @@ export function ChatContent() {
             setIsUploading(true);
             const results = await Promise.all(
                 Array.from(files).map(async (f) => {
-                    return uploadFile.mutateAsync({ sessionId, file: f, dependentId: activeDependentId });
+                    return uploadFile.mutateAsync({ sessionId, file: f });
                 })
-            ).catch(() => [] as Array<{ downloadUrl?: string; mimeType: string }>);
+            ).catch(() => [] as FileRecord[]);
             setIsUploading(false);
-            for (const r of results) {
-                if (r.downloadUrl) {
-                    fileParts.push({ type: "file", url: r.downloadUrl, mediaType: r.mimeType });
-                }
-            }
+            const resolvedParts = results.map((file) => buildGcsFilePart(file));
+            fileParts.push(...resolvedParts.filter((part) => part !== null));
         }
         if (existingFiles && existingFiles.length > 0) {
-            for (const f of existingFiles) {
-                if (f.downloadUrl) {
-                    fileParts.push({ type: "file", url: f.downloadUrl, mediaType: f.mimeType });
-                }
-            }
+            const resolvedParts = existingFiles.map((file) => buildGcsFilePart(file));
+            fileParts.push(...resolvedParts.filter((part) => part !== null));
         }
         if (fileParts.length > 0) setPendingAttachments(fileParts.map(({ url, mediaType }) => ({ url, mediaType })));
         await sendMessage({ text, ...(fileParts.length > 0 && { files: fileParts }) });
@@ -227,6 +251,7 @@ export function ChatContent() {
                             phraseFading={phraseFading}
                             loadingHints={loadingHints}
                             agentType={agentType}
+                            sessionId={sessionId}
                             error={error}
                             onRetry={regenerate}
                             onAnswer={handleAnswer}
@@ -238,6 +263,7 @@ export function ChatContent() {
                             onEditSubmit={handleEditSubmit}
                             onStarterSelect={setInput}
                             onLearnMore={async (text: string) => { await sendMessage({ text }); }}
+                            onSendReferralMessage={async (text: string) => { await sendMessage({ text }); }}
                             hasNextPage={hasNextPage}
                             isFetchingNextPage={isFetchingNextPage}
                             onLoadMore={() => fetchNextPage()}

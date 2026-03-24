@@ -26,34 +26,24 @@ export class DietPlanService {
     };
   }
 
-  async create(
-    input: CreateDietPlanInput,
-    dependentId?: string,
-  ): Promise<DietPlanDto> {
+  async create(input: CreateDietPlanInput): Promise<DietPlanDto> {
     const { userId, ...rest } = input;
     if (rest.sessionId) {
       return dietPlanRepository.upsertBySession(
         userId,
         rest.sessionId,
         this.buildData(rest),
-        dependentId,
       );
     }
-    return dietPlanRepository.create(userId, this.buildData(rest), dependentId);
+    return dietPlanRepository.create(userId, this.buildData(rest));
   }
 
-  async list(
-    input: ListDietPlansInput,
-    dependentId?: string,
-  ): Promise<DietPlanDto[]> {
-    return dietPlanRepository.list(input.userId, input.limit, dependentId);
+  async list(input: ListDietPlansInput): Promise<DietPlanDto[]> {
+    return dietPlanRepository.list(input.userId, input.limit);
   }
 
-  async delete(
-    input: DeleteDietPlanInput,
-    dependentId?: string,
-  ): Promise<void> {
-    await dietPlanRepository.delete(input.userId, input.planId, dependentId);
+  async delete(input: DeleteDietPlanInput): Promise<void> {
+    await dietPlanRepository.delete(input.userId, input.planId);
   }
 }
 

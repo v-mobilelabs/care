@@ -13,7 +13,6 @@ export const bloodTestChatAgent = createAgent({
     fetchBloodTests: createFetchBloodTestsTool(
       options.userId,
       options.profileId,
-      options.dependentId,
     ),
     submitBloodTestAnalysis: createSubmitBloodTestAnalysisTool(),
   }),

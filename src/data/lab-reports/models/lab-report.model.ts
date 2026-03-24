@@ -125,8 +125,6 @@ export const ExtractLabReportInputSchema = z.object({
   userId: z.string().min(1),
   profileId: z.string().min(1),
   fileId: z.string().min(1),
-  /** Optional: scopes lab report records to a dependent sub-collection. */
-  dependentId: z.string().optional(),
 });
 export type ExtractLabReportInput = z.infer<typeof ExtractLabReportInputSchema>;
 

@@ -12,10 +12,7 @@ export class DeleteMedicationUseCase extends UseCase<
   DeleteMedicationInput,
   void
 > {
-  constructor(
-    private readonly dependentId?: string,
-    private readonly service: MedicationService = medicationService,
-  ) {
+  constructor(private readonly service: MedicationService = medicationService) {
     super();
   }
 
@@ -24,6 +21,6 @@ export class DeleteMedicationUseCase extends UseCase<
   }
 
   protected async run(input: DeleteMedicationInput): Promise<void> {
-    await this.service.delete(input, this.dependentId);
+    await this.service.delete(input);
   }
 }

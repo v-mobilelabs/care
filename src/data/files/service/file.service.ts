@@ -58,7 +58,7 @@ export class FileService {
   }
 
   async listPaginated(input: ListAllFilesInput): Promise<PaginatedFiles> {
-    return fileRepository.listPaginated(input.userId, {
+    return fileRepository.listPaginated(input.profileId, {
       limit: input.limit,
       cursor: input.cursor,
       label: input.label,

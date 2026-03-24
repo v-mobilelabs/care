@@ -71,9 +71,7 @@ export abstract class UseCase<TInput, TOutput> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const inp = validatedInput as any;
           const userId = inp.userId as string;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const dependentId = (this as any).dependentId as string | undefined;
-          const profileId = dependentId ?? inp.profileId ?? userId;
+          const profileId = inp.profileId ?? userId;
 
           if (isRemoveOptions(indexable)) {
             if (indexable.collection) {
@@ -123,7 +121,6 @@ export abstract class UseCase<TInput, TOutput> {
                 .indexDocument({
                   userId,
                   profileId,
-                  dependentId,
                   type: indexable.type,
                   sourceId,
                   content,

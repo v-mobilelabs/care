@@ -12,8 +12,7 @@ import {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
-const summariesCol = (userId: string, dependentId?: string) =>
-  scopedCol(dependentId ?? userId, "patient-summaries");
+const summariesCol = (userId: string) => scopedCol(userId, "patient-summaries");
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -21,7 +20,6 @@ export const patientSummaryRepository = {
   async create(
     userId: string,
     data: Omit<PatientSummaryDocument, "userId" | "createdAt" | "updatedAt">,
-    dependentId?: string,
   ): Promise<PatientSummaryDto> {
     const now = Timestamp.now();
     const doc: PatientSummaryDocument = {
@@ -30,17 +28,13 @@ export const patientSummaryRepository = {
       createdAt: now,
       updatedAt: now,
     };
-    const ref = summariesCol(userId, dependentId).doc();
+    const ref = summariesCol(userId).doc();
     await ref.set(stripUndefined(doc));
     return toPatientSummaryDto(ref.id, doc);
   },
 
-  async list(
-    userId: string,
-    limit: number,
-    dependentId?: string,
-  ): Promise<PatientSummaryDto[]> {
-    const snap = await summariesCol(userId, dependentId)
+  async list(userId: string, limit: number): Promise<PatientSummaryDto[]> {
+    const snap = await summariesCol(userId)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
@@ -49,11 +43,7 @@ export const patientSummaryRepository = {
     );
   },
 
-  async delete(
-    userId: string,
-    summaryId: string,
-    dependentId?: string,
-  ): Promise<void> {
-    await summariesCol(userId, dependentId).doc(summaryId).delete();
+  async delete(userId: string, summaryId: string): Promise<void> {
+    await summariesCol(userId).doc(summaryId).delete();
   },
 };

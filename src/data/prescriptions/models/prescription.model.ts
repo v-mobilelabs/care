@@ -113,7 +113,6 @@ export const CreatePrescriptionSchema = z.object({
   prescribedBy: z.string().optional(),
   prescriptionDate: z.string().optional(),
   notes: z.string().optional(),
-  dependentId: z.string().optional(),
 });
 export type CreatePrescriptionInput = z.infer<typeof CreatePrescriptionSchema>;
 
