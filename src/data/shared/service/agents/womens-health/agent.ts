@@ -7,6 +7,9 @@ import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 export const womensHealthAgent = createAgent({
   id: "womensHealth",
   buildSystemPrompt: () => buildWomensHealthPrompt(),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

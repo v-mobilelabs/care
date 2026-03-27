@@ -37,7 +37,7 @@ export function RetryBlock({ error, onRetry }: Readonly<{ error?: Error | null; 
                     color="orange"
                     radius="md"
                     variant="light"
-                    title="Daily credits used up"
+                    title="Monthly credits used up"
                     style={{ flex: 1 }}
                 >
                     <Text size="sm">{message}</Text>

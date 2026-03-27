@@ -77,7 +77,7 @@ export function useAskAI() {
     setPendingAskAI({ text: input.text, sessionId, files });
 
     // Navigate to the assistant page with the target session ID.
-    router.push(`/patient/assistant?id=${sessionId}`);
+    router.push(`/user/assistant?id=${sessionId}`);
     return sessionId;
   }
 

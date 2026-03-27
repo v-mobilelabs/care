@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/auth/jwt";
+import {
+  ADMIN_HOME_PATH,
+  getHomePathForKind,
+  isAdminKind,
+  isConsolePath,
+} from "@/lib/auth/admin";
 
 // ── Public routes (no auth required) ─────────────────────────────────────────
 const PUBLIC_PREFIXES = [
@@ -25,7 +31,7 @@ function isPublic(pathname: string): boolean {
 // API routes (/api/**) are NOT blocked here; kind enforcement for APIs is
 // done by WithContext({ kind }) at the handler level.
 const DOCTOR_ZONE_PREFIX = "/doctor/";
-const USER_ZONE_PREFIXES = ["/patient"];
+const USER_ZONE_PREFIXES = ["/user"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -57,9 +63,27 @@ export async function proxy(request: NextRequest) {
   // User (non-doctor) trying to access the doctor zone → redirect to their portal.
   if (payload.kind === "user" && pathname.startsWith(DOCTOR_ZONE_PREFIX)) {
     const chatUrl = request.nextUrl.clone();
-    chatUrl.pathname = "/patient";
+    chatUrl.pathname = "/user";
     chatUrl.search = "";
     return NextResponse.redirect(chatUrl);
+  }
+
+  if (!isAdminKind(payload.kind) && isConsolePath(pathname)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = getHomePathForKind(payload.kind);
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (
+    isAdminKind(payload.kind) &&
+    (pathname.startsWith(DOCTOR_ZONE_PREFIX) ||
+      USER_ZONE_PREFIXES.some((p) => pathname.startsWith(p)))
+  ) {
+    const adminUrl = request.nextUrl.clone();
+    adminUrl.pathname = ADMIN_HOME_PATH;
+    adminUrl.search = "";
+    return NextResponse.redirect(adminUrl);
   }
 
   return NextResponse.next();

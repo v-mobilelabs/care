@@ -26,7 +26,7 @@ import { useState } from "react";
 import { signOut } from "@/lib/auth/sign-out";
 import { Logo } from "@/ui/brand/logo";
 import { colors, spacing } from "@/ui/tokens";
-import { useConsentMutation } from "@/app/(portal)/patient/_query";
+import { useConsentMutation } from "@/app/(portal)/user/_query";
 
 // ── Storage key ───────────────────────────────────────────────────────────────
 

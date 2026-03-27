@@ -24,7 +24,7 @@ export function LandingFooter() {
               <Anchor href="/status" c="dimmed" size="xs" underline="hover">
                 System Status
               </Anchor>
-              <Anchor component={Link} href="/patient/assistant" size="xs" c="dimmed">Symptom Check</Anchor>
+              <Anchor component={Link} href="/user/assistant" size="xs" c="dimmed">Symptom Check</Anchor>
               <Anchor component={Link} href="/privacy" size="xs" c="dimmed">Privacy Policy</Anchor>
               <Anchor component={Link} href="/terms" size="xs" c="dimmed" >Terms &amp; Conditions</Anchor>
             </Group>

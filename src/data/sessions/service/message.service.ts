@@ -17,6 +17,7 @@ export class MessageService {
    */
   async add(input: AddMessageInput): Promise<MessageDto> {
     const { userId, profileId, sessionId } = input;
+    const lastMessagePreview = buildMessagePreview(input.content);
 
     const writes: Promise<unknown>[] = [
       messageRepository.add(userId, profileId, sessionId, {
@@ -25,7 +26,12 @@ export class MessageService {
         usage: input.usage,
         agentType: input.agentType,
       }),
-      sessionRepository.incrementMessageCount(userId, profileId, sessionId),
+      sessionRepository.incrementMessageCount(
+        userId,
+        profileId,
+        sessionId,
+        lastMessagePreview,
+      ),
     ];
 
     if (input.usage) {
@@ -53,6 +59,38 @@ export class MessageService {
       input.cursor,
     );
   }
+}
+
+const PREVIEW_MAX_LENGTH = 140;
+
+function buildMessagePreview(content: string): string | undefined {
+  const plainFromJson = extractTextFromSerializedParts(content);
+  const plainText = normalizePreviewText(plainFromJson ?? content);
+  if (!plainText) return undefined;
+
+  if (plainText.length <= PREVIEW_MAX_LENGTH) return plainText;
+  return `${plainText.slice(0, PREVIEW_MAX_LENGTH - 1)}…`;
+}
+
+function extractTextFromSerializedParts(content: string): string | undefined {
+  try {
+    const parsed = JSON.parse(content) as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) return undefined;
+
+    const textParts = parsed
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => (part.text as string).trim())
+      .filter((text) => text.length > 0);
+
+    if (textParts.length === 0) return undefined;
+    return textParts.join(" ");
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePreviewText(text: string): string {
+  return text.replaceAll(/\s+/g, " ").trim();
 }
 
 /** Singleton — import this throughout the application. */

@@ -10,6 +10,9 @@ export const ophthalmologyAgent = createAgent({
   buildSystemPrompt: () => buildOphthalmologyPrompt(),
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

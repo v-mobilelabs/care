@@ -13,15 +13,12 @@
  *  3. Composes a middleware chain:
  *       preContextMiddleware → cachedContentMiddleware → toolInputExamples
  *     (guardrail, credit, memory, and RAG are pre-fetched in PrepareChatUseCase
- *      via `prefetchContext()` and injected by `preContextMiddleware`)
+ *      via preflight + gateway orchestration and injected by `preContextMiddleware`)
  *  4. Wraps the model with the middleware chain
  *  5. Delegates to a fresh ToolLoopAgent for the actual LLM streaming loop
  */
 
-import {
-  google,
-  type VertexLanguageModelOptions,
-} from "@/data/shared/service/vertex-provider";
+import { type VertexLanguageModelOptions } from "@/data/shared/service/vertex-provider";
 import {
   ToolLoopAgent,
   stepCountIs,
@@ -43,17 +40,21 @@ import type {
   LanguageModel,
 } from "ai";
 import { devToolsMiddleware } from "@ai-sdk/devtools";
-import {
-  cachedContentMiddleware,
-  getContextCache,
-} from "@/data/shared/service/middleware/cached-content.middleware";
+import { cachedContentMiddleware } from "@/data/shared/service/middleware/cached-content.middleware";
 import { preContextMiddleware } from "@/data/shared/service/middleware/pre-context.middleware";
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
 import { actionCard } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
 import { submitReportTool } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import { submitReferralRequestTool } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
-import { GetProfileUseCase, type ProfileDto } from "@/data/profile";
+import {
+  createAgentExecutionGraph,
+  runAgentExecutionGraph,
+  type AgentExecutionOptions,
+  type AgentThinkingLevel,
+} from "@/data/shared/service/agents/base/langgraph-agent-execution.service";
+import { modelIds, sharedModels } from "@/data/shared/service/model";
+import type { ProfileDto } from "@/data/profile";
 
 // ── Prune helper ──────────────────────────────────────────────────────────────
 
@@ -113,27 +114,6 @@ function pruneKeepingToolCallReasoning(
   );
 }
 
-// ── Profile context builder ───────────────────────────────────────────────────
-
-function buildProfileContext(profile: ProfileDto): string {
-  const age = profile.dateOfBirth
-    ? Math.floor(
-        (Date.now() - new Date(profile.dateOfBirth).getTime()) / 31_557_600_000,
-      )
-    : undefined;
-  const lines = [
-    `- ID: ${profile.userId}`,
-    `- Kind: ${profile.kind}`,
-    profile.name && `- Name: ${profile.name}`,
-    profile.gender && `- Gender: ${profile.gender}`,
-    profile.city && `- City: ${profile.city}`,
-    profile.country && `- Country: ${profile.country}`,
-    profile.dateOfBirth &&
-      `- Date of Birth: ${profile.dateOfBirth}${age !== undefined ? ` (Age: ${age})` : ""}`,
-  ].filter(Boolean);
-  return `## Patient Profile\n${lines.join("\n")}`;
-}
-
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /**
@@ -143,6 +123,8 @@ function buildProfileContext(profile: ProfileDto): string {
 export interface AgentCallOptions {
   /** The authenticated user's UID */
   userId: string;
+  /** Response style selected by user in assistant UI. */
+  responseMode?: "quick" | "full";
   /** Active profile ID (self profile in patient portal) */
   profileId: string;
   /** Latest user message text — used as the semantic search query for RAG */
@@ -153,15 +135,21 @@ export interface AgentCallOptions {
   hasAttachment?: boolean;
   /** Pre-computed query embedding — skips the embed call inside stream() */
   queryEmbedding?: number[];
+  /** Pre-fetched profile reused across gateway + agent runtime. */
+  profile?: ProfileDto | null;
   /** Thinking depth for the LLM — set by gateway based on query complexity */
-  thinkingLevel?: "low" | "medium" | "high";
+  thinkingLevel?: AgentThinkingLevel;
   /** Whether this query needs patient medical records (RAG). When false, the
    *  expensive KNN + Bedrock reranking pipeline is skipped entirely. */
   needsRag?: boolean;
-  /** Pre-fetched context from prefetchContext(). When provided, the agent
+  /** Pre-fetched context assembled in PrepareChatUseCase. When provided, the agent
    *  skips guardrail/credit/memory/rag middleware and uses a lightweight
    *  injector instead. */
   preContext?: PreRunContext;
+  /** Agent's assessment configuration (if assessment-based agent). */
+  assessmentConfig?: {
+    adaptiveMode?: boolean;
+  };
 }
 
 /** Configuration for a specialist agent. */
@@ -174,6 +162,12 @@ export interface AgentConfig {
   buildTools: (options: AgentCallOptions) => ToolSet;
   /** Return additional per-request context (e.g. attachment note). May be async. */
   buildDynamicContext?: (options: AgentCallOptions) => string | Promise<string>;
+  /** Configuration for adaptive assessment questions. When enabled, questions are
+   *  validated via lightweight LLM at startAssessment time. */
+  assessmentConfig?: {
+    /** Enable adaptive question validation and skeletal structure. */
+    adaptiveMode?: boolean;
+  };
   /** LLM model for medium/high thinking. Default: gemini-3.1-pro-preview. */
   model?: LanguageModel;
   /** Model ID string for context cache key. Default: "gemini-3.1-pro-preview". */
@@ -194,6 +188,117 @@ export interface AgentConfig {
   allowActionCard?: boolean;
 }
 
+type AgentEventCallback = (event: Record<string, unknown>) => void;
+
+function getAgentEventCallback(
+  params: AgentStreamParameters<AgentCallOptions, ToolSet>,
+  key: "onStepFinish" | "onFinish",
+): AgentEventCallback | undefined {
+  if (!(key in params)) return undefined;
+  return (params as Record<string, unknown>)[key] as
+    | AgentEventCallback
+    | undefined;
+}
+
+function getAgentMessages(
+  params: AgentStreamParameters<AgentCallOptions, ToolSet>,
+): ModelMessage[] {
+  if ("prompt" in params && Array.isArray(params.prompt)) {
+    return params.prompt;
+  }
+
+  if ("messages" in params && params.messages) {
+    return params.messages;
+  }
+
+  return [];
+}
+
+function getRequiredAgentOptions(
+  id: string,
+  params: AgentStreamParameters<AgentCallOptions, ToolSet>,
+): AgentCallOptions {
+  const options = "options" in params ? params.options : undefined;
+
+  if (!options) {
+    throw new Error(
+      `[${id}] stream() requires options: AgentCallOptions (userId, profileId, userQuery, sessionId).`,
+    );
+  }
+
+  return options;
+}
+
+function buildVertexOptions(args: {
+  thinkingLevel?: AgentThinkingLevel;
+  cacheName: string | null;
+}): VertexLanguageModelOptions {
+  const vertexThinkingLevel =
+    args.thinkingLevel === "low" ||
+    args.thinkingLevel === "medium" ||
+    args.thinkingLevel === "high"
+      ? args.thinkingLevel
+      : undefined;
+
+  return {
+    ...(vertexThinkingLevel && {
+      thinkingConfig: {
+        thinkingLevel: vertexThinkingLevel,
+        includeThoughts: true,
+      },
+    }),
+    ...(args.cacheName && { cachedContent: args.cacheName }),
+  };
+}
+
+function buildAgentMiddleware(args: {
+  agentId: string;
+  preContext?: PreRunContext;
+  dynamicContext: string;
+  cacheName: string | null;
+}): LanguageModelMiddleware[] {
+  const commonMiddleware: LanguageModelMiddleware[] = [
+    ...(args.cacheName ? [cachedContentMiddleware] : []),
+    addToolInputExamplesMiddleware(),
+    ...(process.env.NODE_ENV === "development" ? [devToolsMiddleware()] : []),
+  ];
+
+  if (!args.preContext) {
+    throw new Error(
+      `[${args.agentId}] preContext is required — PrepareChatUseCase must run preflight + gateway orchestration before streaming.`,
+    );
+  }
+
+  return [
+    preContextMiddleware({
+      agentId: args.agentId,
+      preContext: args.preContext,
+      dynamicContext: args.dynamicContext || undefined,
+      cacheActive: !!args.cacheName,
+    }),
+    ...commonMiddleware,
+  ];
+}
+
+function buildAgentInstructions(args: {
+  cacheName: string | null;
+  staticPrompt: string;
+}): SystemModelMessage[] | undefined {
+  return args.cacheName
+    ? undefined
+    : [{ role: "system", content: args.staticPrompt }];
+}
+
+function compactSystemPrompt(prompt: string): string {
+  return prompt
+    .replaceAll(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 /**
@@ -208,18 +313,21 @@ export interface AgentConfig {
  * });
  * ```
  */
+// eslint-disable-next-line max-lines-per-function
 export function createAgent(
   config: AgentConfig,
 ): Agent<AgentCallOptions, ToolSet> {
+  const staticPrompt = compactSystemPrompt(config.buildSystemPrompt());
+
   const {
     id,
-    buildSystemPrompt,
     buildTools,
     buildDynamicContext,
-    model = google("gemini-3.1-pro-preview"),
-    modelId = "gemini-3.1-pro-preview",
-    fastModel = google("gemini-3.1-flash-lite-preview"),
-    fastModelId = "gemini-3.1-flash-lite-preview",
+    assessmentConfig,
+    model = sharedModels.pro,
+    modelId = modelIds.pro,
+    fastModel = sharedModels.fast,
+    fastModelId = modelIds.fast,
     useThinking = true,
     maxSteps = 10,
     temperature,
@@ -227,8 +335,22 @@ export function createAgent(
     allowActionCard = true,
   } = config;
 
+  const executionGraph = createAgentExecutionGraph({
+    id,
+    staticPrompt,
+    buildTools: (options) => buildTools(options as AgentCallOptions),
+    buildDynamicContext: buildDynamicContext
+      ? async (options) => buildDynamicContext(options as AgentCallOptions)
+      : undefined,
+    assessmentConfig,
+    modelId,
+    fastModelId,
+    useThinking,
+    allowActionCard,
+  });
+
   const agent: Agent<AgentCallOptions, ToolSet> = {
-    version: "agent-v1" as const,
+    version: "agent-v1",
     id,
     // Expose tool schemas so the SDK can validate incoming UIMessage tool parts
     // (createAgentUIStreamResponse → validateUIMessages reads agent.tools).
@@ -240,6 +362,7 @@ export function createAgent(
         profileId: "",
         userQuery: "",
         sessionId: "",
+        assessmentConfig,
       } as AgentCallOptions),
       memory: createMemoryTool("", "", ""),
       ...(allowActionCard ? { actionCard } : {}),
@@ -255,136 +378,41 @@ export function createAgent(
       );
     },
 
+    // eslint-disable-next-line max-lines-per-function
     async stream(
       params: AgentStreamParameters<AgentCallOptions, ToolSet>,
     ): Promise<StreamTextResult<ToolSet, never>> {
       const { abortSignal, experimental_transform } = params;
-
-      // Forward outer callbacks so createAgentUIStreamResponse can
-      // accumulate usage / receive finish events through the agent.
-      const outerOnStepFinish =
-        "onStepFinish" in params
-          ? ((params as Record<string, unknown>).onStepFinish as
-              | ((event: Record<string, unknown>) => void)
-              | undefined)
-          : undefined;
-      const outerOnFinish =
-        "onFinish" in params
-          ? ((params as Record<string, unknown>).onFinish as
-              | ((event: Record<string, unknown>) => void)
-              | undefined)
-          : undefined;
-
-      // Extract messages — createAgentUIStreamResponse passes `prompt`
-      const messages =
-        "prompt" in params && Array.isArray(params.prompt)
-          ? params.prompt
-          : "messages" in params && params.messages
-            ? params.messages
-            : [];
-
-      const options =
-        "options" in params ? (params.options as AgentCallOptions) : undefined;
-
-      if (!options) {
-        throw new Error(
-          `[${id}] stream() requires options: AgentCallOptions (userId, profileId, userQuery, sessionId).`,
-        );
-      }
+      const outerOnStepFinish = getAgentEventCallback(params, "onStepFinish");
+      const outerOnFinish = getAgentEventCallback(params, "onFinish");
+      const messages = getAgentMessages(params);
+      const options = getRequiredAgentOptions(id, params);
 
       console.log(
         `[${id}] Starting stream for user ${options.userId}, query: "${options.userQuery.slice(0, 80)}${options.userQuery.length > 80 ? "…" : ""}"`,
       );
 
-      // ── 1. Build per-request tools + fetch profile ─────────────────
-      const [tools, profile] = await Promise.all([
-        Promise.resolve({
-          ...buildTools(options),
-          memory: createMemoryTool(
-            options.userId,
-            options.profileId,
-            options.sessionId,
-          ),
-          ...(allowActionCard ? { actionCard } : {}),
-          submitReport: submitReportTool,
-          submitReferralRequest: submitReferralRequestTool,
-        } as ToolSet),
-        new GetProfileUseCase()
-          .execute({ userId: options.profileId })
-          .catch(() => null),
-      ]);
-
-      const staticPrompt = buildSystemPrompt();
-      const agentDynamicContext = (await buildDynamicContext?.(options)) ?? "";
-      const profileContext = profile ? buildProfileContext(profile) : "";
-      const dynamicContext = [profileContext, agentDynamicContext]
-        .filter(Boolean)
-        .join("\n\n");
+      const executionState = await runAgentExecutionGraph({
+        graph: executionGraph,
+        options: options as AgentExecutionOptions,
+        messages,
+      });
 
       console.log(
-        `[${id}] Instructions: static ${staticPrompt.length} chars + dynamic ${dynamicContext.length} chars | Tools: ${Object.keys(tools).join(", ")}`,
+        `[${id}] LangGraph runtime: ${executionState.trace.join(" → ")}`,
       );
 
-      // ── 2. Select model based on thinking level ─────────────────────
-      const thinkingLevel =
-        options.thinkingLevel ?? (useThinking ? "high" : undefined);
-      const useFast = thinkingLevel === "low";
-      const activeModel = useFast ? fastModel : model;
-      const activeModelId = useFast ? fastModelId : modelId;
-
-      // ── 3. Context cache (keyed per model variant) ──────────────────
-      const cacheKey = useFast ? `${id}:fast` : id;
-      const cacheName = await getContextCache(
-        cacheKey,
-        activeModelId,
-        staticPrompt,
-        tools,
-      );
-      if (cacheName) console.log(`[${id}] Using context cache: ${cacheName}`);
-
-      if (thinkingLevel)
-        console.log(
-          `[${id}] Thinking level: ${thinkingLevel}${useFast ? ` (using ${activeModelId})` : ""}`,
-        );
-
-      const vertexThinkingLevel =
-        thinkingLevel === "low" ||
-        thinkingLevel === "medium" ||
-        thinkingLevel === "high"
-          ? thinkingLevel
-          : undefined;
-
-      const vertexOptions: VertexLanguageModelOptions = {
-        ...(vertexThinkingLevel && {
-          thinkingConfig: { thinkingLevel: vertexThinkingLevel },
-        }),
-        ...(cacheName && { cachedContent: cacheName }),
-      };
-
-      // ── 4. Middleware chain ─────────────────────────────────────────
-      const commonMiddleware: LanguageModelMiddleware[] = [
-        ...(cacheName ? [cachedContentMiddleware] : []),
-        addToolInputExamplesMiddleware(),
-        ...(process.env.NODE_ENV === "development"
-          ? [devToolsMiddleware()]
-          : []),
-      ];
-
-      const middleware: LanguageModelMiddleware[] = options.preContext
-        ? [
-            preContextMiddleware({
-              agentId: id,
-              preContext: options.preContext,
-              dynamicContext: dynamicContext || undefined,
-              cacheActive: !!cacheName,
-            }),
-            ...commonMiddleware,
-          ]
-        : (() => {
-            throw new Error(
-              `[${id}] preContext is required — PrepareChatUseCase must call prefetchContext() before streaming.`,
-            );
-          })();
+      const activeModel = executionState.useFast ? fastModel : model;
+      const vertexOptions = buildVertexOptions({
+        thinkingLevel: executionState.thinkingLevel,
+        cacheName: executionState.cacheName,
+      });
+      const middleware = buildAgentMiddleware({
+        agentId: id,
+        preContext: options.preContext,
+        dynamicContext: executionState.dynamicContext,
+        cacheName: executionState.cacheName,
+      });
 
       const wrappedModel = wrapLanguageModel({
         model: activeModel as Parameters<typeof wrapLanguageModel>[0]["model"],
@@ -393,15 +421,16 @@ export function createAgent(
       // ── 5. Instructions ─────────────────────────────────────────────
       // When cache is active, static prompt is in cache — omit instructions.
       // Dynamic context + RAG are injected by ragMiddleware as synthetic turns.
-      const instructions: SystemModelMessage[] | undefined = cacheName
-        ? undefined
-        : [{ role: "system", content: staticPrompt }];
+      const instructions = buildAgentInstructions({
+        cacheName: executionState.cacheName,
+        staticPrompt: executionState.staticPrompt,
+      });
 
       // ── 6. Delegate to ToolLoopAgent ────────────────────────────────
       return new ToolLoopAgent({
         model: wrappedModel,
         instructions,
-        tools,
+        tools: executionState.tools,
         ...(temperature !== undefined && { temperature }),
         ...(maxOutputTokens !== undefined && { maxOutputTokens }),
         stopWhen: stepCountIs(maxSteps),

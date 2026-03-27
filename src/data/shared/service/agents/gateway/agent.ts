@@ -20,8 +20,10 @@
  * ```
  */
 
+import type { FileLabel } from "@/data/files";
 import { z } from "zod";
 import { aiService } from "@/data/shared/service/ai.service";
+import { decideRagRequirement } from "./rag-decision";
 import { buildRoutingPrompt } from "./prompt";
 
 export type { GatewayInput } from "./prompt";
@@ -55,7 +57,14 @@ const LAB_REPORT_KEYWORDS = [
   "blood results",
   "lab results",
   "lab report",
+  "test report",
+  "test result",
   "biomarker",
+  "marker report",
+  "double marker",
+  "triple marker",
+  "tumor marker",
+  "prenatal screening",
   "blood work",
   "blood panel",
   "cbc result",
@@ -96,6 +105,45 @@ const PATIENT_KEYWORDS = [
   "my activity level",
 ];
 
+const MENTAL_HEALTH_KEYWORDS = [
+  "anxiety",
+  "depression",
+  "depressed",
+  "stress",
+  "stressed",
+  "panic attack",
+  "panic",
+  "ocd",
+  "ptsd",
+  "trauma",
+  "traumatic",
+  "insomnia",
+  "sleep issue",
+  "sleep problem",
+  "mood",
+  "mood swing",
+  "bipolar",
+  "mental health",
+  "psychol",
+  "therapist",
+  "counselor",
+  "counselling",
+  "cbt",
+  "mindfulness",
+  "meditation",
+  "breathing exercis",
+  "burnout",
+  "emotional",
+  "self-harm",
+  "suicidal",
+  "suicid",
+  "phobia",
+  "afraid",
+  "worried",
+  "worry",
+  "overwhelm",
+];
+
 const NEUROLOGY_KEYWORDS = [
   "headache",
   "migraine",
@@ -110,6 +158,209 @@ const NEUROLOGY_KEYWORDS = [
   "neurological",
 ];
 
+const CARDIOLOGY_KEYWORDS = [
+  "chest pain",
+  "cardiac",
+  "heart",
+  "arrhythmia",
+  "palpitation",
+  "hypertension",
+  "high blood pressure",
+  "angina",
+  "heart disease",
+  "heart condition",
+  "valve",
+  "heart murmur",
+  "atrial fibrillation",
+];
+
+const DERMATOLOGY_KEYWORDS = [
+  "skin",
+  "rash",
+  "eczema",
+  "psoriasis",
+  "acne",
+  "mole",
+  "wart",
+  "fungal",
+  "hives",
+  "urticaria",
+  "dermatitis",
+  "pigment",
+];
+
+const PEDIATRICS_KEYWORDS = [
+  "baby",
+  "child",
+  "toddler",
+  "infant",
+  "kid",
+  "children",
+  "newborn",
+  "vaccination",
+  "vaccine",
+  "immunization",
+];
+
+const WOMENS_HEALTH_KEYWORDS = [
+  "pregnancy",
+  "pregnant",
+  "prenatal",
+  "postnatal",
+  "menstrual",
+  "period",
+  "menopause",
+  "ovarian",
+  "breast",
+  "cervical",
+  "endometriosis",
+  "fibroids",
+  "pelvic",
+];
+
+const ORTHOPEDICS_KEYWORDS = [
+  "bone",
+  "fracture",
+  "joint",
+  "spine",
+  "arthritis",
+  "osteoporosis",
+  "torn",
+  "injury",
+  "muscle",
+  "ligament",
+  "tendon",
+  "sprain",
+  "strain",
+];
+
+const GASTROENTEROLOGY_KEYWORDS = [
+  "stomach",
+  "digestive",
+  "ibd",
+  "crohn",
+  "ulcerative colitis",
+  "acid reflux",
+  "gerd",
+  "heartburn",
+  "constipation",
+  "diarrhea",
+  "ibs",
+  "irritable bowel",
+];
+
+const ENDOCRINOLOGY_KEYWORDS = [
+  "thyroid",
+  "diabetes",
+  "diabetic",
+  "tsh",
+  "hormone",
+  "metabolic",
+  "metabolism",
+  "glucose",
+  "insulin",
+  "parathyroid",
+  "adrenal",
+];
+
+const UROLOGY_KEYWORDS = [
+  "kidney",
+  "bladder",
+  "prostate",
+  "urinary",
+  "urinate",
+  "uti",
+  "kidney stone",
+  "incontinence",
+  "erectile dysfunction",
+];
+
+const RADIOLOGY_KEYWORDS = [
+  "imaging",
+  "x-ray",
+  "ct scan",
+  "ct",
+  "mri",
+  "ultrasound",
+  "sonogram",
+  "radiograph",
+  "radiological",
+];
+
+const DENTISTRY_KEYWORDS = [
+  "teeth",
+  "dental",
+  "gum",
+  "cavity",
+  "root canal",
+  "tooth pain",
+  "toothache",
+  "braces",
+  "orthodontic",
+];
+
+const NUTRITION_KEYWORDS = [
+  "nutritionist",
+  "nutrition",
+  "vitamin",
+  "mineral",
+  "supplement",
+  "calorie",
+  "macronutrient",
+  "micronutrient",
+  "dietary",
+];
+
+const IMMUNOLOGY_KEYWORDS = [
+  "immune system",
+  "allergy",
+  "allergic",
+  "autoimmune",
+  "immunodeficiency",
+  "hiv",
+  "aids",
+  "lupus",
+  "rheumatoid",
+];
+
+const ENT_KEYWORDS = [
+  "ear",
+  "nose",
+  "throat",
+  "sinus",
+  "hearing",
+  "ear infection",
+  "otitis",
+  "tuning fork",
+  "audiogram",
+];
+
+const OPHTHALMOLOGY_KEYWORDS = [
+  "eye",
+  "vision",
+  "contact lens",
+  "glasses",
+  "retina",
+  "glaucoma",
+  "cataract",
+  "cornea",
+  "astigmatism",
+  "myopia",
+  "hyperopia",
+];
+
+const NEPHROLOGY_KEYWORDS = [
+  "kidney",
+  "renal",
+  "dialysis",
+  "glomerulonephritis",
+  "nephrotic",
+  "creatinine",
+  "bun",
+  "kidney failure",
+  "chronic kidney",
+];
+
 function matchesAny(query: string, keywords: string[]): boolean {
   const lower = query.toLowerCase();
   return keywords.some((k) => lower.includes(k));
@@ -117,9 +368,97 @@ function matchesAny(query: string, keywords: string[]): boolean {
 
 const KEYWORD_ROUTE_RULES = [
   {
+    agent: "mentalHealth",
+    reasoning:
+      "Keyword match: mental health / psychological support intent detected",
+    keywords: MENTAL_HEALTH_KEYWORDS,
+  },
+  {
+    agent: "cardiology",
+    reasoning: "Keyword match: cardiac / heart symptoms intent detected",
+    keywords: CARDIOLOGY_KEYWORDS,
+  },
+  {
+    agent: "womensHealth",
+    reasoning:
+      "Keyword match: women's health / pregnancy / reproductive intent detected",
+    keywords: WOMENS_HEALTH_KEYWORDS,
+  },
+  {
     agent: "neurology",
     reasoning: "Keyword match: neurology symptoms intent detected",
     keywords: NEUROLOGY_KEYWORDS,
+  },
+  {
+    agent: "gastroenterology",
+    reasoning:
+      "Keyword match: gastrointestinal / digestive symptoms intent detected",
+    keywords: GASTROENTEROLOGY_KEYWORDS,
+  },
+  {
+    agent: "orthopedics",
+    reasoning:
+      "Keyword match: bone / joint / orthopedic symptoms intent detected",
+    keywords: ORTHOPEDICS_KEYWORDS,
+  },
+  {
+    agent: "dermatology",
+    reasoning: "Keyword match: skin condition / dermatology intent detected",
+    keywords: DERMATOLOGY_KEYWORDS,
+  },
+  {
+    agent: "endocrinology",
+    reasoning:
+      "Keyword match: endocrine / thyroid / metabolic disorder intent detected",
+    keywords: ENDOCRINOLOGY_KEYWORDS,
+  },
+  {
+    agent: "nephrology",
+    reasoning: "Keyword match: kidney / renal condition intent detected",
+    keywords: NEPHROLOGY_KEYWORDS,
+  },
+  {
+    agent: "urology",
+    reasoning: "Keyword match: urological / urinary symptoms intent detected",
+    keywords: UROLOGY_KEYWORDS,
+  },
+  {
+    agent: "ophthalmology",
+    reasoning: "Keyword match: eye / vision / ophthalmology intent detected",
+    keywords: OPHTHALMOLOGY_KEYWORDS,
+  },
+  {
+    agent: "ent",
+    reasoning: "Keyword match: ear / nose / throat symptoms intent detected",
+    keywords: ENT_KEYWORDS,
+  },
+  {
+    agent: "immunology",
+    reasoning:
+      "Keyword match: immune system / allergy / autoimmune condition intent detected",
+    keywords: IMMUNOLOGY_KEYWORDS,
+  },
+  {
+    agent: "dentistry",
+    reasoning: "Keyword match: dental / tooth symptoms intent detected",
+    keywords: DENTISTRY_KEYWORDS,
+  },
+  {
+    agent: "pediatrics",
+    reasoning: "Keyword match: pediatric / child / infant care intent detected",
+    keywords: PEDIATRICS_KEYWORDS,
+  },
+  {
+    agent: "radiology",
+    reasoning:
+      "Keyword match: imaging / radiological investigation intent detected",
+    keywords: RADIOLOGY_KEYWORDS,
+  },
+  {
+    agent: "nutrition",
+    reasoning:
+      "Keyword match: nutritional / supplement / dietary intent detected",
+    keywords: NUTRITION_KEYWORDS,
   },
   {
     agent: "dietPlanner",
@@ -191,84 +530,23 @@ const REASONING_WORDS = [
   "analys",
 ];
 
-const RECORD_HINTS = [
-  "my medication",
-  "my medicine",
-  "my med",
-  "my prescription",
-  "my condition",
-  "my blood",
-  "my lab",
-  "my result",
-  "my report",
-  "my vital",
-  "my diagnos",
-  "my treatment",
-  "my history",
-  "my record",
-  "my allerg",
-  "interaction",
-  "my health",
-  "my drug",
-  "my dose",
-  "my dosage",
-  "my name",
-  "my age",
-  "my profile",
-  "my weight",
-  "my height",
-  "my gender",
-  "my detail",
-  "my info",
-  "my data",
-  "who am i",
-  "about me",
-  "medicines i",
-  "medications i",
-  "meds i",
-  "drugs i",
-  "been taking",
-  "i take",
-  "i'm taking",
-  "am taking",
-  "prescribed",
-];
-
-function hasRecordHint(query: string): boolean {
-  return RECORD_HINTS.some((hint) => query.includes(hint));
-}
-
-function isShortTriageOpener(query: string): boolean {
-  return query.trim().split(/\s+/).length <= 12;
-}
+type ThinkingLevel = "low" | "medium" | "high";
 
 /**
  * Determine whether the query needs patient medical records (RAG).
  *
- * RAG is expensive (~1.2-1.5s for KNN + Bedrock reranking). Skip it for:
- * - Initial symptom triage ("I have a headache") — model will ask follow-ups first
- * - Greetings and simple questions ("hi", "what can you do")
- * - Diet/prescription keyword matches — those agents fetch their own data
- *
- * RAG IS needed for:
- * - File uploads (model needs patient history for context)
- * - Explicit record references ("my medications", "my blood pressure")
- * - Complex reasoning queries that reference patient data
+ * Centralized in `rag-decision.ts` so gateway and prefetchContext use
+ * the same heuristics and avoid drift.
  */
 function inferNeedsRag(query: string, hasAttachment?: boolean): boolean {
-  if (hasAttachment) return true;
-
-  const lower = query.toLowerCase();
-  if (hasRecordHint(lower)) return true;
-  if (REASONING_WORDS.some((k) => lower.includes(k))) return true;
-  return !isShortTriageOpener(query);
+  return decideRagRequirement(query, hasAttachment).needsRag;
 }
 
 /** Classify query complexity to set the model's thinking depth per-message. */
 function inferThinkingLevel(
   query: string,
   hasAttachment?: boolean,
-): "low" | "medium" | "high" {
+): ThinkingLevel {
   if (hasAttachment) return "high";
   const lower = query.toLowerCase();
   if (EMERGENCY_KEYWORDS.some((k) => lower.includes(k))) return "high";
@@ -283,7 +561,7 @@ function inferThinkingLevel(
 
 // ── Session cache ───────────────────────────────────────────────────────────
 
-/** Hints that should bypass the agent cache (might need diet/prescription/blood test). */
+/** Hints that should bypass the agent cache (might need diet/prescription/blood test/mental health). */
 const DIET_HINT_WORDS = ["diet", "meal", "food", "eat", "nutrition", "calorie"];
 const RX_HINT_WORDS = ["prescri", "refill", "medication order"];
 const LR_HINT_WORDS = [
@@ -303,6 +581,190 @@ const NEURO_HINT_WORDS = [
   "vertigo",
   "memory",
   "nerve",
+];
+const MENTAL_HEALTH_HINT_WORDS = [
+  "anxiety",
+  "depress",
+  "stress",
+  "panic",
+  "mood",
+  "ptsd",
+  "OCD",
+  "mental",
+  "psycholog",
+  "therapist",
+  "suicid",
+  "self-harm",
+  "sleep issue",
+];
+const CARDIOLOGY_HINT_WORDS = [
+  "heart",
+  "cardiac",
+  "chest",
+  "arrhythmia",
+  "palpitation",
+  "hypertension",
+  "blood pressure",
+  "valve",
+];
+const DERMATOLOGY_HINT_WORDS = [
+  "skin",
+  "rash",
+  "eczema",
+  "psoriasis",
+  "acne",
+  "mole",
+  "wart",
+  "fungal",
+];
+const PEDIATRICS_HINT_WORDS = [
+  "baby",
+  "child",
+  "toddler",
+  "infant",
+  "kid",
+  "vaccination",
+  "vaccine",
+];
+const WOMENS_HEALTH_HINT_WORDS = [
+  "pregnancy",
+  "pregnant",
+  "menstrual",
+  "period",
+  "menopause",
+  "ovarian",
+  "breast",
+  "cervical",
+];
+const ORTHOPEDICS_HINT_WORDS = [
+  "bone",
+  "fracture",
+  "joint",
+  "spine",
+  "arthritis",
+  "ligament",
+  "tendon",
+  "sprain",
+];
+const GASTRO_HINT_WORDS = [
+  "stomach",
+  "digestive",
+  "ibd",
+  "acid reflux",
+  "gerd",
+  "heartburn",
+  "constipat",
+  "diarr",
+  "ibs",
+];
+const ENDOCRINOLOGY_HINT_WORDS = [
+  "thyroid",
+  "diabetes",
+  "diabetic",
+  "hormone",
+  "metabolic",
+  "glucose",
+  "insulin",
+];
+const UROLOGY_HINT_WORDS = [
+  "kidney",
+  "bladder",
+  "prostate",
+  "urinary",
+  "uti",
+  "stone",
+];
+const RADIOLOGY_HINT_WORDS = [
+  "imaging",
+  "x-ray",
+  "ct",
+  "mri",
+  "ultrasound",
+  "sonogram",
+];
+const DENTISTRY_HINT_WORDS = [
+  "teeth",
+  "dental",
+  "gum",
+  "tooth",
+  "cavity",
+  "root canal",
+];
+const NUTRITION_HINT_WORDS = [
+  "nutrition",
+  "vitamin",
+  "mineral",
+  "supplement",
+  "nutrient",
+];
+const IMMUNOLOGY_HINT_WORDS = [
+  "immune",
+  "allergy",
+  "allergic",
+  "autoimmune",
+  "immunodeficiency",
+];
+const ENT_HINT_WORDS = ["ear", "nose", "sinus", "hearing", "throat", "otitis"];
+const OPHTHALMOLOGY_HINT_WORDS = [
+  "eye",
+  "vision",
+  "retina",
+  "glaucoma",
+  "cataract",
+  "myopia",
+];
+const NEPHROLOGY_HINT_WORDS = [
+  "kidney",
+  "renal",
+  "dialysis",
+  "creatinine",
+  "bun",
+];
+
+const RADIOLOGY_ATTACHMENT_HINTS = [
+  "x-ray",
+  "xray",
+  "ct",
+  "ct scan",
+  "mri",
+  "ultrasound",
+  "sonogram",
+  "mammogram",
+  "scan",
+  "dicom",
+  "radiology",
+  "radiograph",
+  "imaging",
+  "opg",
+];
+
+const LAB_ATTACHMENT_HINTS = [
+  "lab",
+  "blood",
+  "report",
+  "result",
+  "test",
+  "panel",
+  "biomarker",
+  "marker",
+  "double marker",
+  "triple marker",
+  "tumor marker",
+  "screening",
+  "prenatal",
+  "serum",
+  "cbc",
+  "hba1c",
+  "thyroid",
+  "lipid",
+  "lft",
+  "kft",
+  "creatinine",
+  "troponin",
+  "bnp",
+  "glucose",
+  "insulin",
+  "pathology",
 ];
 const PATIENT_HINT_WORDS = [
   "my name",
@@ -343,9 +805,6 @@ const CLINICAL_CUE_WORDS = [
   "dizziness",
   "headache",
   "migraine",
-  "anxiety",
-  "depress",
-  "stress",
   "sleep",
   "urine",
   "pee",
@@ -365,7 +824,7 @@ const CLINICAL_CUE_WORDS = [
   "sick",
 ];
 
-const TRIAGE_FALLBACK_EXACT = [
+const TRIAGE_FALLBACK_EXACT = new Set([
   "hi",
   "hello",
   "hey",
@@ -380,41 +839,7 @@ const TRIAGE_FALLBACK_EXACT = [
   "i dont know",
   "i don't know",
   "idk",
-];
-
-const LOADING_HINTS_BY_AGENT: Partial<Record<AgentType, string[]>> = {
-  generalMedicine: [
-    "Reviewing your symptoms...",
-    "Checking likely causes and next steps...",
-    "Preparing safe guidance...",
-  ],
-  neurology: [
-    "Reviewing neurological symptoms...",
-    "Assessing headache and nerve-related patterns...",
-    "Preparing neurology-focused guidance...",
-  ],
-  dietPlanner: [
-    "Creating your personalized meal plan...",
-    "Calculating nutritional requirements...",
-    "This may take 15-20 seconds",
-  ],
-  prescription: [
-    "Reviewing medication options...",
-    "Checking drug interactions...",
-    "Preparing your prescription...",
-  ],
-  labReport: [
-    "Analysing your test results...",
-    "Checking reference ranges...",
-    "Reviewing the details...",
-  ],
-  patient: ["Looking up your records..."],
-  triageNurse: [
-    "A nurse is reviewing your symptoms...",
-    "Asking clarifying questions...",
-    "Routing to the right specialist...",
-  ],
-};
+]);
 
 function hintsSpecialist(query: string): boolean {
   const lower = query.toLowerCase();
@@ -423,6 +848,22 @@ function hintsSpecialist(query: string): boolean {
     RX_HINT_WORDS.some((k) => lower.includes(k)) ||
     LR_HINT_WORDS.some((k) => lower.includes(k)) ||
     NEURO_HINT_WORDS.some((k) => lower.includes(k)) ||
+    MENTAL_HEALTH_HINT_WORDS.some((k) => lower.includes(k)) ||
+    CARDIOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    DERMATOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    PEDIATRICS_HINT_WORDS.some((k) => lower.includes(k)) ||
+    WOMENS_HEALTH_HINT_WORDS.some((k) => lower.includes(k)) ||
+    ORTHOPEDICS_HINT_WORDS.some((k) => lower.includes(k)) ||
+    GASTRO_HINT_WORDS.some((k) => lower.includes(k)) ||
+    ENDOCRINOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    UROLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    RADIOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    DENTISTRY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    NUTRITION_HINT_WORDS.some((k) => lower.includes(k)) ||
+    IMMUNOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    ENT_HINT_WORDS.some((k) => lower.includes(k)) ||
+    OPHTHALMOLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
+    NEPHROLOGY_HINT_WORDS.some((k) => lower.includes(k)) ||
     PATIENT_HINT_WORDS.some((k) => lower.includes(k))
   );
 }
@@ -435,7 +876,7 @@ function looksClinical(query: string): boolean {
 function shouldUseTriageFallback(query: string): boolean {
   const lower = query.trim().toLowerCase();
   if (lower.length === 0) return true;
-  if (TRIAGE_FALLBACK_EXACT.includes(lower)) return true;
+  if (TRIAGE_FALLBACK_EXACT.has(lower)) return true;
 
   const words = lower.split(/\s+/);
   if (words.length <= 2 && !looksClinical(lower) && !hintsSpecialist(lower)) {
@@ -468,7 +909,7 @@ function buildRoutingLogPrefix(input: {
 function logGatewayDecision(
   source: string,
   agent: AgentType,
-  thinkingLevel: "low" | "medium" | "high",
+  thinkingLevel: ThinkingLevel,
   needsRag: boolean,
   duration: number,
 ): void {
@@ -480,7 +921,7 @@ function logGatewayDecision(
 function buildRoutingResult(
   agent: AgentType,
   reasoning: string,
-  thinkingLevel: "low" | "medium" | "high",
+  thinkingLevel: ThinkingLevel,
   needsRag: boolean,
 ): ClinicalRouting {
   return {
@@ -488,8 +929,23 @@ function buildRoutingResult(
     reasoning,
     thinkingLevel,
     needsRag,
-    loadingHints: buildLoadingHints(agent, thinkingLevel, needsRag),
+    loadingHints: [],
   };
+}
+
+function getAttachmentReportReasoning(args: {
+  hasExtractedReportSummary: boolean;
+  hasLabLabel: boolean;
+}): string {
+  if (args.hasExtractedReportSummary) {
+    return "Extracted report summary detected — routing to the most relevant specialist for analysis";
+  }
+
+  if (args.hasLabLabel) {
+    return "Classified report attachment detected — routing to the most relevant specialist for analysis";
+  }
+
+  return "Report-style attachment detected — routing to the most relevant specialist for analysis";
 }
 
 // ── Routing schema ────────────────────────────────────────────────────────────
@@ -536,30 +992,21 @@ export type ClinicalRouting = {
   loadingHints: string[];
 };
 
-// ── Loading hints ─────────────────────────────────────────────────────────────
-
-/**
- * Build contextual loading phrases based on the full routing decision.
- * These are shown in the client as cycling status messages while the AI responds.
- */
-function buildLoadingHints(
-  agent: AgentType,
-  thinkingLevel: "low" | "medium" | "high",
-  needsRag: boolean,
-): string[] {
-  const hints: string[] = [];
-  if (needsRag) hints.push("Searching your health records...");
-  hints.push(...(LOADING_HINTS_BY_AGENT[agent] ?? []));
-  return hints.length > 0 ? hints : ["Processing your request..."];
-}
-
 type GatewayDecisionInput = {
   userQuery: string;
   hasAttachment?: boolean;
   attachmentMetadata?: Array<{
+    fileId?: string;
     url: string;
     mediaType: string;
     fileName?: string;
+    label?: FileLabel;
+    extractedSummary?: {
+      testName?: string;
+      labName?: string;
+      notes?: string;
+      biomarkerNames: string[];
+    };
   }>;
   reportHandoff?: {
     nextSpecialist: string;
@@ -576,7 +1023,7 @@ type GatewayDecisionInput = {
 type DecisionContext = {
   input: GatewayDecisionInput;
   startTime: number;
-  thinkingLevel: "low" | "medium" | "high";
+  thinkingLevel: ThinkingLevel;
   needsRag: boolean;
 };
 
@@ -625,8 +1072,8 @@ export class GatewayAgent {
 
   /**
    * Classify attachments and route intelligently.
-   * - Medical images → radiology (for diagnostic reporting)
-   * - Lab reports → specialist inferred from results type
+   * - Imaging-related attachments → radiology
+   * - Lab/report-style attachments → specialist inferred from results type
    * - Other → pass through to normal routing
    */
   private async resolveAttachmentRoute(
@@ -637,17 +1084,90 @@ export class GatewayAgent {
     // If attachment but no metadata, can't classify — return null to continue normal routing
     if (!attachmentMetadata || attachmentMetadata.length === 0) return null;
 
+    const attachmentNames = attachmentMetadata
+      .map((a) => a.fileName?.toLowerCase() ?? "")
+      .filter((value) => value.length > 0)
+      .join(" ");
+    const attachmentSummaries = attachmentMetadata
+      .flatMap((attachment) => {
+        const summary = attachment.extractedSummary;
+        if (!summary) {
+          return [];
+        }
+
+        return [
+          summary.testName,
+          summary.labName,
+          summary.notes,
+          ...(summary.biomarkerNames ?? []),
+        ];
+      })
+      .filter((value): value is string =>
+        Boolean(value && value.trim().length > 0),
+      )
+      .join(" ");
+    const attachmentLabels = attachmentMetadata
+      .map((a) => a.label)
+      .filter((value): value is FileLabel => Boolean(value));
+    const attachmentText = `${userQuery.toLowerCase()} ${attachmentNames} ${attachmentSummaries.toLowerCase()}`;
+
+    const hasAnyHint = (hints: readonly string[]) =>
+      hints.some((hint) => attachmentText.includes(hint));
+
+    const looksLikeLabAttachment = hasAnyHint(LAB_ATTACHMENT_HINTS);
+    const looksLikeRadiologyAttachment =
+      hasAnyHint(RADIOLOGY_ATTACHMENT_HINTS) && !looksLikeLabAttachment;
+    const hasLabLabel = attachmentLabels.some(
+      (label) => label === "blood_test" || label === "report",
+    );
+    const hasExtractedReportSummary = attachmentMetadata.some((attachment) => {
+      const summary = attachment.extractedSummary;
+      return Boolean(
+        summary?.testName ||
+        summary?.notes ||
+        summary?.labName ||
+        (summary?.biomarkerNames?.length ?? 0) > 0,
+      );
+    });
+    const hasRadiologyLabel = attachmentLabels.some(
+      (label) => label === "xray" || label === "scan",
+    );
+
     // Check MIME types for quick classification
     const isImageAttachment = attachmentMetadata.some((a) =>
       a.mediaType.startsWith("image/"),
     );
+    const isPdfAttachment = attachmentMetadata.some(
+      (a) => a.mediaType === "application/pdf",
+    );
 
-    if (isImageAttachment) {
-      // Medical images route to radiology for first-pass diagnostic analysis.
-      // Skip RAG here by default to reduce latency and avoid injecting unrelated
-      // patient records into the primary image interpretation.
-      const reasoning =
-        "Image attachment detected — routing to radiology for diagnostic analysis";
+    if (hasLabLabel || looksLikeLabAttachment || hasExtractedReportSummary) {
+      const specialist = await this.inferLabReportSpecialist(
+        attachmentText,
+        context.input.userId,
+      );
+      const reasoning = getAttachmentReportReasoning({
+        hasExtractedReportSummary,
+        hasLabLabel,
+      });
+      this.cacheResolvedAgent(context.input.sessionId, specialist);
+      return this.finishDecision(
+        context,
+        specialist,
+        reasoning,
+        true,
+        "attachment-report",
+      );
+    }
+
+    if (
+      hasRadiologyLabel ||
+      (isImageAttachment && looksLikeRadiologyAttachment)
+    ) {
+      // Only imaging-related images should route straight to radiology.
+      const reasoning = hasRadiologyLabel
+        ? "Classified imaging attachment detected — routing to radiology for diagnostic analysis"
+        : "Imaging-related attachment detected — routing to radiology for diagnostic analysis";
       this.cacheResolvedAgent(context.input.sessionId, "radiology");
       return this.finishDecision(
         context,
@@ -658,40 +1178,17 @@ export class GatewayAgent {
       );
     }
 
-    // For PDF/documents, try to infer if lab report or other
-    const isPdfAttachment = attachmentMetadata.some(
-      (a) => a.mediaType === "application/pdf",
-    );
-
-    if (isPdfAttachment) {
-      // Check filename and query for lab report indicators
-      const fileName = attachmentMetadata
-        .map((a) => a.fileName?.toLowerCase() ?? "")
-        .join(" ");
-      const isLabReport =
-        fileName.includes("lab") ||
-        fileName.includes("blood") ||
-        fileName.includes("test") ||
-        fileName.includes("result") ||
-        userQuery.toLowerCase().includes("blood test") ||
-        userQuery.toLowerCase().includes("lab result");
-
-      if (isLabReport) {
-        // Use LLM to infer which specialist should analyze these results
-        const specialist = await this.inferLabReportSpecialist(
-          userQuery,
-          context.input.userId,
-        );
-        const reasoning = `Lab report attachment detected — routing to ${specialist} specialist for analysis`;
-        this.cacheResolvedAgent(context.input.sessionId, specialist);
-        return this.finishDecision(
-          context,
-          specialist,
-          reasoning,
-          true,
-          "attachment-lab-report",
-        );
-      }
+    if (isPdfAttachment && looksLikeRadiologyAttachment) {
+      const reasoning =
+        "Radiology report attachment detected — routing to radiology for imaging analysis";
+      this.cacheResolvedAgent(context.input.sessionId, "radiology");
+      return this.finishDecision(
+        context,
+        "radiology",
+        reasoning,
+        true,
+        "attachment-radiology-report",
+      );
     }
 
     // Couldn't classify — fall through to normal routing
@@ -768,6 +1265,19 @@ export class GatewayAgent {
       lower.includes("tsh")
     ) {
       return "endocrinology";
+    }
+    if (
+      lower.includes("double marker") ||
+      lower.includes("triple marker") ||
+      lower.includes("prenatal screening") ||
+      lower.includes("maternal serum") ||
+      lower.includes("alpha fetoprotein") ||
+      lower.includes("afp") ||
+      lower.includes("beta hcg") ||
+      lower.includes("free beta hcg") ||
+      lower.includes("papp-a")
+    ) {
+      return "womensHealth";
     }
     if (
       lower.includes("hemoglobin") ||

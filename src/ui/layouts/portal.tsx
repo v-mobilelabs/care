@@ -1,39 +1,41 @@
 "use client";
 import {
+  ActionIcon,
   AppShell,
+  Badge,
+  Button,
   Burger,
+  Divider,
   Group,
+  Loader,
   Menu,
   NavLink,
   Paper,
   ScrollArea,
   Text,
   ThemeIcon,
-  Loader
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from "@mantine/core";
-import { PortalFooter } from "../footers/portal.footer";
-import { useDisclosure } from "@mantine/hooks";
 import { Logo } from "../brand/logo";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { BreadcrumbsBar } from "../breadcrumbs";
 import { UserCard } from "../user-card";
-import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { useCurrentProfile } from "@/lib/auth/use-current-profile";
+import { useAuth } from "@/ui/providers/auth-provider";
+import { useProfileQuery } from "@/ui/ai/query";
 import { SignOutButton } from "../sign-out-button";
-import { IconLogout } from "@tabler/icons-react";
+import { IconLogout, IconMoon, IconSun } from "@tabler/icons-react";
 import { Credits } from "../credits";
-import { MessagesButton } from "../messaging/messages-button";
-import { NotificationsButton } from "../notifications/notifications-button";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
 import { useMessaging } from "../providers/messaging-provider";
 import Link, { useLinkStatus } from "@/ui/link";
-import ColorSchemeToggle from "@/ui/color-scheme-toggle";
 
 type MenuItem = {
   label: string;
   icon: React.ReactNode;
   href: string;
+  beta?: boolean;
   children?: MenuItem[];
 };
 
@@ -43,13 +45,34 @@ type MenuGroup = {
   profile: MenuItem[];
 };
 
+function isAskAiMenuItem(menu: MenuItem): boolean {
+  return menu.label === "Ask AI";
+}
+
+function isRouteActive(menu: MenuItem, pathName: string): boolean {
+  if (pathName === menu.href) {
+    return true;
+  }
+
+  if (!menu.children || menu.children.length === 0) {
+    return false;
+  }
+
+  return menu.children.some((child) => isRouteActive(child, pathName));
+}
+
 /* ── NavLink label with pending indicator ────────────────────────────────── */
 
-function NavLinkLabel({ label }: Readonly<{ label: string }>) {
+function NavLinkLabel({ label, beta }: Readonly<{ label: string; beta?: boolean }>) {
   const { pending } = useLinkStatus();
   return (
     <Group gap="xs" wrap="nowrap">
       {label}
+      {beta && (
+        <Badge size="xs" variant="light" color="violet" radius="sm" px={5}>
+          Beta
+        </Badge>
+      )}
       {pending && <Loader size={12} color="primary" />}
     </Group>
   );
@@ -70,16 +93,103 @@ export function PortalLayout({
     icon: ReactNode;
   };
 }>) {
-  const [opened, { toggle, close }] = useDisclosure();
+  const [opened, setOpened] = useState(false);
+  const toggle = () => {
+    setOpened((current) => !current);
+  };
+  const close = () => {
+    setOpened(false);
+  };
   const { isOpen } = useMessaging()
   const pathName = usePathname();
 
   useEffect(() => {
     close();
-  }, [pathName, close]);
+  }, [pathName]);
 
-  const { data: profile } = useCurrentProfile();
-  const { data: user } = useCurrentUser();
+  const { data: profile } = useProfileQuery();
+  const { user } = useAuth();
+  const { setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme("light", {
+    getInitialValueInEffect: true,
+  });
+  const isDarkMode = computedColorScheme === "dark";
+  const toggleColorScheme = () => {
+    setColorScheme(isDarkMode ? "light" : "dark");
+  };
+
+  const renderHeaderItem = (menu: MenuItem): ReactNode => {
+    if (isAskAiMenuItem(menu)) {
+      return (
+        <Button
+          key={menu.label}
+          component={Link}
+          href={menu.href}
+          leftSection={menu.icon}
+          color="primary"
+          variant="gradient"
+          size="xs"
+          radius="xl"
+        >
+          {menu.label}
+        </Button>
+      );
+    }
+
+    return (
+      <NavLink
+        key={menu.label}
+        label={menu.label}
+        href={menu.href}
+        leftSection={menu.icon}
+        component={Link}
+      />
+    );
+  };
+
+  const renderMenuItem = (menu: MenuItem, depth = 0): ReactNode => {
+    const active = isRouteActive(menu, pathName);
+    const hasChildren = Boolean(menu.children && menu.children.length > 0);
+    const leftSection = (
+      <ThemeIcon radius="xl" size={depth > 0 ? "md" : "lg"} p="xs" variant={active ? "filled" : "light"} color="primary">
+        {menu.icon}
+      </ThemeIcon>
+    );
+
+    if (hasChildren) {
+      return (
+        <NavLink
+          key={menu.label}
+          component={Link}
+          variant={active ? "filled" : "subtle"}
+          color="primary.7"
+          label={<NavLinkLabel label={menu.label} beta={menu.beta} />}
+          href={menu.href}
+          leftSection={leftSection}
+          active={active}
+          onClick={close}
+          defaultOpened={active}
+          childrenOffset={depth > 0 ? 14 : 20}
+        >
+          {menu.children?.map((child) => renderMenuItem(child, depth + 1))}
+        </NavLink>
+      );
+    }
+
+    return (
+      <NavLink
+        key={menu.label}
+        component={Link}
+        variant={active ? "filled" : "subtle"}
+        color="primary.7"
+        label={<NavLinkLabel label={menu.label} beta={menu.beta} />}
+        href={menu.href}
+        onClick={close}
+        leftSection={leftSection}
+        active={active}
+      />
+    );
+  };
 
   const Header = (
     <AppShell.Header
@@ -103,17 +213,7 @@ export function PortalLayout({
           <Logo />
         </Group>
         <Group gap="sm">
-          {menus.header.map((menu) => (
-            <NavLink
-              key={menu.label}
-              label={menu.label}
-              href={menu.href}
-              leftSection={menu.icon}
-            />
-          ))}
-          <NotificationsButton />
-          <MessagesButton />
-          <ColorSchemeToggle />
+          {menus.header.map((menu) => renderHeaderItem(menu))}
           <Menu
             shadow="md"
             width={240}
@@ -144,6 +244,7 @@ export function PortalLayout({
                   {menu.label}
                 </Menu.Item>
               ))}
+              <Menu.Divider />
               <Menu.Item leftSection={<IconLogout size={16} />} color="red">
                 <SignOutButton />
               </Menu.Item>
@@ -160,7 +261,7 @@ export function PortalLayout({
       navbar={{
         width: { base: 260, md: 260 },
         breakpoint: "md",
-        collapsed: { mobile: !opened },
+        collapsed: { mobile: !opened, desktop: false },
       }}
       aside={{
         width: { base: 360, md: 360 },
@@ -198,32 +299,31 @@ export function PortalLayout({
           borderRight: "1px solid light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.06))",
         }}
       >
+        <AppShell.Section>
+          {/* set User card with avatat */}
+        </AppShell.Section>
+        <Divider />
         <AppShell.Section
+
           grow
           component={ScrollArea}
         >
-          {menus.navigation.map((menu) => {
-            // Exact match only - don't activate parent paths when on child routes
-            const isActive = pathName === menu.href;
-            return <NavLink
-              component={Link}
-              variant={isActive ? "filled" : "subtle"}
-              color="primary.7"
-              key={menu.label}
-              label={<NavLinkLabel label={menu.label} />}
-              href={menu.href}
-              onClick={close}
-              leftSection={
-                <ThemeIcon radius="xl" size={"lg"} p="xs" variant={isActive ? "filled" : "light"} color="primary">
-                  {menu.icon}
-                </ThemeIcon>
-              }
-              active={isActive}
-            />
-          })}
+          {menus.navigation.map((menu) => renderMenuItem(menu))}
         </AppShell.Section>
+        <Divider />
         <AppShell.Section>
-          <PortalFooter />
+          <Group justify="space-between" px="md" py="xs">
+            <Text size="sm" fw={500}>Theme</Text>
+            <ActionIcon
+              onClick={toggleColorScheme}
+              variant="light"
+              size="lg"
+              radius="xl"
+              aria-label="Toggle color theme"
+            >
+              {isDarkMode ? <IconSun size={16} /> : <IconMoon size={16} />}
+            </ActionIcon>
+          </Group>
         </AppShell.Section>
       </AppShell.Navbar>
       <MessagingSidebar />

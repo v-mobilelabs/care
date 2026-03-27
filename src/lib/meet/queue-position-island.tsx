@@ -99,7 +99,7 @@ export function QueuePositionIsland() {
             `}</style>
             <UnstyledButton
                 component={Link}
-                href="/patient/connect"
+                href="/user/connect"
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
                 aria-label={isNext ? "You're next in queue" : `#${pos} in queue`}

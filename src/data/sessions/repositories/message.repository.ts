@@ -96,7 +96,7 @@ export const messageRepository = {
   },
 
   /** Update the content (and optionally accumulate usage) of an existing message. */
-  // eslint-disable-next-line max-lines-per-function
+   
   async updateContent(
     userId: string,
     profileId: string,

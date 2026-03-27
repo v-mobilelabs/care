@@ -5,7 +5,7 @@
 // Body: { online: boolean }
 import { type NextRequest, NextResponse, after } from "next/server";
 import { cookies } from "next/headers";
-import { COOKIE_NAME, USER_KINDS, type UserKind } from "@/lib/auth/jwt";
+import { COOKIE_NAME, coerceUserKind, type UserKind } from "@/lib/auth/jwt";
 import { auth, rtdb } from "@/lib/firebase/admin";
 import { UpdateDoctorAvailabilityUseCase } from "@/data/doctors";
 
@@ -20,12 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const decoded = await auth.verifySessionCookie(sessionCookie, true);
 
-    const rawKind = decoded["kind"] as string | undefined;
-    const kind: UserKind = (USER_KINDS as readonly string[]).includes(
-      rawKind ?? "",
-    )
-      ? (rawKind as UserKind)
-      : "user";
+    const kind: UserKind = coerceUserKind(decoded["kind"]);
 
     const body = (await req.json()) as { online?: boolean };
     const online = body.online !== false; // default true

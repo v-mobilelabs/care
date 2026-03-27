@@ -17,6 +17,10 @@ export const progressPartSchema = z.object({
     .string()
     .optional()
     .describe("Which specialist agent is handling this request"),
+  reasoning: z
+    .string()
+    .optional()
+    .describe("Why the specialist agent was selected for this request"),
 });
 
 export type ProgressData = z.infer<typeof progressPartSchema>;

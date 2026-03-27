@@ -1,5 +1,5 @@
 "use client";
-import { usePatientQuery } from "@/app/(portal)/patient/_query";
+import { usePatientQuery } from "@/app/(portal)/user/_query";
 import { ConsentGate } from "@/ui/ai/components/consent-gate";
 import { useState } from "react";
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Center, Loader, Stack, Text, Button } from "@mantine/core";
+import { ADMIN_HOME_PATH, isAdminKind } from "@/lib/auth/admin";
 import { completeMagicLink } from "@/lib/firebase/magic-link";
 import { trackEvent } from "@/lib/analytics";
 import type { UserKind } from "@/lib/auth/jwt";
@@ -69,9 +70,12 @@ async function routeByKind(
         } else {
             throw new Error("Could not check profile status.");
         }
+    } else if (isAdminKind(kind)) {
+        trackEvent({ name: "login", params: { method: "magic_link" } });
+        router.replace(ADMIN_HOME_PATH);
     } else {
         trackEvent({ name: "login", params: { method: "magic_link" } });
-        router.replace("/patient/assistant");
+        router.replace("/user/assistant");
     }
 }
 

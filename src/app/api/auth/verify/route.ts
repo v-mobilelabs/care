@@ -4,6 +4,7 @@
 // `email` in the continueUrl so we don't need localStorage lookups.
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/firebase/admin";
+import { ADMIN_HOME_PATH, isAdminKind } from "@/lib/auth/admin";
 import { detectKind } from "@/lib/auth/detect-kind";
 import { COOKIE_NAME, COOKIE_OPTS, type UserKind } from "@/lib/auth/jwt";
 import { UpsertProfileUseCase } from "@/data/profile";
@@ -75,8 +76,10 @@ export async function GET(req: NextRequest) {
       // proxy forwards to /doctor/dashboard.
 
       destination = "/doctor";
+    } else if (isAdminKind(kind)) {
+      destination = ADMIN_HOME_PATH;
     } else {
-      destination = "/patient/assistant";
+      destination = "/user/assistant";
     }
 
     const destUrl = new URL(destination, APP_URL);

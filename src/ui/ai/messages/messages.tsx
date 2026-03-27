@@ -13,7 +13,7 @@ import { ScrollToBottomFab } from "./scroll-to-bottom-fab";
 
 function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: string) => boolean }>) {
     const {
-        messages, messageTimestamps, messageUsage, messageAgentTypes,
+        messages, messageTimestamps, messageUsage, messageAgentTypes, messageReasonings,
         isLoading, chatStatus,
         userPhotoURL, userInitials, answeredIds, editingId, editingText,
         phraseIdx, phraseFading, loadingHints, agentType, sessionId, onSendReferralMessage, onAnswer, onApproval,
@@ -42,6 +42,7 @@ function MessageThread(props: Readonly<MessagesProps & { isNewMessage: (id: stri
                     userInitials={userInitials}
                     messageUsage={messageUsage}
                     messageAgentTypes={messageAgentTypes}
+                    messageReasonings={messageReasonings}
                     agentType={agentType}
                     editingId={editingId}
                     editingText={editingText}

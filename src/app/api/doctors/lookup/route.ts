@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import { LookupClinicUseCase } from "@/data/doctors";
 
-export const maxDuration = 30;
-
 /**
  * POST /api/doctors/lookup
  * Body: { name: string; specialty: string; address: string }

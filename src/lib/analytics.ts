@@ -24,7 +24,7 @@ let _analytics: Analytics | null = null;
  * Safe to call multiple times — subsequent calls are no-ops.
  */
 export async function initAnalytics(): Promise<void> {
-  if (typeof window === "undefined") return; // SSR guard
+  if (globalThis.window === undefined) return; // SSR guard
   if (_analytics) return;
 
   const supported = await isSupported();
@@ -44,10 +44,67 @@ export type AnalyticsEvent =
   // Chat
   | { name: "chat_started"; params?: { session_id?: string } }
   | { name: "chat_message_sent"; params?: { session_id?: string } }
+  | {
+      name: "chat_mode_changed";
+      params?: { mode?: "quick" | "full"; session_id?: string };
+    }
+  | {
+      name: "feedback_escalation_clicked";
+      params?: { session_id?: string; source?: "dislike" | "report" };
+    }
+  | {
+      name: "onboarding_tour_completed";
+      params?: { steps_viewed?: number };
+    }
+  | {
+      name: "onboarding_tour_skipped";
+      params?: { steps_viewed?: number };
+    }
+  | {
+      name: "onboarding_tour_action_clicked";
+      params?: {
+        action?: "upload_records" | "connect_doctor";
+        step_index?: number;
+      };
+    }
+  | {
+      name: "onboarding_tour_resumed";
+      params?: { step_index?: number };
+    }
+  | {
+      name: "onboarding_tour_restarted";
+      params?: { from_step_index?: number };
+    }
 
   // Clinical
   | { name: "assessment_viewed"; params?: { assessment_id?: string } }
   | { name: "assessment_completed"; params?: { assessment_id?: string } }
+  | {
+      name: "assessment_validation_completed";
+      params?: {
+        latency_ms?: number;
+        adaptive_mode?: boolean;
+        condition?: string;
+        estimated_questions?: number;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "assessment_adapted";
+      params?: {
+        condition?: string;
+        questions_count?: number;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "assessment_validation_error";
+      params?: {
+        error_message?: string;
+        condition?: string;
+        session_id?: string;
+      };
+    }
   | { name: "soap_note_viewed"; params?: { note_id?: string } }
   | { name: "lab_report_viewed"; params?: { record_id?: string } }
   | { name: "lab_report_uploaded"; params?: { record_id?: string } }
@@ -65,13 +122,97 @@ export type AnalyticsEvent =
   | { name: "medication_viewed"; params?: { medication_id?: string } }
   | { name: "insurance_viewed"; params?: Record<string, unknown> }
   | { name: "health_record_viewed"; params?: Record<string, unknown> }
-
+  | {
+      name: "health_record_exported";
+      params?: {
+        artifact_type?:
+          | "assessment"
+          | "summary"
+          | "prescription"
+          | "lab_report"
+          | "file";
+        format?: "pdf" | "csv" | "json";
+        artifact_id?: string;
+      };
+    }
+  | {
+      name: "continuity_memory_recalled";
+      params?: {
+        memory_text?: string;
+        category?:
+          | "medical"
+          | "preference"
+          | "lifestyle"
+          | "allergy"
+          | "summary";
+      };
+    }
+  | {
+      name: "artifact_shared_with_doctor";
+      params?: {
+        artifact_type?:
+          | "assessment"
+          | "summary"
+          | "prescription"
+          | "lab_report";
+        doctor_id?: string;
+        share_id?: string;
+      };
+    }
   // Files
   | { name: "file_uploaded"; params?: { file_type?: string } }
 
   // Profile
   | { name: "profile_updated"; params?: { section?: string } }
-  | { name: "dependent_added"; params?: Record<string, never> };
+  | { name: "dependent_added"; params?: Record<string, never> }
+
+  // KPI Events — Phase 3
+  | {
+      name: "encounter_completed";
+      params?: {
+        outcome?: "deflected" | "escalated" | "resolved" | "abandoned";
+        deflection_reason?: string;
+        agent_type?: string;
+        duration_ms?: number;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "encounter_deflected";
+      params?: {
+        reason?: string;
+        condition?: string;
+        agent_type?: string;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "encounter_escalated";
+      params?: {
+        reason?: string;
+        risk_level?: "low" | "moderate" | "high" | "emergency";
+        agent_type?: string;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "user_satisfaction_recorded";
+      params?: {
+        score?: number;
+        liked?: boolean;
+        recommended?: boolean;
+        session_id?: string;
+      };
+    }
+  | {
+      name: "kpi_daily_computed";
+      params?: {
+        deflection_rate?: number;
+        avg_resolution_time_ms?: number;
+        avg_satisfaction?: number;
+        date?: string;
+      };
+    };
 
 // ── Public helper ────────────────────────────────────────────────────────────
 

@@ -47,6 +47,8 @@ export const profileRepository = {
     if (input.country !== undefined) baseData.country = input.country;
     if (input.dateOfBirth !== undefined)
       baseData.dateOfBirth = input.dateOfBirth;
+    if (input.onboardingTourCompleted !== undefined)
+      baseData.onboardingTourCompleted = input.onboardingTourCompleted;
 
     await baseProfileDoc(input.userId).set(baseData, { merge: true });
 

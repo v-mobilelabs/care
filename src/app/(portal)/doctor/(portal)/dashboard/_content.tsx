@@ -48,10 +48,7 @@ function IosStatCard({
                     >
                         {label}
                     </Text>
-                    <Text
-                        fw={700}
-                        style={{ fontSize: 28, lineHeight: 1 }}
-                    >
+                    <Text size="xl" fw={700} lh={1}>
                         {value}
                     </Text>
                     <Text size="xs" c="dimmed">

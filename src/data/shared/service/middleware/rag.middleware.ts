@@ -34,6 +34,19 @@ export interface RagMiddlewareOptions {
   cacheActive?: boolean;
 }
 
+const DEFAULT_RAG_TIMEOUT_MS = 10000;
+
+function parseRagTimeoutMs(): number {
+  const raw = process.env.AI_RAG_TIMEOUT_MS;
+  if (!raw) return DEFAULT_RAG_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_RAG_TIMEOUT_MS;
+}
+
+const RAG_TIMEOUT_MS = parseRagTimeoutMs();
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
     promise,
@@ -90,7 +103,7 @@ export function ragMiddleware(
                 rerankMinScore: 0.01,
                 rerankMinScoreRatio: 0.85,
               }),
-              10000,
+              RAG_TIMEOUT_MS,
             ),
             withTimeout(
               knowledgeBaseService
@@ -102,7 +115,7 @@ export function ragMiddleware(
                   );
                   return [];
                 }),
-              10000,
+              RAG_TIMEOUT_MS,
             ),
           ]);
 

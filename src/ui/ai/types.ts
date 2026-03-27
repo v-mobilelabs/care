@@ -29,6 +29,17 @@ export interface AskQuestionInput {
   scaleMax?: number;
   scaleMinLabel?: string;
   scaleMaxLabel?: string;
+  /** Current question number in assessment (1-indexed) */
+  currentQuestion?: number;
+  /** Total questions in assessment */
+  totalQuestions?: number;
+  /** Validated questions array from adaptive assessment */
+  validatedQuestions?: Array<{
+    question: string;
+    type: "text" | "choice" | "scale" | "binary";
+    options?: string[];
+    rationale?: string;
+  }>;
 }
 
 export interface StartAssessmentInput {
@@ -37,6 +48,13 @@ export interface StartAssessmentInput {
   guideline: string;
   estimatedQuestions: number;
   estimatedMinutes: string;
+  /** Validated questions from adaptive assessment */
+  validatedQuestions?: Array<{
+    question: string;
+    type: "text" | "choice" | "scale" | "binary";
+    options?: string[];
+    rationale?: string;
+  }>;
 }
 
 // ── Tool part helpers ─────────────────────────────────────────────────────────
@@ -94,6 +112,19 @@ export function extractToolInput<T>(
   const data = p.input ?? p.args ?? null;
   if (data == null) return null;
   return data;
+}
+
+export function extractToolOutput<T>(
+  part: UIMessagePart<UIDataTypes, UITools>,
+  toolName: string,
+): T | null {
+  const name = getToolPartName(part);
+  if (name !== toolName) return null;
+  const state = getToolPartState(part);
+  if (state === "input-streaming") return null;
+  const p = part as unknown as { output?: T };
+  if (p.output == null) return null;
+  return p.output;
 }
 
 // ── Answer tracking helpers ───────────────────────────────────────────────────

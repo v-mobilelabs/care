@@ -19,12 +19,13 @@ const referralsCol = (profileId: string) => scopedCol(profileId, "referrals");
 export const referralRepository = {
   async create(
     profileId: string,
-    data: Omit<ReferralDocument, "userId" | "createdAt">,
+    data: Omit<ReferralDocument, "userId" | "createdAt" | "specialistLower">,
   ): Promise<ReferralDto> {
     const now = Timestamp.now();
     const doc: ReferralDocument = {
       userId: profileId,
       ...data,
+      specialistLower: data.specialist.toLowerCase(),
       createdAt: now,
     };
     const ref = referralsCol(profileId).doc();
@@ -59,35 +60,39 @@ export const referralRepository = {
     await referralsCol(profileId).doc(referralId).update(update);
   },
 
+  async delete(profileId: string, referralId: string): Promise<void> {
+    await referralsCol(profileId).doc(referralId).delete();
+  },
+
   async listPaginated(
     profileId: string,
     opts: ListReferralsInput,
   ): Promise<PaginatedReferrals> {
-    let query = referralsCol(profileId).orderBy("createdAt", "desc");
+    const specialistLookup = (opts.q ?? opts.specialist)?.trim().toLowerCase();
+    const sortDir = opts.sortDir ?? "desc";
+
+    let baseQuery = referralsCol(profileId).orderBy("createdAt", sortDir);
+
+    if (opts.status) {
+      baseQuery = baseQuery.where("status", "==", opts.status);
+    }
+
+    if (specialistLookup) {
+      baseQuery = baseQuery.where("specialistLower", "==", specialistLookup);
+    }
+
+    let query = baseQuery;
 
     if (opts.cursor) {
-      query = query.startAfter(
-        Timestamp.fromDate(new Date(opts.cursor)),
-      ) as typeof query;
+      query = query.startAfter(Timestamp.fromDate(new Date(opts.cursor)));
     }
 
     const fetchLimit = opts.limit + 1;
     const snap = await query.limit(fetchLimit).get();
 
-    let referrals = snap.docs.map((d) =>
+    const referrals = snap.docs.map((d) =>
       toReferralDto(d.id, d.data() as ReferralDocument),
     );
-
-    // Client-side filtering to avoid composite indexes
-    if (opts.status) {
-      referrals = referrals.filter((r) => r.status === opts.status);
-    }
-    if (opts.specialist) {
-      const wanted = opts.specialist.toLowerCase();
-      referrals = referrals.filter(
-        (r) => r.specialist.toLowerCase() === wanted,
-      );
-    }
 
     const hasMore = referrals.length > opts.limit;
     const page = hasMore ? referrals.slice(0, opts.limit) : referrals;
@@ -97,7 +102,7 @@ export const referralRepository = {
 
     let totalCount: number | undefined;
     if (!opts.cursor) {
-      const countSnap = await referralsCol(profileId).count().get();
+      const countSnap = await baseQuery.count().get();
       totalCount = countSnap.data().count;
     }
 

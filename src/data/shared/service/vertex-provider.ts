@@ -20,7 +20,7 @@ function buildVertexProvider() {
           credentials: {
             client_email: clientEmail,
             // Env var stores \n as a literal backslash-n — convert back to newlines.
-            private_key: rawKey.replace(/\\n/g, "\n"),
+            private_key: rawKey.replaceAll(String.raw`\n`, "\n"),
           },
         }
       : undefined;
@@ -61,6 +61,7 @@ export type VertexLanguageModelOptions = {
   thinkingConfig?: {
     thinkingLevel?: "minimal" | "low" | "medium" | "high";
     thinkingBudget?: number;
+    includeThoughts?: boolean;
   };
   cachedContent?: string;
   [key: string]: JsonValue | undefined;

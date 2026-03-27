@@ -7,6 +7,9 @@ import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 export const gastroenterologyAgent = createAgent({
   id: "gastroenterology",
   buildSystemPrompt: () => buildGastroenterologyPrompt(),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

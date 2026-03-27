@@ -13,6 +13,17 @@ export interface GatewayInput {
   userQuery: string;
   /** Whether the message includes file attachments */
   hasAttachment?: boolean;
+  /** Known attachment metadata for richer routing context */
+  attachmentMetadata?: Array<{
+    fileName?: string;
+    label?: string;
+    extractedSummary?: {
+      testName?: string;
+      labName?: string;
+      notes?: string;
+      biomarkerNames: string[];
+    };
+  }>;
   /** Recent conversation context (last 3-5 messages) */
   recentMessages?: string[];
   /** User ID for credit consumption */
@@ -112,13 +123,38 @@ const OUTPUT_FORMAT_SECTION = [
   "Use **triageNurse** only if impossible to route safely.",
 ] as const;
 
-function buildAttachmentSection(hasAttachment?: boolean): string[] {
-  if (!hasAttachment) return [];
+function buildAttachmentSection(input: GatewayInput): string[] {
+  if (!input.hasAttachment) return [];
+
+  const attachmentSummaryLines = (input.attachmentMetadata ?? []).flatMap(
+    (attachment, index) => {
+      const summary = attachment.extractedSummary;
+      const parts = [
+        attachment.fileName,
+        attachment.label ? `label=${attachment.label}` : undefined,
+        summary?.testName ? `test=${summary.testName}` : undefined,
+        summary?.labName ? `lab=${summary.labName}` : undefined,
+        summary?.notes ? `notes=${summary.notes}` : undefined,
+        summary?.biomarkerNames?.length
+          ? `biomarkers=${summary.biomarkerNames.join(", ")}`
+          : undefined,
+      ].filter((value): value is string => Boolean(value));
+
+      if (parts.length === 0) {
+        return [];
+      }
+
+      return [`   - Attachment ${index + 1}: ${parts.join(" | ")}`];
+    },
+  );
+
   return [
     "📎 **Attachments Present**: User uploaded files (medical images or lab reports)",
     "   **Attachment Routing Logic:**",
-    "   - Medical images (X-Ray, CT, ultrasound, DICOM) → **radiology** (for diagnostic report)",
+    "   - Imaging-related files (X-Ray, CT, MRI, ultrasound, mammogram, DICOM, radiology reports) → **radiology**",
+    "   - Photos of non-radiology reports should NOT default to radiology — route by report type or specialty intent",
     "   - Lab reports (blood tests, pathology) → Route to specialist based on result type:",
+    "     • Double marker / triple marker / prenatal screening → **womensHealth**",
     "     • Cardiac markers, BNP, ECG → **cardiology**",
     "     • Glucose, HbA1c, TSH, thyroid → **endocrinology**",
     "     • CBC, WBC abnormalities → **generalMedicine**",
@@ -126,6 +162,9 @@ function buildAttachmentSection(hasAttachment?: boolean): string[] {
     "     • Liver enzymes (AST, ALT, bilirubin) → **generalMedicine** or specialist",
     "     • Generic lab results → **labReport** agent for detailed analysis",
     "   - Other documents → Route based on content and user query",
+    ...(attachmentSummaryLines.length > 0
+      ? ["", "   **Known attachment signals:**", ...attachmentSummaryLines]
+      : []),
     "",
   ];
 }
@@ -152,7 +191,7 @@ function buildRecentMessagesSection(recentMessages?: string[]): string[] {
 export function buildRoutingPrompt(input: GatewayInput): string {
   return [
     ...BASE_PROMPT_SECTIONS,
-    ...buildAttachmentSection(input.hasAttachment),
+    ...buildAttachmentSection(input),
     ...buildRecentMessagesSection(input.recentMessages),
     ...OUTPUT_FORMAT_SECTION,
   ].join("\n");

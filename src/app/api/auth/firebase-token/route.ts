@@ -4,7 +4,7 @@
 // Firebase Auth client-side, enabling RTDB writes (presence, etc.).
 import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { COOKIE_NAME, USER_KINDS, type UserKind } from "@/lib/auth/jwt";
+import { COOKIE_NAME, coerceUserKind, type UserKind } from "@/lib/auth/jwt";
 import { auth } from "@/lib/firebase/admin";
 
 export async function GET(_req: NextRequest) {
@@ -19,12 +19,7 @@ export async function GET(_req: NextRequest) {
     const decoded = await auth.verifySessionCookie(sessionCookie, true);
 
     // Resolve kind from the session cookie claims, defaulting to "user".
-    const rawKind = decoded["kind"] as string | undefined;
-    const kind: UserKind = (USER_KINDS as readonly string[]).includes(
-      rawKind ?? "",
-    )
-      ? (rawKind as UserKind)
-      : "user";
+    const kind: UserKind = coerceUserKind(decoded["kind"]);
 
     // Include kind as a custom claim so getIdTokenResult() also has it.
     const customToken = await auth.createCustomToken(decoded.uid, { kind });

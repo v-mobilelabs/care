@@ -7,6 +7,20 @@ const nextConfig: NextConfig = {
   experimental: {
     useCache: true,
   },
+  async redirects() {
+    return [
+      {
+        source: "/patient",
+        destination: "/user",
+        permanent: true,
+      },
+      {
+        source: "/patient/:path*",
+        destination: "/user/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

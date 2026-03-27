@@ -3,9 +3,14 @@ import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { trace, SpanStatusCode, type Span } from "@opentelemetry/api";
 import { COOKIE_NAME } from "@/lib/auth/jwt";
-import type { SessionPayload, UserKind } from "@/lib/auth/jwt";
+import {
+  coerceUserKind,
+  type SessionPayload,
+  type UserKind,
+} from "@/lib/auth/jwt";
 import { auth } from "@/lib/firebase/admin";
 import { CreditsExhaustedError } from "@/lib/errors";
+import { GuardrailError } from "@/lib/errors/guardrail.error";
 
 const tracer = trace.getTracer("careai.api");
 
@@ -186,7 +191,7 @@ function makeRouteHandler<
           // no extra getUser() call needed.
           const decoded = await auth.verifySessionCookie(token, true);
           // Back-compat: tokens may carry kind:"patient" (brief migration window) — normalise to "user".
-          const kind: UserKind = decoded.kind === "doctor" ? "doctor" : "user";
+          const kind = coerceUserKind(decoded.kind);
           user = { uid: decoded.uid, email: decoded.email ?? "", kind };
 
           // Add user context to span
@@ -279,6 +284,26 @@ function makeRouteHandler<
               "http.status_code": err.statusCode,
               "error.code": err.code,
               "error.type": "CreditsExhaustedError",
+            });
+            span.recordException(err);
+            return errorResponse(
+              err.statusCode,
+              err.code,
+              err.toResponseMessage(),
+            );
+          }
+
+          // Guardrail blocked (thrown by pre-run guardrail check)
+          if (err instanceof GuardrailError) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: err.message,
+            });
+            span.setAttributes({
+              "http.status_code": err.statusCode,
+              "error.code": err.code,
+              "error.type": "GuardrailError",
+              "guardrail.category": err.category,
             });
             span.recordException(err);
             return errorResponse(

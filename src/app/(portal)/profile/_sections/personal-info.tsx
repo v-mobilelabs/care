@@ -18,7 +18,7 @@ import { useState } from "react";
 
 import { useAuth } from "@/ui/providers/auth-provider";
 import { colors } from "@/ui/tokens";
-import { useProfileQuery, useUpdateIdentityMutation } from "@/app/(portal)/patient/_query";
+import { useProfileQuery, useUpdateIdentityMutation } from "@/app/(portal)/user/_query";
 
 const GENDER_DATA = [
     { value: "man", label: "Man" },

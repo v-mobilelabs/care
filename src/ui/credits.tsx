@@ -1,5 +1,5 @@
 "use client";
-import { useCreditsQuery } from "@/app/(portal)/patient/_query";
+import { useCreditsQuery } from "@/app/(portal)/user/_query";
 import { Badge, Loader, Skeleton, Tooltip } from "@mantine/core";
 import { IconBolt } from "@tabler/icons-react";
 import Link, { useLinkStatus } from "@/ui/link";
@@ -62,7 +62,7 @@ export function Credits() {
         >
             <Badge
                 component={Link}
-                href="/patient/usage"
+                href="/user/usage"
                 leftSection={<IconBolt size={13} />}
                 color={color}
                 variant="light"

@@ -41,6 +41,21 @@ export interface MedicationDto {
   updatedAt: string; // ISO-8601
 }
 
+export type MedicationStatus =
+  | "active"
+  | "completed"
+  | "discontinued"
+  | "paused";
+
+export type MedicationSortDir = "asc" | "desc";
+
+export interface PaginatedMedications {
+  medications: MedicationDto[];
+  nextCursor: string | null;
+  /** Total matching documents (only computed on first page and without text search). */
+  totalCount?: number;
+}
+
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 export function toMedicationDto(
@@ -112,6 +127,19 @@ export const ListMedicationsSchema = z.object({
 });
 
 export type ListMedicationsInput = z.infer<typeof ListMedicationsSchema>;
+
+export const ListMedicationsPaginatedSchema = z.object({
+  userId: z.string().min(1, { message: "userId is required" }),
+  limit: z.number().int().min(1).max(100).optional().default(20),
+  cursor: z.string().optional(),
+  status: z.enum(["active", "completed", "discontinued", "paused"]).optional(),
+  q: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional().default("desc"),
+});
+
+export type ListMedicationsPaginatedInput = z.infer<
+  typeof ListMedicationsPaginatedSchema
+>;
 
 // ── DTO — inbound (delete) ────────────────────────────────────────────────────
 

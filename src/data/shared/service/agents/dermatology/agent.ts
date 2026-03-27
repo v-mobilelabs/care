@@ -10,6 +10,9 @@ export const dermatologyAgent = createAgent({
   buildSystemPrompt: () => buildDermatologyPrompt(),
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

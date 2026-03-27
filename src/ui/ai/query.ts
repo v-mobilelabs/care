@@ -75,6 +75,43 @@ export interface ConditionRecord {
   createdAt: string;
 }
 
+export type SymptomObservationSource =
+  | "chat"
+  | "assessment"
+  | "doctor-note"
+  | "manual"
+  | "migration";
+
+export type SymptomObservationState = "improving" | "stable" | "worsening";
+
+export interface SymptomObservationRecord {
+  id: string;
+  userId: string;
+  conditionId?: string;
+  sessionId?: string;
+  assessmentId?: string;
+  symptom: string;
+  severity?: number;
+  state?: SymptomObservationState;
+  source: SymptomObservationSource;
+  onset?: string;
+  duration?: string;
+  triggers?: string[];
+  alleviators?: string[];
+  associatedSymptoms?: string[];
+  notes?: string;
+  observedAt: string;
+  recordedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedSymptomObservationsResponse {
+  observations: SymptomObservationRecord[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+
 export interface SoapNoteRecord {
   id: string;
   userId: string;
@@ -329,6 +366,17 @@ export function useInvalidateConditions() {
   const pid = useActiveProfileScope();
   return () => {
     qc.invalidateQueries({ queryKey: [...chatKeys.conditions(), pid] });
+  };
+}
+
+/** Invalidate the symptom-observations cache. */
+export function useInvalidateSymptomObservations() {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  return () => {
+    qc.invalidateQueries({
+      queryKey: [...chatKeys.symptomObservations(), pid],
+    });
   };
 }
 
@@ -590,6 +638,222 @@ export function useDeleteConditionMutation() {
       qc.setQueryData<ConditionRecord[]>(key, (old = []) =>
         old.filter((c) => c.id !== conditionId),
       );
+      return { snapshot };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+export interface AddSymptomObservationPayload {
+  conditionId?: string;
+  sessionId?: string;
+  assessmentId?: string;
+  symptom: string;
+  severity?: number;
+  state?: SymptomObservationState;
+  source?: SymptomObservationSource;
+  onset?: string;
+  duration?: string;
+  triggers?: string[];
+  alleviators?: string[];
+  associatedSymptoms?: string[];
+  notes?: string;
+  observedAt?: string;
+}
+
+/** Cursor-paginated query for symptom timeline events. */
+export function useSymptomObservationsQuery(filters?: {
+  conditionId?: string;
+  limit?: number;
+  sortDir?: "asc" | "desc";
+}) {
+  const pid = useActiveProfileScope();
+  const conditionId = filters?.conditionId;
+  const limit = filters?.limit;
+  const sortDir = filters?.sortDir;
+
+  return useInfiniteQuery({
+    queryKey: [
+      ...chatKeys.symptomObservations(),
+      pid,
+      conditionId ?? "all",
+      sortDir ?? "desc",
+      limit ?? 50,
+    ],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("cursor", pageParam);
+      if (conditionId) params.set("conditionId", conditionId);
+      if (sortDir) params.set("sortDir", sortDir);
+      if (limit) params.set("limit", String(limit));
+      const qs = params.toString();
+      const url = qs
+        ? `/api/symptom-observations?${qs}`
+        : "/api/symptom-observations";
+      return apiFetch<PaginatedSymptomObservationsResponse>(url);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    staleTime: 30_000,
+  });
+}
+
+/** Create a symptom timeline event with optimistic list insertion. */
+export function useAddSymptomObservationMutation(filters?: {
+  conditionId?: string;
+  limit?: number;
+  sortDir?: "asc" | "desc";
+}) {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  const key = [
+    ...chatKeys.symptomObservations(),
+    pid,
+    filters?.conditionId ?? "all",
+    filters?.sortDir ?? "desc",
+    filters?.limit ?? 50,
+  ] as const;
+
+  return useMutation({
+    mutationFn: (payload: AddSymptomObservationPayload) =>
+      apiFetch<SymptomObservationRecord>("/api/symptom-observations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<{
+        pages: PaginatedSymptomObservationsResponse[];
+        pageParams: (string | undefined)[];
+      }>(key);
+
+      const now = new Date().toISOString();
+      const optimistic: SymptomObservationRecord = {
+        id: `__optimistic__${Date.now()}`,
+        userId: "",
+        conditionId: payload.conditionId,
+        sessionId: payload.sessionId,
+        assessmentId: payload.assessmentId,
+        symptom: payload.symptom,
+        severity: payload.severity,
+        state: payload.state,
+        source: payload.source ?? "manual",
+        onset: payload.onset,
+        duration: payload.duration,
+        triggers: payload.triggers,
+        alleviators: payload.alleviators,
+        associatedSymptoms: payload.associatedSymptoms,
+        notes: payload.notes,
+        observedAt: payload.observedAt ?? now,
+        recordedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      qc.setQueryData<{
+        pages: PaginatedSymptomObservationsResponse[];
+        pageParams: (string | undefined)[];
+      }>(key, (old) => {
+        if (!old || old.pages.length === 0) {
+          return {
+            pages: [{ observations: [optimistic], nextCursor: null }],
+            pageParams: [undefined],
+          };
+        }
+
+        return {
+          ...old,
+          pages: old.pages.map((page, pageIndex) => {
+            if (pageIndex !== 0) return page;
+            return {
+              ...page,
+              observations: [optimistic, ...page.observations],
+            };
+          }),
+        };
+      });
+
+      return { snapshot };
+    },
+    onSuccess: (created) => {
+      qc.setQueryData<{
+        pages: PaginatedSymptomObservationsResponse[];
+        pageParams: (string | undefined)[];
+      }>(key, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page, pageIndex) => {
+            if (pageIndex !== 0) return page;
+            return {
+              ...page,
+              observations: page.observations.map((item) =>
+                item.id.startsWith("__optimistic__") ? created : item,
+              ),
+            };
+          }),
+        };
+      });
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(key, ctx.snapshot);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+    },
+  });
+}
+
+/** Delete a symptom timeline event with optimistic cache update. */
+export function useDeleteSymptomObservationMutation(filters?: {
+  conditionId?: string;
+  limit?: number;
+  sortDir?: "asc" | "desc";
+}) {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  const key = [
+    ...chatKeys.symptomObservations(),
+    pid,
+    filters?.conditionId ?? "all",
+    filters?.sortDir ?? "desc",
+    filters?.limit ?? 50,
+  ] as const;
+
+  return useMutation({
+    mutationFn: (observationId: string) =>
+      apiFetch<{ ok: boolean }>(`/api/symptom-observations/${observationId}`, {
+        method: "DELETE",
+      }),
+    onMutate: async (observationId) => {
+      await qc.cancelQueries({ queryKey: key });
+      const snapshot = qc.getQueryData<{
+        pages: PaginatedSymptomObservationsResponse[];
+        pageParams: (string | undefined)[];
+      }>(key);
+
+      qc.setQueryData<{
+        pages: PaginatedSymptomObservationsResponse[];
+        pageParams: (string | undefined)[];
+      }>(key, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            observations: page.observations.filter(
+              (item) => item.id !== observationId,
+            ),
+          })),
+        };
+      });
+
       return { snapshot };
     },
     onError: (_err, _id, ctx) => {
@@ -1505,6 +1769,7 @@ export interface ProfileRecord {
   foodPreferences?: string[];
   /** ISO-8601 timestamp of when the user accepted the consent terms. */
   consentedAt?: string;
+  onboardingTourCompleted?: boolean;
   updatedAt?: string;
 }
 
@@ -1574,6 +1839,7 @@ export function useUpdateIdentityMutation() {
       gender?: string;
       city?: string;
       country?: string;
+      dateOfBirth?: string;
     }) =>
       apiFetch<ProfileRecord>("/api/profile", {
         method: "PUT",
@@ -1597,7 +1863,6 @@ export function useUpdateIdentityMutation() {
 /** Health fields from patients/{userId} — separate from base profile identity */
 export interface PatientRecord {
   userId: string;
-  dateOfBirth?: string;
   sex?: Sex;
   height?: number;
   weight?: number;
@@ -1611,11 +1876,11 @@ export interface PatientRecord {
 }
 
 export interface UpsertPatientPayload {
-  dateOfBirth?: string;
   sex?: Sex;
   height?: number;
   weight?: number;
   activityLevel?: ActivityLevel;
+  foodPreferences?: string[];
 }
 
 /** Fetch patient health data from patients/{userId} */
@@ -2024,6 +2289,9 @@ export function useReExtractLabReportMutation() {
 export interface PatientSummaryRecord {
   id: string;
   userId: string;
+  version: number;
+  status: "active" | "pending_rebuild" | "error";
+  lastUpdatedBy?: string;
   sessionId?: string;
   title: string;
   narrative: string;
@@ -2038,12 +2306,69 @@ export interface PatientSummaryRecord {
   updatedAt: string;
 }
 
-/** Fetch all patient summaries for the active profile. */
-export function usePatientSummariesQuery() {
+export interface PatchPatientSummaryPayload {
+  expectedVersion: number;
+  patch: Partial<
+    Pick<
+      PatientSummaryRecord,
+      | "sessionId"
+      | "title"
+      | "narrative"
+      | "chiefComplaints"
+      | "diagnoses"
+      | "medications"
+      | "vitals"
+      | "allergies"
+      | "riskFactors"
+      | "recommendations"
+    >
+  >;
+  reason?: "assistant_update" | "doctor_edit" | "system_rebuild";
+}
+
+/** Fetch the singleton living patient summary for the active profile. */
+export function usePatientSummaryQuery() {
   const pid = useActiveProfileScope();
   return useQuery({
     queryKey: [...chatKeys.patientSummaries(), pid],
-    queryFn: () => apiFetch<PatientSummaryRecord[]>("/api/patient-summary"),
+    queryFn: () =>
+      apiFetch<PatientSummaryRecord | null>("/api/patient-summary"),
+  });
+}
+
+/** @deprecated Use usePatientSummaryQuery(); kept as array-compat shim. */
+export function usePatientSummariesQuery() {
+  const pid = useActiveProfileScope();
+  return useQuery({
+    queryKey: [...chatKeys.patientSummaries(), pid, "legacy-array"],
+    queryFn: async () => {
+      const data = await apiFetch<PatientSummaryRecord | null>(
+        "/api/patient-summary",
+      );
+      return data ? [data] : [];
+    },
+  });
+}
+
+/** Patch the singleton summary by expectedVersion. */
+export function usePatchPatientSummaryMutation() {
+  const qc = useQueryClient();
+  const pid = useActiveProfileScope();
+  const psKey = [...chatKeys.patientSummaries(), pid] as const;
+  return useMutation({
+    mutationFn: (payload: PatchPatientSummaryPayload) =>
+      apiFetch<PatientSummaryRecord>("/api/patient-summary", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (updated) => {
+      qc.setQueryData<PatientSummaryRecord | null>(psKey, updated);
+      qc.invalidateQueries({ queryKey: [...psKey, "legacy-array"] });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: psKey });
+    },
   });
 }
 

@@ -43,6 +43,9 @@ import { useChatContext } from "@/ui/ai/context/chat-context";
 import { getAgentLabel } from "@/ui/ai/types/agent-labels";
 import { useTTS } from "@/ui/ai/hooks/use-tts";
 
+import { trackEvent } from "@/lib/analytics";
+import { parseMemoryRecalls } from "@/lib/chat/parse-memory-recalls";
+import { MemoryRecallBadge } from "@/ui/chat/components/memory-recall-badge";
 // ── Speak button (Gemini-style TTS) ──────────────────────────────────────────
 
 function SpeakButton({ msgId, text }: Readonly<{ msgId: string; text: string }>) {
@@ -538,15 +541,36 @@ function AssistantBubble({ text, isLoading, msgId, usage }: Readonly<{
     msgId: string;
     usage?: TokenUsage;
 }>) {
+    const memoryRecalls = parseMemoryRecalls(text);
+    const hasRecalls = memoryRecalls.length > 0;
+    const firstRecallFired = useRef(false);
+
+    // Track memory recall on first render
+    if (hasRecalls && !firstRecallFired.current) {
+        firstRecallFired.current = true;
+        trackEvent({
+            name: "continuity_memory_recalled",
+            params: { memory_text: memoryRecalls[0].text },
+        });
+    }
+
     return (
         <>
             <Group gap={2} mt={4} justify="flex-start" style={{ minHeight: 28 }}>
                 <Box style={{ wordBreak: "break-word" }}>
                     <Streamdown plugins={{ code, math }} isAnimating={isLoading}>{text}</Streamdown>
+                    {hasRecalls && (
+                        <Stack gap={6} mt={8}>
+                            {memoryRecalls.map((recall, idx) => (
+                                <MemoryRecallBadge key={idx} text={recall.text} date={recall.date} />
+                            ))}
+                        </Stack>
+                    )}
                 </Box>
             </Group>
             <Group gap="sm">
                 <SpeakButton msgId={msgId} text={text} />
+                <Text size="xs" c="dimmed">Was this helpful?</Text>
                 <FeedbackBar msgId={msgId} />
                 {usage && <TokenUsageBadge usage={usage} />}
             </Group>
@@ -644,11 +668,6 @@ export function TextMessage({
 
 // ── Typing / thinking status indicator ───────────────────────────────────────
 
-const FALLBACK_PHRASES = [
-    "Processing your request...",
-    "One moment...",
-];
-
 interface StatusIndicatorProps {
     chatStatus: ChatStatus;
     phraseIdx: number;
@@ -662,8 +681,8 @@ interface StatusIndicatorProps {
 }
 
 export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, agentType, overrideLabel }: Readonly<StatusIndicatorProps>) {
-    const phrases = loadingHints && loadingHints.length > 0 ? loadingHints : FALLBACK_PHRASES;
-    const label = overrideLabel ?? phrases[phraseIdx % phrases.length];
+    const phrases = loadingHints ?? [];
+    const label = overrideLabel ?? (phrases.length > 0 ? phrases[phraseIdx % phrases.length] : undefined);
     const agentLabel = getAgentLabel(agentType);
     return (
         <Stack gap={4} align="flex-start" style={{ animation: "msg-enter 0.2s ease both" }}>
@@ -684,16 +703,18 @@ export function StatusIndicator({ phraseIdx, phraseFading, loadingHints, agentTy
                     style={{ display: "inline-flex", alignItems: "center", gap: 10 }}
                 >
                     <Loader size={16} color="primary" type="dots" />
-                    <Text
-                        size="sm"
-                        c="dimmed"
-                        style={{
-                            transition: "opacity 0.3s ease",
-                            opacity: phraseFading && !overrideLabel ? 0 : 1,
-                        }}
-                    >
-                        {label}
-                    </Text>
+                    {label && (
+                        <Text
+                            size="sm"
+                            c="dimmed"
+                            style={{
+                                transition: "opacity 0.3s ease",
+                                opacity: phraseFading && !overrideLabel ? 0 : 1,
+                            }}
+                        >
+                            {label}
+                        </Text>
+                    )}
                 </Paper>
             </Box>
         </Stack>

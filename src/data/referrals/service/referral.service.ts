@@ -3,6 +3,7 @@ import type {
   CreateReferralInput,
   ListReferralsInput,
   PaginatedReferrals,
+  ReferralRefInput,
   ReferralDto,
   ReferralStatus,
   UpdateReferralStatusInput,
@@ -29,6 +30,10 @@ export class ReferralService {
       input.referralId,
       input.status,
     );
+  }
+
+  async delete(input: ReferralRefInput): Promise<void> {
+    return referralRepository.delete(input.userId, input.referralId);
   }
 
   async findBySession(

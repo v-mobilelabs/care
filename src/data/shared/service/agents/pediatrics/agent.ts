@@ -10,6 +10,9 @@ export const pediatricsAgent = createAgent({
   buildSystemPrompt: () => buildPediatricsPrompt(),
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

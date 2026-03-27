@@ -20,7 +20,7 @@ export const GET = WithContext(
       doctorId: user.uid,
       patientId,
     });
-    if (!link || link.status !== "accepted") {
+    if (link?.status !== "accepted") {
       throw ApiError.forbidden(
         "You do not have consent to view this patient\u2019s health records.",
       );
@@ -41,7 +41,7 @@ export const GET = WithContext(
       patientName: link.patientName ?? profile?.name,
       profile: patient
         ? {
-            dateOfBirth: patient.dateOfBirth,
+            dateOfBirth: profile?.dateOfBirth,
             sex: patient.sex,
             height: patient.height,
             weight: patient.weight,

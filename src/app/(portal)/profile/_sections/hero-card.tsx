@@ -12,7 +12,7 @@ import {
     IconMapPin,
     IconShieldCheck,
 } from "@tabler/icons-react";
-import type { ProfileRecord } from "@/app/(portal)/patient/_query";
+import type { ProfileRecord } from "@/app/(portal)/user/_query";
 import { AvatarUpload } from "./avatar-upload";
 
 interface Props {

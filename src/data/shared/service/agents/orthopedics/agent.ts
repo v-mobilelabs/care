@@ -10,6 +10,9 @@ export const orthopedicsAgent = createAgent({
   buildSystemPrompt: () => buildOrthopedicsPrompt(),
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

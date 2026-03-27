@@ -1,5 +1,5 @@
 "use client";
-import { Box, Card, Group, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Box, Card, Group, Stack, Text, ThemeIcon, Progress } from "@mantine/core";
 import { IconClipboardHeart, IconClock, IconListCheck, IconStethoscope } from "@tabler/icons-react";
 import type { StartAssessmentInput } from "@/ui/ai/types";
 
@@ -50,6 +50,22 @@ export function AssessmentPrefaceCard({ data }: Readonly<{ data: StartAssessment
                             <Text size="sm" fw={500}>~{data.estimatedMinutes} min</Text>
                         </Group>
                     </Group>
+
+                    {/* Progress bar if adaptive mode with validated questions */}
+                    {data.validatedQuestions && data.validatedQuestions.length > 0 && (
+                        <Stack gap="xs">
+                            <Text size="xs" c="dimmed" fw={500}>
+                                Assessment adapted · {data.validatedQuestions.length} questions prepared
+                            </Text>
+                            <Progress
+                                value={0}
+                                size="sm"
+                                radius="md"
+                                style={{ background: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-7))" }}
+                                color="primary"
+                            />
+                        </Stack>
+                    )}
 
                     <Text size="xs" c="dimmed" lh={1.5}>
                         This structured assessment helps evaluate your symptoms systematically.

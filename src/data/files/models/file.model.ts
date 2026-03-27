@@ -179,9 +179,11 @@ export const ListAllFilesSchema = z.object({
   mimeType: z.string().optional(),
   /** Client-side name search (applied after Firestore fetch). */
   q: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional().default("desc"),
 });
 
 export type ListAllFilesInput = z.infer<typeof ListAllFilesSchema>;
+export type FileSortDir = "asc" | "desc";
 
 // ── Paginated response ───────────────────────────────────────────────────────
 

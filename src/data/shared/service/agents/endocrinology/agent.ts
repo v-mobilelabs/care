@@ -7,6 +7,9 @@ import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 export const endocrinologyAgent = createAgent({
   id: "endocrinology",
   buildSystemPrompt: () => buildEndocrinologyPrompt(),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

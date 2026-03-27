@@ -67,7 +67,7 @@ async function PatientData({
                 patientName: link.patientName ?? profile?.name,
                 profile: patient
                     ? {
-                        dateOfBirth: patient.dateOfBirth,
+                        dateOfBirth: profile?.dateOfBirth,
                         sex: patient.sex,
                         height: patient.height,
                         weight: patient.weight,

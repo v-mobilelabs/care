@@ -15,8 +15,8 @@ import { notifications } from "@mantine/notifications";
 import { IconCheck, IconMapPin } from "@tabler/icons-react";
 
 import { colors } from "@/ui/tokens";
-import type { ProfileRecord } from "@/app/(portal)/patient/_query";
-import { useUpdateIdentityMutation } from "@/app/(portal)/patient/_query";
+import type { ProfileRecord } from "@/app/(portal)/user/_query";
+import { useUpdateIdentityMutation } from "@/app/(portal)/user/_query";
 import { trackEvent } from "@/lib/analytics";
 import { COUNTRIES } from "@/lib/constants";
 

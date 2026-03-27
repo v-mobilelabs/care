@@ -30,7 +30,6 @@ export const patientRepository = {
       updatedAt: now,
     };
 
-    if (input.dateOfBirth !== undefined) data.dateOfBirth = input.dateOfBirth;
     if (input.sex !== undefined) data.sex = input.sex;
     if (input.height !== undefined) data.height = input.height;
     if (input.weight !== undefined) data.weight = input.weight;

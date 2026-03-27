@@ -15,21 +15,21 @@ export function AIAssistantProvider({ children }: Readonly<{ children: React.Rea
 
     // Only auto-create a session when on the assistant page.
     // Sub-pages (profile, soap-notes, faq) don't carry ?id= and must not be redirected.
-    const isChatRoot = pathname === "/patient/assistant";
+    const isChatRoot = pathname === "/user/assistant";
 
     // Auto-create a session ID when on the chat root with no URL id present.
     useEffect(() => {
         if (isChatRoot && !urlSessionId) {
-            router.replace(`/patient/assistant?id=${crypto.randomUUID()}`);
+            router.replace(`/user/assistant?id=${crypto.randomUUID()}`);
         }
     }, [isChatRoot, urlSessionId, router]);
 
     function handleNewChat() {
-        router.replace(`/patient/assistant?id=${crypto.randomUUID()}`);
+        router.replace(`/user/assistant?id=${crypto.randomUUID()}`);
     }
 
     function handleSelectSession(id: string) {
-        router.replace(`/patient/assistant?id=${id}`);
+        router.replace(`/user/assistant?id=${id}`);
     }
 
     // ── Shared messages state ─────────────────────────────────────────────────

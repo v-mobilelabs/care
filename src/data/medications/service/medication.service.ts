@@ -2,9 +2,11 @@ import { medicationRepository } from "../repositories/medication.repository";
 import type {
   CreateMedicationInput,
   ListMedicationsInput,
+  ListMedicationsPaginatedInput,
   UpdateMedicationInput,
   DeleteMedicationInput,
   MedicationDto,
+  PaginatedMedications,
 } from "../models/medication.model";
 
 export class MedicationService {
@@ -25,6 +27,19 @@ export class MedicationService {
 
   async list(input: ListMedicationsInput): Promise<MedicationDto[]> {
     return medicationRepository.list(input.userId, input.limit);
+  }
+
+  async listPaginated(
+    input: ListMedicationsPaginatedInput,
+  ): Promise<PaginatedMedications> {
+    return medicationRepository.listPaginated({
+      userId: input.userId,
+      limit: input.limit,
+      cursor: input.cursor,
+      status: input.status,
+      q: input.q,
+      sortDir: input.sortDir,
+    });
   }
 
   async update(input: UpdateMedicationInput): Promise<MedicationDto> {

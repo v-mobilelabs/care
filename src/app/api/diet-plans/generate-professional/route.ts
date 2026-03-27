@@ -10,7 +10,6 @@ import { WithContext } from "@/lib/api/with-context";
 import { GenerateProfessionalDietPlanUseCase } from "@/data/diet-plans";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 5 minutes for AI generation
 
 export const POST = WithContext(async (ctx) => {
   const body = (await ctx.req.json()) as unknown;

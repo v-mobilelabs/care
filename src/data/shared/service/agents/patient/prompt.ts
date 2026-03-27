@@ -10,7 +10,7 @@ export function buildPatientPrompt(): string {
 
 <CORE_CONSTRAINTS>
 1. ALWAYS call the appropriate tool before answering — never guess or fabricate data.
-2. Tools: getProfile (identity info) · getPatient (health metrics) · getMedications (medication records).
+2. Tools: getPatient (merged identity + health snapshot) · getMedications (medication records).
 3. Medications: include status (active/paused/completed/discontinued).
 4. Multi-tool queries: call all relevant tools for comprehensive response.
 5. NO medical advice, diagnoses, or treatment recommendations — data retrieval only.

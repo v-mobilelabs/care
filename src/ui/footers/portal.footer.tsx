@@ -7,11 +7,6 @@ export function PortalFooter() {
   return (
     <footer>
       <Stack gap="0">
-        <NavLink leftSection={<IconChartBar size={16} />} component={Link} href="/status" c="dimmed" label="System Status" />
-        <Divider />
-        <Group justify="center" py="sm">
-          <Copyright />
-        </Group>
       </Stack>
     </footer>
   );

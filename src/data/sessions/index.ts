@@ -1,6 +1,7 @@
 // ── Models ────────────────────────────────────────────────────────────────────
 export * from "./models/session.model";
 export * from "./models/message.model";
+export * from "./models/file.model";
 
 // ── Repositories ──────────────────────────────────────────────────────────────
 export { sessionRepository } from "./repositories/session.repository";
@@ -21,10 +22,17 @@ export { ListSessionsPaginatedUseCase } from "./use-cases/list-sessions-paginate
 export { UpdateSessionUseCase } from "./use-cases/update-session.use-case";
 export { DeleteSessionUseCase } from "./use-cases/delete-session.use-case";
 export { SetSessionAgentUseCase } from "./use-cases/set-session-agent.use-case";
+export { SetSessionGroundingUseCase } from "./use-cases/set-session-grounding.use-case";
 
 // Message
 export { AddMessageUseCase } from "./use-cases/add-message.use-case";
 export { ListMessagesUseCase } from "./use-cases/list-messages.use-case";
+
+// Files
+export { ListFilesUseCase } from "./use-cases/list-files.use-case";
+export { UploadFileUseCase } from "./use-cases/upload-file.use-case";
+export { GetFileUseCase } from "./use-cases/get-file.use-case";
+export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
 
 // Chat
 export { PrepareChatUseCase } from "./use-cases/prepare-chat.use-case";

@@ -12,5 +12,7 @@ export {
 
 // ── Use Cases ─────────────────────────────────────────────────────────────────
 export { CreatePatientSummaryUseCase } from "./use-cases/create-patient-summary.use-case";
+export { GetPatientSummaryUseCase } from "./use-cases/get-patient-summary.use-case";
 export { ListPatientSummariesUseCase } from "./use-cases/list-patient-summaries.use-case";
+export { PatchPatientSummaryUseCase } from "./use-cases/patch-patient-summary.use-case";
 export { DeletePatientSummaryUseCase } from "./use-cases/delete-patient-summary.use-case";

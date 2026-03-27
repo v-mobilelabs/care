@@ -118,6 +118,10 @@ export async function getContextCache(
   systemPrompt: string,
   tools: ToolSet,
 ): Promise<string | null> {
+  if (!contextCacheService.isExplicitCacheAvailable()) {
+    return null;
+  }
+
   const toolDeclarations = toolsToGoogleDeclarations(tools);
   return contextCacheService
     .getOrCreate(agentId, modelId, systemPrompt, toolDeclarations)

@@ -2,6 +2,39 @@
 @source "../../node_modules/@streamdown/code/dist/*.js";
 @source "../../node_modules/@streamdown/math/dist/*.js";
 
+/* ── Streamdown design tokens (shadcn-compatible) ───────────────────────── */
+/* Streamdown table/controls styles rely on these CSS vars. */
+:root {
+  --background: var(--mantine-color-body);
+  --foreground: var(--mantine-color-text);
+  --card: var(--mantine-color-body);
+  --card-foreground: var(--mantine-color-text);
+  --muted: var(--mantine-color-gray-1);
+  --muted-foreground: var(--mantine-color-dimmed);
+  --border: var(--mantine-color-gray-3);
+  --input: var(--mantine-color-gray-2);
+  --primary: var(--mantine-color-primary-6);
+  --primary-foreground: var(--mantine-color-white);
+  --radius: var(--mantine-radius-md);
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+:where([data-mantine-color-scheme="dark"]) {
+  --background: var(--mantine-color-dark-9);
+  --foreground: var(--mantine-color-gray-0);
+  --card: var(--mantine-color-dark-8);
+  --card-foreground: var(--mantine-color-gray-0);
+  --muted: var(--mantine-color-dark-6);
+  --muted-foreground: var(--mantine-color-gray-5);
+  --border: var(--mantine-color-dark-4);
+  --input: var(--mantine-color-dark-5);
+  --primary: var(--mantine-color-primary-5);
+  --primary-foreground: var(--mantine-color-white);
+}
+
 /* Prevent iOS text inflation and ensure consistent font scaling */
 html {
   scroll-behavior: smooth;
@@ -16,14 +49,6 @@ html {
     var(--mantine-color-dark-9)
   );
   overscroll-behavior-y: none; /* Stops the vertical bounce */
-}
-
-/* === Safe-area insets for iOS standalone PWA === */
-:root {
-  --sat: env(safe-area-inset-top, 0px);
-  --sar: env(safe-area-inset-right, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
-  --sal: env(safe-area-inset-left, 0px);
 }
 
 body {

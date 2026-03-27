@@ -9,6 +9,9 @@
  */
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
+import type { ReferralSortDir, ReferralStatus } from "@/data/referrals";
+import type { DailyKpiDocument } from "@/data/encounters";
+import { encounterRepository } from "@/data/encounters";
 
 // ── Cache tag helpers ─────────────────────────────────────────────────────────
 
@@ -24,7 +27,9 @@ export const CacheTags = {
   vitals: (userId: string) => `vitals:${userId}`,
   patientSummaries: (userId: string) => `patient-summaries:${userId}`,
   conditions: (userId: string) => `conditions:${userId}`,
+  symptomObservations: (userId: string) => `symptom-observations:${userId}`,
   referrals: (userId: string) => `referrals:${userId}`,
+  metrics: (profileId: string) => `metrics:${profileId}`,
 } as const;
 
 // ── Cached usage (credits / minutes / storage) ──────────────────────────────
@@ -71,6 +76,41 @@ export async function getCachedFiles(userId: string) {
   });
 }
 
+export interface CachedFilesFilters {
+  label?:
+    | "xray"
+    | "blood_test"
+    | "prescription"
+    | "scan"
+    | "report"
+    | "vaccination"
+    | "other";
+  mimeType?: string;
+  q?: string;
+  sortDir?: "asc" | "desc";
+  limit?: number;
+}
+
+export async function getCachedFilesWithFilters(
+  userId: string,
+  filters: CachedFilesFilters,
+) {
+  "use cache";
+  cacheTag(CacheTags.files(userId));
+  cacheLife("minutes");
+
+  const { ListAllFilesUseCase } = await import("@/data/files");
+  return new ListAllFilesUseCase().execute({
+    userId,
+    profileId: userId,
+    limit: filters.limit ?? 20,
+    ...(filters.label ? { label: filters.label } : {}),
+    ...(filters.mimeType ? { mimeType: filters.mimeType } : {}),
+    ...(filters.q ? { q: filters.q } : {}),
+    ...(filters.sortDir ? { sortDir: filters.sortDir } : {}),
+  });
+}
+
 // ── Cached memories (formatted for prompt injection) ────────────────────────
 
 export async function getCachedMemories(profileId: string): Promise<string> {
@@ -105,6 +145,34 @@ export async function getCachedMedications(userId: string) {
   return new ListMedicationsUseCase().execute({ userId });
 }
 
+export interface CachedMedicationsFilters {
+  status?: "active" | "completed" | "discontinued" | "paused";
+  q?: string;
+  sortDir?: "asc" | "desc";
+  limit?: number;
+  cursor?: string;
+}
+
+export async function getCachedMedicationsWithFilters(
+  userId: string,
+  filters: CachedMedicationsFilters,
+) {
+  "use cache";
+  cacheTag(CacheTags.medications(userId));
+  cacheLife("minutes");
+
+  const { ListMedicationsPaginatedUseCase } =
+    await import("@/data/medications");
+  return new ListMedicationsPaginatedUseCase().execute({
+    userId,
+    limit: filters.limit ?? 20,
+    ...(filters.cursor ? { cursor: filters.cursor } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.q ? { q: filters.q } : {}),
+    ...(filters.sortDir ? { sortDir: filters.sortDir } : {}),
+  });
+}
+
 // ── Cached vitals ───────────────────────────────────────────────────────────
 
 export async function getCachedVitals(userId: string) {
@@ -114,6 +182,17 @@ export async function getCachedVitals(userId: string) {
 
   const { ListVitalsUseCase } = await import("@/data/vitals");
   return new ListVitalsUseCase().execute({ userId });
+}
+
+// ── Cached conditions ───────────────────────────────────────────────────────
+
+export async function getCachedConditions(userId: string) {
+  "use cache";
+  cacheTag(CacheTags.conditions(userId));
+  cacheLife("minutes");
+
+  const { ListConditionsUseCase } = await import("@/data/conditions");
+  return new ListConditionsUseCase().execute({ userId, limit: 100 });
 }
 
 // ── Cached assessments ──────────────────────────────────────────────────────
@@ -138,6 +217,32 @@ export async function getCachedSessions(userId: string) {
   return new ListSessionsUseCase().execute({ userId, profileId: userId });
 }
 
+export interface CachedSessionsFilters {
+  agent?: string;
+  q?: string;
+  sortDir?: "asc" | "desc";
+  limit?: number;
+}
+
+export async function getCachedSessionsWithFilters(
+  userId: string,
+  filters: CachedSessionsFilters,
+) {
+  "use cache";
+  cacheTag(CacheTags.sessions(userId));
+  cacheLife("seconds");
+
+  const { ListSessionsPaginatedUseCase } = await import("@/data/sessions");
+  return new ListSessionsPaginatedUseCase().execute({
+    userId,
+    profileId: userId,
+    limit: filters.limit ?? 20,
+    ...(filters.agent ? { agent: filters.agent } : {}),
+    ...(filters.q ? { q: filters.q } : {}),
+    ...(filters.sortDir ? { sortDir: filters.sortDir } : {}),
+  });
+}
+
 // ── Cached patient summaries ────────────────────────────────────────────────
 
 export async function getCachedPatientSummaries(userId: string) {
@@ -147,7 +252,27 @@ export async function getCachedPatientSummaries(userId: string) {
 
   const { ListPatientSummariesUseCase } =
     await import("@/data/patient-summary");
-  return new ListPatientSummariesUseCase().execute({ userId });
+  return new ListPatientSummariesUseCase().execute({ userId, limit: 20 });
+}
+
+export async function getCachedPatientSummary(userId: string) {
+  "use cache";
+  cacheTag(CacheTags.patientSummaries(userId));
+  cacheLife("minutes");
+
+  const { GetPatientSummaryUseCase } = await import("@/data/patient-summary");
+  return new GetPatientSummaryUseCase().execute({ userId });
+}
+// ── Cached symptom observations ──────────────────────────────────────────────
+
+export async function getCachedSymptomObservations(userId: string) {
+  "use cache";
+  cacheTag(CacheTags.symptomObservations(userId));
+  cacheLife("minutes");
+
+  const { ListSymptomObservationsUseCase } =
+    await import("@/data/symptom-observations");
+  return new ListSymptomObservationsUseCase().execute({ userId });
 }
 
 // ── Cached referrals ─────────────────────────────────────────────────────────
@@ -159,4 +284,49 @@ export async function getCachedReferrals(userId: string) {
 
   const { ListReferralsUseCase } = await import("@/data/referrals");
   return new ListReferralsUseCase().execute({ userId, limit: 20 });
+}
+
+export interface CachedReferralsFilters {
+  status?: ReferralStatus;
+  specialist?: string;
+  q?: string;
+  sortDir?: ReferralSortDir;
+  limit?: number;
+}
+
+export async function getCachedReferralsWithFilters(
+  userId: string,
+  filters: CachedReferralsFilters,
+) {
+  "use cache";
+  cacheTag(CacheTags.referrals(userId));
+  cacheLife("minutes");
+
+  const { ListReferralsUseCase } = await import("@/data/referrals");
+  return new ListReferralsUseCase().execute({
+    userId,
+    limit: filters.limit ?? 20,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.specialist ? { specialist: filters.specialist } : {}),
+    ...(filters.q ? { q: filters.q } : {}),
+    ...(filters.sortDir ? { sortDir: filters.sortDir } : {}),
+  });
+}
+
+// ── Cached aggregated metrics ───────────────────────────────────────────────
+
+export async function getCachedMetricsAggregated(
+  profileId: string,
+  startDate: string,
+  endDate: string,
+): Promise<DailyKpiDocument[]> {
+  "use cache";
+  cacheTag(CacheTags.metrics(profileId));
+  cacheLife("minutes");
+
+  return encounterRepository.queryDailyKpisByRange(
+    profileId,
+    startDate,
+    endDate,
+  );
 }

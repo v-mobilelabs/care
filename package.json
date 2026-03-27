@@ -9,6 +9,7 @@
     "lint": "eslint",
     "ai:devtool": "npx @ai-sdk/devtools",
     "seed:nutrition": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-nutrition.ts",
+    "seed:admin": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-admin-user.ts",
     "seed:kb": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-knowledge-base.ts",
     "setup:vector-indexes": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/create-vector-indexes.ts"
   },
@@ -23,6 +24,8 @@
     "@aws-sdk/client-sts": "^3.1005.0",
     "@aws-sdk/s3-request-presigner": "^3.1005.0",
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@langchain/core": "^1.1.36",
+    "@langchain/langgraph": "^1.2.6",
     "@mantine/carousel": "^8.3.15",
     "@mantine/charts": "^8.3.15",
     "@mantine/code-highlight": "^8.3.15",

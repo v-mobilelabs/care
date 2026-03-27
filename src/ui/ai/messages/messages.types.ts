@@ -29,6 +29,8 @@ export interface MessagesProps {
   agentType?: string;
   /** Per-message agent type map (DB-persisted + live overlay). */
   messageAgentTypes?: ReadonlyMap<string, string>;
+  /** Per-message reasoning map (why specialist was selected). */
+  messageReasonings?: ReadonlyMap<string, string>;
   /** Current session ID for referral and other session-specific operations. */
   sessionId?: string;
   /** Called after referral confirmation to auto-send continuation message. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import type { useMessages } from "@/ui/ai/hooks/use-messages";
 
 export type MessagesContextValue = ReturnType<typeof useMessages>;
@@ -36,7 +36,13 @@ export function useMessagesContext(): MessagesContextValue {
 export interface PendingAskAIValue {
     text: string;
     sessionId: string;
-    files?: Array<{ url: string; mediaType: string }>;
+    files?: Array<{
+        fileId?: string;
+        url: string;
+        mediaType: string;
+        fileName?: string;
+        label?: string;
+    }>;
 }
 
 const PendingAskAIContext = createContext<{
@@ -49,8 +55,12 @@ const PendingAskAIContext = createContext<{
 
 export function PendingAskAIProvider({ children }: Readonly<{ children: React.ReactNode }>) {
     const [pendingAskAI, setPendingAskAI] = useState<PendingAskAIValue | null>(null);
+    const value = useMemo(
+        () => ({ pendingAskAI, setPendingAskAI }),
+        [pendingAskAI],
+    );
     return (
-        <PendingAskAIContext.Provider value={{ pendingAskAI, setPendingAskAI }}>
+        <PendingAskAIContext.Provider value={value}>
             {children}
         </PendingAskAIContext.Provider>
     );

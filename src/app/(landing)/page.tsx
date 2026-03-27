@@ -281,16 +281,14 @@ export default function HomePage() {
               12 Clinical Outputs · 5 Input Modes
             </Badge>
             <Title ta="center" style={{ fontSize: "clamp(2rem, 6vw, 3.2rem)", lineHeight: 1.2 }}>
-              Your symptoms turned into{" "}
-              <Text component="span" c="primary" inherit>a full clinical report.</Text>
+              Not ChatGPT. Clinical-grade assessments{" "}
+              <Text component="span" c="primary" inherit>built for doctors.</Text>
             </Title>
             <Text size="lg" c="dimmed" ta="center" maw={580} style={{ lineHeight: 1.7 }}>
-              Type, talk, photograph, or upload. CareAI asks the right follow-up questions
-              then hands you diagnoses, medications, lab orders, SOAP notes, specialist
-              referrals, and more — all from one conversation.
+              Unlike generic AI, CareAI follows clinical protocols. It structures your symptoms into diagnoses, risk scores, medications, lab orders, referrals, and SOAP notes—documentation your doctor can actually use. Built from your complete medical history, not just this conversation.
             </Text>
             <Group gap="md" justify="center" wrap="wrap">
-              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/patient/assistant">
+              <Button color="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/user/assistant">
                 <PendingButtonLabel>Check My Symptoms</PendingButtonLabel>
               </Button>
               <Button variant="subtle" color="primary" radius="xl" leftSection={<IconStethoscope size={20} />} component={Link} href="/auth/login?kind=doctor">
@@ -320,7 +318,7 @@ export default function HomePage() {
           <Stack gap={6} align="center">
             <Title order={2} ta="center">5 Ways to Describe Your Condition</Title>
             <Text size="md" c="dimmed" ta="center" maw={500}>
-              No forms. No checkboxes. Just tell CareAI what&apos;s wrong — however is easiest.
+              Natural conversation meets clinical structure. Talk, type, photograph, or upload—CareAI captures the details and translates them into medical documentation.
             </Text>
           </Stack>
           <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 5 }} spacing="md">
@@ -340,8 +338,7 @@ export default function HomePage() {
             <Badge color="primary" variant="dot" size="sm">12 Structured Outputs</Badge>
             <Title order={2} ta="center">What CareAI Produces</Title>
             <Text size="md" c="dimmed" ta="center" maw={520}>
-              Not just a summary — a full structured clinical report covering every dimension
-              of your condition.
+              Clinical-grade documentation, not generic summaries. ICD-10 diagnoses, risk scores, guideline-based recommendations, medications, labs, referrals, SOAP notes—structured for clinical workflows and care coordination.
             </Text>
           </Stack>
           <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
@@ -359,7 +356,7 @@ export default function HomePage() {
         <Stack gap="xl">
           <Stack gap={6} align="center">
             <Title order={2} ta="center">How CareAI Works</Title>
-            <Text size="md" c="dimmed" ta="center" maw={500}>From first symptom to complete assessment in a single conversation.</Text>
+            <Text size="md" c="dimmed" ta="center" maw={500}>From your first symptom to a complete clinical assessment. CareAI remembers your history and builds continuity across conversations—no starting over with a new AI every time.</Text>
           </Stack>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             {HOW_IT_WORKS.map((item) => (
@@ -382,11 +379,9 @@ export default function HomePage() {
               Not sure what&apos;s wrong?
             </Title>
             <Text c="rgba(255,255,255,0.8)" ta="center" maw={460} size="md" lh={1.7}>
-              CareAI will work through your symptoms, ask the right questions, and hand you
-              a full clinical report — conditions, medications, labs, referrals, SOAP notes,
-              and a clear action plan.
+              CareAI follows clinical pathways to work through your symptoms, connecting the dots across your medical history. You get diagnoses, medications, labs, referrals, SOAP notes, and documentation ready to share with your doctor—because assessment is only valuable when connected to care.
             </Text>
-            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/patient/assistant">
+            <Button color="white" c="primary" radius="xl" leftSection={<IconMessageChatbot size={20} />} component={Link} href="/user/assistant">
               <PendingButtonLabel>Start Free Assessment</PendingButtonLabel>
             </Button>
           </Stack>

@@ -20,6 +20,125 @@
 import { ragService } from "./rag.service";
 import type { SearchResult } from "./rag.types";
 
+const RECENCY_WINDOW_DAYS = 30;
+const MAX_RECENCY_BOOST = 0.15;
+const MAX_SEVERITY_BOOST = 0.2;
+
+function getMetadataString(
+  result: SearchResult,
+  key: string,
+): string | undefined {
+  const value = result.chunk.metadata[key];
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getMetadataNumber(
+  result: SearchResult,
+  key: string,
+): number | undefined {
+  const value = result.chunk.metadata[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function getObservedAt(result: SearchResult): Date | undefined {
+  const observed = getMetadataString(result, "observedAt");
+  if (observed) {
+    const parsed = new Date(observed);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  const recorded = getMetadataString(result, "recordedAt");
+  if (!recorded) return undefined;
+  const parsed = new Date(recorded);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed;
+}
+
+function getRecencyBoost(observedAt?: Date): number {
+  if (!observedAt) return 0;
+
+  const msInDay = 1000 * 60 * 60 * 24;
+  const ageDays = (Date.now() - observedAt.getTime()) / msInDay;
+  if (ageDays <= 0) return MAX_RECENCY_BOOST;
+  if (ageDays >= RECENCY_WINDOW_DAYS) return 0;
+
+  const remainingRatio = 1 - ageDays / RECENCY_WINDOW_DAYS;
+  return MAX_RECENCY_BOOST * remainingRatio;
+}
+
+function getSeverityBoost(result: SearchResult): number {
+  const severity = getMetadataNumber(result, "severity");
+  if (severity == null) return 0;
+
+  const normalized = Math.max(0, Math.min(10, severity)) / 10;
+  return MAX_SEVERITY_BOOST * normalized;
+}
+
+function getPersistenceBoost(result: SearchResult): number {
+  const state = getMetadataString(result, "state")?.toLowerCase();
+
+  if (state === "worsening") return 0.15;
+  if (state === "stable") return 0.08;
+
+  const contentLower = result.chunk.content.toLowerCase();
+  if (contentLower.includes("duration:")) return 0.04;
+  return 0;
+}
+
+function getSourceQualityBoost(result: SearchResult): number {
+  const source = getMetadataString(result, "source")?.toLowerCase();
+  if (!source) return 0;
+
+  if (source === "assessment") return 0.05;
+  if (source === "doctor-note") return 0.05;
+  if (source === "manual") return 0.03;
+  if (source === "chat") return 0.01;
+  return 0;
+}
+
+function getClinicalBoost(result: SearchResult): number {
+  if (result.chunk.type !== "symptom-observation") return 0;
+
+  const observedAt = getObservedAt(result);
+  const recencyBoost = getRecencyBoost(observedAt);
+  const severityBoost = getSeverityBoost(result);
+  const persistenceBoost = getPersistenceBoost(result);
+  const sourceQualityBoost = getSourceQualityBoost(result);
+
+  return recencyBoost + severityBoost + persistenceBoost + sourceQualityBoost;
+}
+
+function prioritizeClinically(results: SearchResult[]): SearchResult[] {
+  const scored = results.map((result, index) => {
+    const clinicalBoost = getClinicalBoost(result);
+    const boostedScore = Math.min(1, result.score + clinicalBoost);
+    return {
+      index,
+      boostedScore,
+      result: {
+        ...result,
+        score: boostedScore,
+      },
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (b.boostedScore !== a.boostedScore) {
+      return b.boostedScore - a.boostedScore;
+    }
+    return a.index - b.index;
+  });
+
+  return scored.map((entry) => entry.result);
+}
+
 export interface BuildContextParams {
   userId: string;
   profileId: string;
@@ -102,6 +221,7 @@ export class RAGContextBuilderService {
         "profile",
         "patient",
         "condition",
+        "symptom-observation",
         "medication",
         "assessment",
         "soap",
@@ -110,13 +230,14 @@ export class RAGContextBuilderService {
         "prescription",
       ],
     });
+    const clinicallyPrioritized = prioritizeClinically(results);
     console.log(
       `[RAG Builder] Search${rerank ? " + rerank" : ""} completed: ${(performance.now() - searchStart).toFixed(0)}ms, results: ${results.length}`,
     );
 
     // Step 2: Build formatted context string
     const formatStart = performance.now();
-    const context = ragService.buildContext(results);
+    const context = ragService.buildContext(clinicallyPrioritized);
     console.log(
       `[RAG Builder] Format completed: ${(performance.now() - formatStart).toFixed(0)}ms`,
     );
@@ -127,8 +248,8 @@ export class RAGContextBuilderService {
 
     return {
       context,
-      results,
-      count: results.length,
+      results: clinicallyPrioritized,
+      count: clinicallyPrioritized.length,
     };
   }
 
@@ -139,6 +260,7 @@ export class RAGContextBuilderService {
   async buildContextForTypes(
     params: BuildContextParams & {
       types: Array<
+        | "symptom-observation"
         | "condition"
         | "medication"
         | "assessment"

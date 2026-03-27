@@ -1,3 +1,4 @@
+import type { FileLabel } from "@/data/files";
 import type { UIMessage } from "ai";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,7 +26,13 @@ export interface MessageContext {
  */
 export function extractMessageContext(
   messages: UIMessage[],
-  attachmentUrls?: Array<{ url: string; mediaType: string }>,
+  attachmentUrls?: Array<{
+    fileId?: string;
+    url: string;
+    mediaType: string;
+    fileName?: string;
+    label?: FileLabel;
+  }>,
 ): MessageContext {
   const title = (extractFirstText(messages) ?? "New Session").slice(0, 60);
 
@@ -104,6 +111,49 @@ function normalizeGsUrl(url: string): string {
   return `gs://${bucket}/${normalizedPath}`;
 }
 
+function getNormalizedExistingAttachmentPart(
+  part: Record<string, unknown>,
+  existingUrl: string,
+): Record<string, unknown> {
+  return {
+    type: "file",
+    ...(typeof part.fileId === "string" ? { fileId: part.fileId } : {}),
+    url: normalizeGsUrl(existingUrl),
+    mediaType: (part.mediaType as string) || "application/octet-stream",
+    ...(typeof part.fileName === "string" ? { fileName: part.fileName } : {}),
+    ...(typeof part.label === "string" ? { label: part.label } : {}),
+  };
+}
+
+function getAttachmentReferencePart(attachment: {
+  fileId?: string;
+  url: string;
+  mediaType: string;
+  fileName?: string;
+  label?: FileLabel;
+}): Record<string, unknown> {
+  return {
+    type: "file",
+    ...(attachment.fileId ? { fileId: attachment.fileId } : {}),
+    url: attachment.url,
+    mediaType: attachment.mediaType,
+    ...(attachment.fileName ? { fileName: attachment.fileName } : {}),
+    ...(attachment.label ? { label: attachment.label } : {}),
+  };
+}
+
+function getMissingAttachmentFallback(
+  part: Record<string, unknown>,
+): Record<string, unknown> {
+  console.error(
+    "[Chat] Missing attachment URL — client must upload files before sending.",
+  );
+  return {
+    type: "text",
+    text: `[Attached: ${(part.mediaType as string) || (part.mimeType as string) || "file"}]`,
+  };
+}
+
 /**
  * Replaces file/image parts with storable URL references from attachmentUrls.
  * Non-file parts are passed through unchanged.
@@ -115,7 +165,13 @@ function normalizeGsUrl(url: string): string {
  */
 function buildStorableParts(
   parts: ReadonlyArray<Record<string, unknown>>,
-  attachmentUrls?: Array<{ url: string; mediaType: string }>,
+  attachmentUrls?: Array<{
+    fileId?: string;
+    url: string;
+    mediaType: string;
+    fileName?: string;
+    label?: FileLabel;
+  }>,
 ): Array<Record<string, unknown>> {
   let attachIdx = 0;
   return parts.map((p) => {
@@ -129,23 +185,13 @@ function buildStorableParts(
       existingUrl &&
       (existingUrl.startsWith("http") || existingUrl.startsWith("gs://"))
     ) {
-      return {
-        type: "file",
-        url: normalizeGsUrl(existingUrl),
-        mediaType: (p.mediaType as string) || "application/octet-stream",
-      };
+      return getNormalizedExistingAttachmentPart(p, existingUrl);
     }
 
     const attach = attachmentUrls?.[attachIdx++];
     if (attach) {
-      return { type: "file", url: attach.url, mediaType: attach.mediaType };
+      return getAttachmentReferencePart(attach);
     }
-    console.error(
-      "[Chat] Missing attachment URL — client must upload files before sending.",
-    );
-    return {
-      type: "text",
-      text: `[Attached: ${(p.mediaType as string) || (p.mimeType as string) || "file"}]`,
-    };
+    return getMissingAttachmentFallback(p);
   });
 }

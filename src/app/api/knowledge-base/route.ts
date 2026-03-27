@@ -6,7 +6,7 @@ import {
 } from "@/data/knowledge-base";
 
 // GET /api/knowledge-base — list entries (paginated, filterable)
-export const GET = WithContext(async ({ user, req }) => {
+export const GET = WithContext({ kind: "admin" }, async ({ user, req }) => {
   const url = new URL(req.url);
   const limit = url.searchParams.get("limit");
   const cursor = url.searchParams.get("cursor") ?? undefined;
@@ -26,7 +26,7 @@ export const GET = WithContext(async ({ user, req }) => {
 });
 
 // POST /api/knowledge-base — create a new entry (auto-embeds)
-export const POST = WithContext(async ({ user, req }) => {
+export const POST = WithContext({ kind: "admin" }, async ({ user, req }) => {
   const body = (await req.json()) as unknown;
   const entry = await new CreateKnowledgeBaseEntryUseCase().execute({
     ...(body as object),

@@ -9,8 +9,6 @@ import { z } from "zod";
  */
 export interface PatientDocument {
   userId: string;
-  /** ISO date "YYYY-MM-DD" */
-  dateOfBirth?: string;
   /** Biological sex — used for BMR / IBW / body-fat calculations */
   sex?: "male" | "female";
   /** Height in cm */
@@ -65,7 +63,6 @@ export type UpsertPatientInput = Omit<
 // ── Zod schema — used in PATCH /api/patients/me ─────────────────────────────
 
 export const UpsertPatientSchema = z.object({
-  dateOfBirth: z.string().optional(),
   sex: z.enum(["male", "female"]).optional(),
   height: z.number().positive().optional(),
   weight: z.number().positive().optional(),

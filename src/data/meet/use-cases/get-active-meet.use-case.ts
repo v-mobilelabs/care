@@ -15,6 +15,10 @@ export class GetActiveMeetUseCase {
   }): Promise<MeetSessionData | null> {
     const { userId, userKind } = params;
 
+    if (userKind === "admin") {
+      return null;
+    }
+
     const active =
       userKind === "doctor"
         ? await meetRepository.getActiveForDoctor(userId)

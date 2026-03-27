@@ -1,8 +1,9 @@
 /**
  * Pre-Context Middleware — Lightweight injector for pre-fetched context.
  *
- * When `prefetchContext()` has already run guardrail, credit, memory, and
- * RAG fetches, this middleware simply injects the cached results into the
+ * When PrepareChatUseCase has already run preflight checks, memory fetch,
+ * and gateway orchestration (including conditional RAG), this middleware
+ * simply injects the cached results into the
  * prompt — replacing the full guardrail → credit → memory → RAG chain.
  *
  * Cache-aware: when Google cachedContent is active, context is injected as
@@ -95,6 +96,18 @@ export function preContextMiddleware(
         );
       }
       if (opts.preContext.ragContext) parts.push(opts.preContext.ragContext);
+
+      if (opts.preContext.ragMeta.used && !opts.preContext.ragContext) {
+        parts.push(
+          `<rag_status>Retrieval context is currently limited (${opts.preContext.ragMeta.timedOut ? "timeout" : "no-matches"}). Ask focused follow-up questions before making definitive claims.</rag_status>`,
+        );
+      }
+
+      if (opts.preContext.ragMeta.partialFailure) {
+        parts.push(
+          "<rag_status>Some retrieval sources were unavailable for this turn. Use conservative language and request missing details when needed.</rag_status>",
+        );
+      }
 
       if (parts.length === 0) {
         console.log(`[${opts.agentId}] preContext: no context to inject`);

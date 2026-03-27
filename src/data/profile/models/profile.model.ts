@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
-import { USER_KINDS, type UserKind } from "@/lib/auth/jwt";
+import { coerceUserKind, USER_KINDS, type UserKind } from "@/lib/auth/jwt";
 
 export interface ProfileDocument {
   userId: string;
@@ -15,6 +15,8 @@ export interface ProfileDocument {
   city?: string;
   country?: string;
   dateOfBirth?: string; // ISO-8601 date string (YYYY-MM-DD)
+  /** Flag indicating whether the user has completed the onboarding tour */
+  onboardingTourCompleted?: boolean;
   updatedAt: Timestamp;
 }
 
@@ -31,6 +33,8 @@ export interface ProfileDto {
   country?: string;
   city?: string;
   gender?: string;
+  /** Flag indicating whether the user has completed the onboarding tour */
+  onboardingTourCompleted?: boolean;
   updatedAt: string; // ISO-8601
 }
 
@@ -39,8 +43,7 @@ export interface ProfileDto {
 export function toProfileDto(base: ProfileDocument): ProfileDto {
   // Back-compat: documents may carry the legacy kind:"patient" value written
   // during a brief migration window — normalise to the canonical "user".
-  const rawKind = base.kind as string;
-  const kind: UserKind = rawKind === "doctor" ? "doctor" : "user";
+  const kind = coerceUserKind(base.kind);
 
   return {
     userId: base.userId,
@@ -53,6 +56,7 @@ export function toProfileDto(base: ProfileDocument): ProfileDto {
     country: base.country,
     dateOfBirth: base.dateOfBirth,
     gender: base.gender,
+    onboardingTourCompleted: base.onboardingTourCompleted,
     updatedAt: base.updatedAt.toDate().toISOString(),
   };
 }
@@ -73,6 +77,7 @@ export const UpsertProfileSchema = z.object({
   country: z.string().optional(),
   /** ISO-8601 date string (YYYY-MM-DD) */
   dateOfBirth: z.string().optional(),
+  onboardingTourCompleted: z.boolean().optional(),
 });
 
 export type UpsertProfileInput = z.infer<typeof UpsertProfileSchema>;

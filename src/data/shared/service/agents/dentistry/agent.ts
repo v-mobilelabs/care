@@ -10,6 +10,9 @@ export const dentistryAgent = createAgent({
   buildSystemPrompt: () => buildDentistryPrompt(),
   buildDynamicContext: (options) =>
     buildAttachmentContext(options.hasAttachment ?? false),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

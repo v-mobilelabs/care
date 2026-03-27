@@ -16,14 +16,21 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
   const cursor = url.searchParams.get("cursor") ?? undefined;
   const limitParam = url.searchParams.get("limit");
   const limit = limitParam ? Number(limitParam) : undefined;
+  const agent = url.searchParams.get("agent") ?? undefined;
+  const q = url.searchParams.get("q") ?? undefined;
+  const sortDir =
+    (url.searchParams.get("sortDir") as "asc" | "desc" | null) ?? undefined;
 
   // If pagination params are present, use paginated endpoint
-  if (cursor || limit) {
+  if (cursor || limit || agent || q || sortDir) {
     const result = await new ListSessionsPaginatedUseCase().execute({
       userId: user.uid,
       profileId,
       ...(cursor && { cursor }),
       ...(limit && { limit }),
+      ...(agent && { agent }),
+      ...(q && { q }),
+      ...(sortDir && { sortDir }),
     });
     return NextResponse.json(result);
   }

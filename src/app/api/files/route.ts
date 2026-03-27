@@ -1,5 +1,4 @@
-import { after } from "next/server";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
@@ -78,6 +77,8 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
       : undefined;
   const mimeType = url.searchParams.get("mimeType") ?? undefined;
   const q = url.searchParams.get("q") ?? undefined;
+  const sortDir =
+    (url.searchParams.get("sortDir") as "asc" | "desc" | null) ?? undefined;
 
   const result = await new ListAllFilesUseCase().execute({
     userId: user.uid,
@@ -87,6 +88,7 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
     ...(label && { label }),
     ...(mimeType && { mimeType }),
     ...(q && { q }),
+    ...(sortDir && { sortDir }),
   });
   return NextResponse.json(result);
 });

@@ -1,21 +1,25 @@
 "use client";
 import {
+    Box,
     Button,
-    Divider,
+    Chip,
     Group,
     Modal,
-    NumberInput,
+    Radio,
     Select,
+    Slider,
     Stack,
+    Stepper,
     Text,
     TextInput,
     Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconActivity, IconUser } from "@tabler/icons-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { colors, spacing } from "@/ui/tokens";
+import { COUNTRIES, FOOD_PREFERENCE_SUGGESTIONS } from "@/ui/ai/profile/shared";
 import {
     useUpdateIdentityMutation,
     useUpsertPatientMutation,
@@ -27,9 +31,9 @@ import {
 
 interface OnboardingModalProps {
     readonly opened: boolean;
-    /** Whether base identity fields are complete (name, phone, gender, country) */
+    /** Whether base identity fields are complete (name, phone, gender, country, DOB) */
     readonly profileComplete: boolean;
-    /** Whether patient health fields are complete (DOB, sex, height, weight, activityLevel).
+    /** Whether patient health fields are complete (height, weight, activityLevel).
      *  Pass true for doctors — they skip the health layer. */
     readonly patientProfileComplete: boolean;
     readonly currentProfile?: ProfileRecord;
@@ -41,26 +45,21 @@ interface FormValues {
     // Layer 1 — identity
     name: string;
     phone: string;
+    location: string;
+    dateOfBirth: string;
     gender: string;
     country: string;
     // Layer 2 — health
-    dateOfBirth: string;
-    sex: string;
     height: string;
     weight: string;
     activityLevel: string;
+    foodPreferences: string[];
 }
 
 const GENDER_OPTIONS = [
     { value: "Male", label: "Male" },
     { value: "Female", label: "Female" },
     { value: "Other", label: "Other" },
-    { value: "Prefer not to say", label: "Prefer not to say" },
-];
-
-const SEX_OPTIONS = [
-    { value: "male", label: "Male" },
-    { value: "female", label: "Female" },
 ];
 
 const ACTIVITY_OPTIONS = [
@@ -71,8 +70,21 @@ const ACTIVITY_OPTIONS = [
     { value: "very_active", label: "Very Active — hard exercise daily" },
 ];
 
+const HEIGHT_MARKS = [
+    { value: 120, label: "120" },
+    { value: 160, label: "160" },
+    { value: 200, label: "200" },
+];
+
+const WEIGHT_MARKS = [
+    { value: 30, label: "30" },
+    { value: 70, label: "70" },
+    { value: 120, label: "120" },
+];
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line max-lines-per-function
 export function OnboardingModal({
     opened,
     profileComplete,
@@ -82,20 +94,187 @@ export function OnboardingModal({
     onComplete,
 }: OnboardingModalProps) {
     const [loading, setLoading] = useState(false);
+    const [dismissed, setDismissed] = useState(false);
+    const [activeStep, setActiveStep] = useState(0);
     const updateIdentity = useUpdateIdentityMutation();
     const upsertPatient = useUpsertPatientMutation();
 
+    const needsIdentity = !profileComplete;
+    const needsHealth = !patientProfileComplete;
+
+    const visibleStepKeys = [
+        ...(needsIdentity ? ["identity"] : []),
+        ...(needsHealth ? ["health"] : []),
+    ] as const;
+
+    function getCurrentStepKey(stepIndex: number): "identity" | "health" {
+        const key = visibleStepKeys[stepIndex];
+        return key === "health" ? "health" : "identity";
+    }
+
+    function isLastStep(stepIndex: number): boolean {
+        return stepIndex >= visibleStepKeys.length - 1;
+    }
+
+    function getForwardButtonLabel(stepIndex: number): string {
+        const key = getCurrentStepKey(stepIndex);
+        if (key === "identity" && !isLastStep(stepIndex)) {
+            return "Next: Health";
+        }
+
+        return "Save & Continue";
+    }
+
+    function getBackButtonLabel(stepIndex: number): string {
+        const key = getCurrentStepKey(stepIndex);
+        if (key === "health") {
+            return "Back: Identity";
+        }
+
+        return "Back";
+    }
+
+    function isPositiveNumber(value: string): boolean {
+        if (value.trim() === "") {
+            return false;
+        }
+
+        return Number(value) > 0;
+    }
+
+    function isIdentityStepValid(values: FormValues): boolean {
+        return (
+            values.name.trim() !== "" &&
+            values.phone.trim() !== "" &&
+            values.location.trim() !== "" &&
+            values.dateOfBirth.trim() !== "" &&
+            values.gender !== "" &&
+            values.country.trim() !== ""
+        );
+    }
+
+    function isHealthStepValid(values: FormValues): boolean {
+        return (
+            isPositiveNumber(values.height) &&
+            isPositiveNumber(values.weight) &&
+            values.activityLevel !== ""
+        );
+    }
+
+    function canProceedFromCurrentStep(values: FormValues): boolean {
+        const key = getCurrentStepKey(activeStep);
+        if (key === "identity") {
+            return isIdentityStepValid(values);
+        }
+
+        return isHealthStepValid(values);
+    }
+
+    function validateStepFields(stepIndex: number): boolean {
+        const key = getCurrentStepKey(stepIndex);
+        if (key === "identity") {
+            form.validateField("name");
+            form.validateField("phone");
+            form.validateField("location");
+            form.validateField("dateOfBirth");
+            form.validateField("gender");
+            form.validateField("country");
+
+            return isIdentityStepValid(form.values);
+        }
+
+        if (key === "health") {
+            form.validateField("height");
+            form.validateField("weight");
+            form.validateField("activityLevel");
+
+            return isHealthStepValid(form.values);
+        }
+
+        return true;
+    }
+
+    async function saveIdentityStep(values: FormValues): Promise<void> {
+        await updateIdentity.mutateAsync({
+            name: values.name.trim(),
+            phone: values.phone.trim(),
+            gender: values.gender,
+            city: values.location.trim(),
+            country: values.country.trim(),
+            dateOfBirth: values.dateOfBirth.trim(),
+        });
+    }
+
+    async function saveHealthStep(values: FormValues): Promise<void> {
+        await upsertPatient.mutateAsync({
+            height: Number(values.height),
+            weight: Number(values.weight),
+            activityLevel: values.activityLevel as PatientRecord["activityLevel"],
+            foodPreferences:
+                values.foodPreferences.length > 0
+                    ? values.foodPreferences
+                    : undefined,
+        });
+    }
+
+    async function saveStepBeforeNext(stepIndex: number, values: FormValues): Promise<void> {
+        const key = getCurrentStepKey(stepIndex);
+        if (key === "identity") {
+            await saveIdentityStep(values);
+            return;
+        }
+
+        if (key === "health") {
+            await saveHealthStep(values);
+        }
+    }
+
+    async function goToNextStep(): Promise<void> {
+        const isValid = validateStepFields(activeStep);
+        if (!isValid) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await saveStepBeforeNext(activeStep, form.values);
+            setActiveStep((current) => Math.min(current + 1, visibleStepKeys.length - 1));
+        } catch {
+            // mutations already show notifications on error
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function goToPreviousStep(): void {
+        setActiveStep((current) => Math.max(current - 1, 0));
+    }
+
+    useEffect(() => {
+        if (!opened) {
+            setDismissed(false);
+            return;
+        }
+
+        setActiveStep(0);
+    }, [opened, needsHealth, needsIdentity]);
+
     const form = useForm<FormValues>({
+        validateInputOnChange: true,
         initialValues: {
             name: currentProfile?.name ?? "",
             phone: currentProfile?.phone ?? "",
-            gender: currentProfile?.gender ?? "",
+            location: currentProfile?.city ?? "",
+            dateOfBirth: currentProfile?.dateOfBirth ?? "",
+            gender:
+                currentProfile?.gender === "Prefer not to say"
+                    ? ""
+                    : (currentProfile?.gender ?? ""),
             country: currentProfile?.country ?? "",
-            dateOfBirth: currentPatient?.dateOfBirth ?? "",
-            sex: currentPatient?.sex ?? "",
-            height: currentPatient?.height ? String(currentPatient.height) : "",
-            weight: currentPatient?.weight ? String(currentPatient.weight) : "",
+            height: currentPatient?.height ? String(currentPatient.height) : "170",
+            weight: currentPatient?.weight ? String(currentPatient.weight) : "70",
             activityLevel: currentPatient?.activityLevel ?? "",
+            foodPreferences: currentPatient?.foodPreferences ?? [],
         },
         validate: {
             name: (v) =>
@@ -103,16 +282,18 @@ export function OnboardingModal({
             phone: (v) =>
                 !profileComplete && !v.trim() ? "Phone number is required" : null,
             gender: (v) =>
-                !profileComplete && !v ? "Please select your gender" : null,
+                                !profileComplete && !v
+                                        ? "Please select your gender"
+                                        : v === "Prefer not to say"
+                                            ? "Please select a valid gender"
+                                            : null,
             country: (v) =>
                 !profileComplete && !v.trim() ? "Country is required" : null,
+            location: (v) =>
+                !profileComplete && !v.trim() ? "Location is required" : null,
             dateOfBirth: (v) =>
-                !patientProfileComplete && !v.trim()
+                !profileComplete && !v.trim()
                     ? "Date of birth is required"
-                    : null,
-            sex: (v) =>
-                !patientProfileComplete && !v
-                    ? "Please select your biological sex"
                     : null,
             height: (v) => {
                 if (patientProfileComplete) return null;
@@ -139,29 +320,15 @@ export function OnboardingModal({
             const tasks: Promise<unknown>[] = [];
 
             if (!profileComplete) {
-                tasks.push(
-                    updateIdentity.mutateAsync({
-                        name: values.name.trim(),
-                        phone: values.phone.trim(),
-                        gender: values.gender,
-                        country: values.country.trim(),
-                    }),
-                );
+                tasks.push(saveIdentityStep(values));
             }
 
             if (!patientProfileComplete) {
-                tasks.push(
-                    upsertPatient.mutateAsync({
-                        dateOfBirth: values.dateOfBirth.trim(),
-                        sex: values.sex as "male" | "female",
-                        height: Number(values.height),
-                        weight: Number(values.weight),
-                        activityLevel: values.activityLevel as PatientRecord["activityLevel"],
-                    }),
-                );
+                tasks.push(saveHealthStep(values));
             }
 
             await Promise.all(tasks);
+            setDismissed(true);
             onComplete();
         } catch {
             // mutations already show notifications on error
@@ -170,15 +337,10 @@ export function OnboardingModal({
         }
     }
 
-    const needsIdentity = !profileComplete;
-    const needsHealth = !patientProfileComplete;
-
     return (
         <Modal
-            opened={opened}
-            onClose={() => {
-                /* intentionally non-closeable */
-            }}
+            opened={opened && !dismissed}
+            onClose={() => setDismissed(true)}
             withCloseButton={false}
             closeOnClickOutside={false}
             closeOnEscape={false}
@@ -191,102 +353,261 @@ export function OnboardingModal({
                     <Text size="sm" c="dimmed">
                         Just a few quick details to personalise your care.
                     </Text>
+                    <Text size="xs" fw={600} c="dimmed">
+                        Step {activeStep + 1} of {visibleStepKeys.length}
+                    </Text>
                 </Stack>
             }
         >
             <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap={spacing.md}>
-                    {needsIdentity && (
-                        <Stack gap={spacing.sm}>
-                            <Group gap={6}>
-                                <IconUser size={15} color={colors.brand} />
-                                <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                                    Your Identity
-                                </Text>
-                            </Group>
+                    <Box style={{ overflowX: "auto" }}>
+                        <Stepper
+                            active={activeStep}
+                            allowNextStepsSelect={false}
+                            size="sm"
+                            styles={{
+                                steps: { flexWrap: "nowrap" },
+                                step: { whiteSpace: "nowrap" },
+                                stepLabel: { whiteSpace: "nowrap" },
+                                stepDescription: { whiteSpace: "nowrap" },
+                            }}
+                        >
+                        {needsIdentity && (
+                            <Stepper.Step
+                                icon={<IconUser size={14} />}
+                                label="Your Identity"
+                                description="Basic profile"
+                            >
+                            <Stack gap={spacing.sm} mt={spacing.sm}>
+                                <Group gap={6}>
+                                    <IconUser size={15} color={colors.brand} />
+                                    <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                                        Your Identity
+                                    </Text>
+                                </Group>
 
-                            <TextInput
-                                label="Full name"
-                                placeholder="Jane Smith"
-                                {...form.getInputProps("name")}
-                            />
-                            <TextInput
-                                label="Phone number"
-                                placeholder="+1 555 000 0000"
-                                {...form.getInputProps("phone")}
-                            />
-                            <Select
-                                label="Gender"
-                                placeholder="Select gender"
-                                data={GENDER_OPTIONS}
-                                {...form.getInputProps("gender")}
-                            />
-                            <TextInput
-                                label="Country"
-                                placeholder="United States"
-                                {...form.getInputProps("country")}
-                            />
-                        </Stack>
-                    )}
-
-                    {needsIdentity && needsHealth && <Divider />}
-
-                    {needsHealth && (
-                        <Stack gap={spacing.sm}>
-                            <Group gap={6}>
-                                <IconActivity size={15} color={colors.success} />
-                                <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                                    Health Profile
-                                </Text>
-                            </Group>
-
-                            <TextInput
-                                label="Date of birth"
-                                placeholder="DD/MM/YYYY"
-                                {...form.getInputProps("dateOfBirth")}
-                            />
-                            <Select
-                                label="Biological sex"
-                                placeholder="Select sex"
-                                data={SEX_OPTIONS}
-                                {...form.getInputProps("sex")}
-                            />
-                            <Group grow>
-                                <NumberInput
-                                    label="Height (cm)"
-                                    placeholder="170"
-                                    min={50}
-                                    max={300}
-                                    value={form.values.height === "" ? "" : Number(form.values.height)}
-                                    onChange={(v) =>
-                                        form.setFieldValue("height", v === "" ? "" : String(v))
+                                {(() => {
+                                    if (needsIdentity) {
+                                        return (
+                                            <>
+                                                <TextInput
+                                                    size="sm"
+                                                    label="Full name"
+                                                    placeholder="Jane Smith"
+                                                    {...form.getInputProps("name")}
+                                                />
+                                                <TextInput
+                                                    size="sm"
+                                                    label="Phone number"
+                                                    placeholder="+1 555 000 0000"
+                                                    {...form.getInputProps("phone")}
+                                                />
+                                                <Radio.Group
+                                                    label="Gender"
+                                                    {...form.getInputProps("gender")}
+                                                >
+                                                    <Group mt={6}>
+                                                        {GENDER_OPTIONS.map((option) => (
+                                                            <Radio
+                                                                key={option.value}
+                                                                size="sm"
+                                                                value={option.value}
+                                                                label={option.label}
+                                                            />
+                                                        ))}
+                                                    </Group>
+                                                </Radio.Group>
+                                                <TextInput
+                                                    size="sm"
+                                                    label="Location"
+                                                    placeholder="Chennai"
+                                                    {...form.getInputProps("location")}
+                                                />
+                                                <TextInput
+                                                    size="sm"
+                                                    label="Date of birth"
+                                                    placeholder="DD/MM/YYYY"
+                                                    {...form.getInputProps("dateOfBirth")}
+                                                />
+                                                <Select
+                                                    size="sm"
+                                                    label="Country"
+                                                    placeholder="Select country"
+                                                    searchable
+                                                    data={COUNTRIES}
+                                                    {...form.getInputProps("country")}
+                                                />
+                                            </>
+                                        );
                                     }
-                                    error={form.errors.height}
-                                />
-                                <NumberInput
-                                    label="Weight (kg)"
-                                    placeholder="70"
-                                    min={10}
-                                    max={500}
-                                    value={form.values.weight === "" ? "" : Number(form.values.weight)}
-                                    onChange={(v) =>
-                                        form.setFieldValue("weight", v === "" ? "" : String(v))
-                                    }
-                                    error={form.errors.weight}
-                                />
-                            </Group>
-                            <Select
-                                label="Activity level"
-                                placeholder="How active are you?"
-                                data={ACTIVITY_OPTIONS}
-                                {...form.getInputProps("activityLevel")}
-                            />
-                        </Stack>
-                    )}
 
-                    <Button type="submit" loading={loading} fullWidth mt={spacing.xs}>
-                        Continue to Chat
-                    </Button>
+                                    return (
+                                        <Text size="sm" c="dimmed">
+                                            Identity details are already complete.
+                                        </Text>
+                                    );
+                                })()}
+                            </Stack>
+                            </Stepper.Step>
+                        )}
+
+                        {needsHealth && (
+                            <Stepper.Step
+                                icon={<IconActivity size={14} />}
+                                label="Health"
+                                description="Vitals, activity, food"
+                            >
+                            <Stack gap="md" mt={spacing.sm}>
+                                <Group gap={6}>
+                                    <IconActivity size={15} color={colors.success} />
+                                    <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                                        Health Profile
+                                    </Text>
+                                </Group>
+
+                                {(() => {
+                                    if (needsHealth) {
+                                        return (
+                                            <>
+                                                <Group grow align="flex-start" gap="md">
+                                                    <Stack gap="xs">
+                                                        <Text size="sm" fw={500}>
+                                                            Height (cm)
+                                                        </Text>
+                                                        <Slider
+                                                            size="sm"
+                                                            min={120}
+                                                            max={220}
+                                                            step={1}
+                                                            marks={HEIGHT_MARKS}
+                                                            value={form.values.height === "" ? 170 : Number(form.values.height)}
+                                                            onChange={(v) => form.setFieldValue("height", String(v))}
+                                                            label={(value) => `${value} cm`}
+                                                        />
+                                                        {form.errors.height && (
+                                                            <Text size="xs" c="danger">
+                                                                {form.errors.height}
+                                                            </Text>
+                                                        )}
+                                                    </Stack>
+                                                    <Stack gap="xs">
+                                                        <Text size="sm" fw={500}>
+                                                            Weight (kg)
+                                                        </Text>
+                                                        <Slider
+                                                            size="sm"
+                                                            min={30}
+                                                            max={200}
+                                                            step={1}
+                                                            marks={WEIGHT_MARKS}
+                                                            value={form.values.weight === "" ? 70 : Number(form.values.weight)}
+                                                            onChange={(v) => form.setFieldValue("weight", String(v))}
+                                                            label={(value) => `${value} kg`}
+                                                        />
+                                                        {form.errors.weight && (
+                                                            <Text size="xs" c="danger">
+                                                                {form.errors.weight}
+                                                            </Text>
+                                                        )}
+                                                    </Stack>
+                                                </Group>
+                                                <Stack gap="xs" mt="md">
+                                                    <Text size="sm" fw={500}>
+                                                        Activity level
+                                                    </Text>
+                                                    <Chip.Group
+                                                        multiple={false}
+                                                        value={form.values.activityLevel}
+                                                        onChange={(value) =>
+                                                            form.setFieldValue("activityLevel", String(value ?? ""))
+                                                        }
+                                                    >
+                                                        <Group gap="xs">
+                                                            {ACTIVITY_OPTIONS.map((option) => (
+                                                                <Chip key={option.value} value={option.value} size="sm">
+                                                                    {option.label.split(" — ")[0]}
+                                                                </Chip>
+                                                            ))}
+                                                        </Group>
+                                                    </Chip.Group>
+                                                    {form.errors.activityLevel && (
+                                                        <Text size="xs" c="danger">
+                                                            {form.errors.activityLevel}
+                                                        </Text>
+                                                    )}
+                                                </Stack>
+                                                <Stack gap="xs" mt="xs">
+                                                    <Text size="sm" fw={500}>
+                                                        Food preferences
+                                                    </Text>
+                                                    <Chip.Group
+                                                        multiple
+                                                        value={form.values.foodPreferences}
+                                                        onChange={(value) =>
+                                                            form.setFieldValue("foodPreferences", value)
+                                                        }
+                                                    >
+                                                        <Group gap="xs">
+                                                            {FOOD_PREFERENCE_SUGGESTIONS.map((option) => (
+                                                                <Chip key={option} value={option} size="sm">
+                                                                    {option}
+                                                                </Chip>
+                                                            ))}
+                                                        </Group>
+                                                    </Chip.Group>
+                                                </Stack>
+                                                <Text size="xs" c="dimmed" mt="xs">
+                                                    Height, weight, and activity are used to personalise nutrition and care suggestions.
+                                                </Text>
+                                            </>
+                                        );
+                                    }
+
+                                    return (
+                                        <Text size="sm" c="dimmed">
+                                            Health profile details are already complete.
+                                        </Text>
+                                    );
+                                })()}
+                            </Stack>
+                            </Stepper.Step>
+                        )}
+
+                        </Stepper>
+                    </Box>
+
+                    <Group grow>
+                        <Button
+                            variant="default"
+                            onClick={() => setDismissed(true)}
+                            disabled={loading}
+                        >
+                            Skip for now
+                        </Button>
+
+                        {activeStep > 0 && (
+                            <Button variant="default" onClick={goToPreviousStep} disabled={loading}>
+                                {getBackButtonLabel(activeStep)}
+                            </Button>
+                        )}
+
+                        {!isLastStep(activeStep) && (
+                            <Button
+                                type="button"
+                                onClick={goToNextStep}
+                                disabled={loading || !canProceedFromCurrentStep(form.values)}
+                            >
+                                {getForwardButtonLabel(activeStep)}
+                            </Button>
+                        )}
+
+                        {isLastStep(activeStep) && (
+                            <Button type="submit" loading={loading}>
+                                Continue to Chat
+                            </Button>
+                        )}
+                    </Group>
                 </Stack>
             </form>
         </Modal>

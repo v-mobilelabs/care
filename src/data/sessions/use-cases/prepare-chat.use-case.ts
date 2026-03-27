@@ -1,3 +1,6 @@
+import type { FileLabel } from "@/data/files";
+import { labReportRepository } from "@/data/lab-reports";
+import { getCachedProfile } from "@/data/cached";
 import { safeValidateUIMessages } from "ai";
 import type { UIMessage, Agent, ToolSet } from "ai";
 import { z } from "zod";
@@ -28,16 +31,22 @@ import {
   entAgent,
   ophthalmologyAgent,
   nephrologyAgent,
-  gatewayAgent,
   triageNurseAgent,
 } from "@/data/shared/service/agents";
 import type { AgentCallOptions } from "@/data/shared/service/agents/base/agent";
 import type { AgentType } from "@/data/shared/service/agents";
-import { prefetchContext } from "@/data/shared/service/middleware/pre-run";
+import {
+  runPreflightChecks,
+  fetchMemory,
+} from "@/data/shared/service/middleware/pre-run";
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
+import { runGatewayOrchestrator } from "@/data/shared/service/agents/gateway/langgraph-gateway-orchestrator.service";
+import { classifyKnownProfileIntent } from "@/data/shared/service/agents/gateway/known-profile-intent";
 import { messageRepository } from "../repositories/message.repository";
 import { sessionRepository } from "../repositories/session.repository";
 import { toUIMessage } from "../models/message.model";
+import type { SessionGroundingCacheDocument } from "../models/session.model";
+import type { ProfileDto } from "@/data/profile";
 
 // ── Input schema ──────────────────────────────────────────────────────────────
 
@@ -51,9 +60,18 @@ const PrepareChatSchema = z.object({
     .object({
       message: z.record(z.string(), z.unknown()),
       sessionId: z.string().optional(),
+      chatMode: z.enum(["quick", "full"]).optional(),
       agentOverride: z.string().optional(),
       attachmentUrls: z
-        .array(z.object({ url: z.string(), mediaType: z.string() }))
+        .array(
+          z.object({
+            fileId: z.string().optional(),
+            url: z.string(),
+            mediaType: z.string(),
+            fileName: z.string().optional(),
+            label: z.custom<FileLabel>().optional(),
+          }),
+        )
         .optional(),
     })
     .strict(),
@@ -76,10 +94,6 @@ type ToolPartLike = {
   output?: unknown;
 };
 
-type ToolOutputPart = UIMessage["parts"][number] & {
-  state: "output-available";
-};
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null;
   return value as Record<string, unknown>;
@@ -97,16 +111,48 @@ function getToolPartName(part: unknown): string | null {
 
 function collectOutputAvailableToolParts(
   parts: UIMessage["parts"],
-): ToolOutputPart[] {
+): UIMessage["parts"][number][] {
   return parts.filter(
-    (p): p is ToolOutputPart =>
-      isToolPartLike(p) && p.state === "output-available",
+    (p) => isToolPartLike(p) && p.state === "output-available",
   );
+}
+
+function normalizeQuestionAnswerValue(answer: unknown): string | null {
+  if (answer === null || answer === undefined) return null;
+
+  if (typeof answer === "string") {
+    return answer.trim().length > 0 ? answer : null;
+  }
+
+  if (typeof answer === "number" || typeof answer === "boolean") {
+    return String(answer);
+  }
+
+  if (Array.isArray(answer)) {
+    const values = answer
+      .map((v) => {
+        if (typeof v === "string") return v.trim();
+        if (v === null || v === undefined) return "";
+        return String(v);
+      })
+      .filter((v) => v.length > 0);
+    return values.length > 0 ? values.join(", ") : null;
+  }
+
+  try {
+    const serialized = JSON.stringify(answer);
+    if (!serialized || serialized === "{}" || serialized === "[]") {
+      return null;
+    }
+    return serialized;
+  } catch {
+    return null;
+  }
 }
 
 function mergeToolOutputsIntoAssistantParts(
   targetParts: UIMessage["parts"],
-  incomingToolOutputs: ToolOutputPart[],
+  incomingToolOutputs: UIMessage["parts"][number][],
 ): {
   mergedParts: UIMessage["parts"];
   mergedById: number;
@@ -269,7 +315,7 @@ function findLatestReportHandoff(
         `[findLatestReportHandoff] Checking part ${j}: type=${(part as { type?: string }).type}`,
       );
       const handoff = readReportHandoffFromPart(part);
-      if (handoff && handoff.autoRoute) {
+      if (handoff?.autoRoute) {
         console.log(
           `[PrepareChatUseCase] Found report handoff: nextSpecialist=${handoff.nextSpecialist}, reason=${handoff.reason}, label=${handoff.reportLabel}`,
         );
@@ -292,8 +338,470 @@ export interface PrepareChatResult {
   loadingHints: string[];
   sessionId: string;
   ctx: MessageContext;
+  gatewayReasoning: string;
+  directResponse?: {
+    text: string;
+    source: "known-profile-context";
+    reason: string;
+  };
   /** When tool outputs are merged into an existing DB assistant message. */
   toolOutputMerge?: { messageId: string; content: string };
+}
+
+type PreparedConversation = {
+  incomingMessage: UIMessage;
+  messages: UIMessage[];
+  toolOutputMerge?: { messageId: string; content: string };
+};
+
+type SessionRoutingState = {
+  lastAgentType?: string;
+  groundingCache: SessionGroundingCacheDocument[];
+};
+
+type GatewayMetadata = {
+  recentMessages: string[];
+  attachmentMetadata: Array<{
+    fileId?: string;
+    url: string;
+    mediaType: string;
+    fileName?: string;
+    label?: FileLabel;
+    extractedSummary?: {
+      testName?: string;
+      labName?: string;
+      notes?: string;
+      biomarkerNames: string[];
+    };
+  }>;
+  reportHandoff?: ReportHandoffSignal;
+};
+
+type GatewayResolution = {
+  agentType: AgentType;
+  needsRag: boolean;
+  thinkingLevel: AgentCallOptions["thinkingLevel"];
+  gatewayReasoning: string;
+  loadingHints: string[];
+  directResponse?: {
+    text: string;
+    source: "known-profile-context";
+    reason: string;
+  };
+  preContext: PreRunContext;
+};
+
+async function validateIncomingMessage(
+  message: Record<string, unknown>,
+): Promise<UIMessage> {
+  const validationResult = safeValidateUIMessages({ messages: [message] });
+  const result = await Promise.resolve(validationResult);
+  if (!result.success || !result.data.length) {
+    throw ApiError.badRequest("message is required.");
+  }
+
+  return {
+    ...result.data[0],
+    parts: result.data[0].parts.filter((p) => p.type !== "step-start"),
+  };
+}
+
+function mergeIncomingMessageIntoHistory(args: {
+  history: UIMessage[];
+  incomingMessage: UIMessage;
+}): {
+  messages: UIMessage[];
+  toolOutputMerge?: { messageId: string; content: string };
+} {
+  const { history, incomingMessage } = args;
+  const existingIdx = history.findIndex((m) => m.id === incomingMessage.id);
+  if (existingIdx >= 0) {
+    const incomingToolOutputs = collectOutputAvailableToolParts(
+      incomingMessage.parts,
+    );
+    if (incomingToolOutputs.length === 0) {
+      return { messages: history };
+    }
+
+    const mergeResult = mergeToolOutputsIntoAssistantParts(
+      history[existingIdx].parts,
+      incomingToolOutputs,
+    );
+    console.log(
+      `[PrepareChatUseCase] Merge(existing assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
+    );
+
+    history[existingIdx] = incomingMessage;
+    return {
+      messages: history,
+      toolOutputMerge: {
+        messageId: history[existingIdx].id,
+        content: JSON.stringify(mergeResult.mergedParts),
+      },
+    };
+  }
+
+  if (incomingMessage.role !== "assistant") {
+    return { messages: [...history, incomingMessage] };
+  }
+
+  const lastAssistantIdx = history.findLastIndex((m) => m.role === "assistant");
+  if (lastAssistantIdx < 0) {
+    return { messages: [...history, incomingMessage] };
+  }
+
+  const incomingToolOutputs = collectOutputAvailableToolParts(
+    incomingMessage.parts,
+  );
+  if (incomingToolOutputs.length === 0) {
+    return { messages: history };
+  }
+
+  const mergeResult = mergeToolOutputsIntoAssistantParts(
+    history[lastAssistantIdx].parts,
+    incomingToolOutputs,
+  );
+  console.log(
+    `[PrepareChatUseCase] Merge(last assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
+  );
+
+  history[lastAssistantIdx] = incomingMessage;
+  return {
+    messages: history,
+    toolOutputMerge: {
+      messageId: history[lastAssistantIdx].id,
+      content: JSON.stringify(mergeResult.mergedParts),
+    },
+  };
+}
+
+async function prepareConversation(args: {
+  userId: string;
+  profileId: string;
+  body: PrepareChatInput["body"];
+}): Promise<PreparedConversation> {
+  const incomingMessage = await validateIncomingMessage(args.body.message);
+
+  if (!args.body.sessionId) {
+    return { incomingMessage, messages: [incomingMessage] };
+  }
+
+  const historyDtos = await messageRepository.listAllForSession(
+    args.userId,
+    args.profileId,
+    args.body.sessionId,
+  );
+  const history = historyDtos.length > 0 ? historyDtos.map(toUIMessage) : [];
+
+  const merged = mergeIncomingMessageIntoHistory({
+    history,
+    incomingMessage,
+  });
+
+  return {
+    incomingMessage,
+    messages: merged.messages,
+    toolOutputMerge: merged.toolOutputMerge,
+  };
+}
+
+function buildContinuationUserQuery(parts: UIMessage["parts"]): string | null {
+  const qaPairs = collectOutputAvailableToolParts(parts)
+    .map((part) => {
+      const toolName = getToolPartName(part);
+      if (toolName !== "askQuestion") return null;
+
+      const toolPart = part as ToolPartLike;
+      const input = asObject(toolPart.input);
+      const output = asObject(toolPart.output);
+      const question =
+        typeof input?.question === "string" ? input.question : "";
+      const answer = normalizeQuestionAnswerValue(output?.answer);
+      return question && answer
+        ? `Question: ${question}\nAnswer: ${answer}`
+        : null;
+    })
+    .filter((pair): pair is string => Boolean(pair));
+
+  return qaPairs.length > 0 ? qaPairs.join("\n\n") : null;
+}
+
+function applyContinuationContextOverride(args: {
+  incomingMessage: UIMessage;
+  ctx: MessageContext;
+}): void {
+  if (args.incomingMessage.role !== "assistant") return;
+
+  const continuationQuery = buildContinuationUserQuery(
+    args.incomingMessage.parts,
+  );
+  if (continuationQuery) {
+    args.ctx.userQuery = continuationQuery;
+  }
+}
+
+async function loadSessionRoutingState(args: {
+  userId: string;
+  profileId: string;
+  sessionId?: string;
+}): Promise<SessionRoutingState> {
+  if (!args.sessionId) {
+    return { groundingCache: [] };
+  }
+
+  const session = await sessionRepository.findById(
+    args.userId,
+    args.profileId,
+    args.sessionId,
+  );
+  const groundingCache = await sessionRepository.getGroundingCache(
+    args.userId,
+    args.profileId,
+    args.sessionId,
+  );
+
+  return {
+    lastAgentType: session?.lastAgentType,
+    groundingCache,
+  };
+}
+
+function collectRecentUserMessages(messages: UIMessage[]): string[] {
+  return messages
+    .filter((m) => m.role === "user")
+    .slice(-4)
+    .map((m) => m.parts.find((p) => p.type === "text"))
+    .filter((p): p is { type: "text"; text: string } => p?.type === "text")
+    .map((p) => p.text);
+}
+
+function collectAttachmentMetadata(
+  ctx: MessageContext,
+): GatewayMetadata["attachmentMetadata"] {
+  return ctx.storableParts
+    .filter(
+      (p) => (p.type as string) === "file" || (p.type as string) === "image",
+    )
+    .map((p) => ({
+      fileId: (p.fileId as string | undefined) ?? undefined,
+      url: (p.url as string) ?? "",
+      mediaType: (p.mediaType as string) ?? "application/octet-stream",
+      fileName: (p.fileName as string | undefined) ?? undefined,
+      label: (p.label as FileLabel | undefined) ?? undefined,
+    }));
+}
+
+async function enrichAttachmentMetadata(args: {
+  userId: string;
+  attachmentMetadata: GatewayMetadata["attachmentMetadata"];
+}): Promise<GatewayMetadata["attachmentMetadata"]> {
+  return Promise.all(
+    args.attachmentMetadata.map(async (attachment) => {
+      if (!attachment.fileId) {
+        return attachment;
+      }
+
+      const labReport = await labReportRepository
+        .findByFileId(args.userId, attachment.fileId)
+        .catch(() => null);
+      if (!labReport) {
+        return attachment;
+      }
+
+      const biomarkerNames = labReport.biomarkers
+        .map((biomarker) => biomarker.name.trim())
+        .filter((name) => name.length > 0)
+        .slice(0, 12);
+
+      return {
+        ...attachment,
+        extractedSummary: {
+          testName: labReport.testName,
+          labName: labReport.labName,
+          notes: labReport.notes,
+          biomarkerNames,
+        },
+      };
+    }),
+  );
+}
+
+async function buildGatewayMetadata(
+  userId: string,
+  messages: UIMessage[],
+  ctx: MessageContext,
+): Promise<GatewayMetadata> {
+  const attachmentMetadata = await enrichAttachmentMetadata({
+    userId,
+    attachmentMetadata: collectAttachmentMetadata(ctx),
+  });
+
+  return {
+    recentMessages: collectRecentUserMessages(messages),
+    attachmentMetadata,
+    reportHandoff: findLatestReportHandoff(messages),
+  };
+}
+
+function sanitizeMessagesForAgent(
+  messages: UIMessage[],
+  agent: Agent<AgentCallOptions, ToolSet>,
+): UIMessage[] {
+  const supportedToolNames = new Set(Object.keys(agent.tools ?? {}));
+
+  return messages.map((message) => {
+    if (message.role !== "assistant") return message;
+
+    const sanitizedParts = message.parts.filter((part) => {
+      if (!isToolPartLike(part)) return true;
+
+      const toolName = getToolPartName(part);
+      if (!toolName || !supportedToolNames.has(toolName)) {
+        return false;
+      }
+
+      return (
+        part.state !== "input-available" && part.state !== "approval-requested"
+      );
+    });
+
+    if (sanitizedParts.length === message.parts.length) return message;
+
+    return {
+      ...message,
+      parts: sanitizedParts,
+    };
+  });
+}
+
+function buildGatewayResolution(args: {
+  memory: string | null;
+  orchestratorResult: Awaited<ReturnType<typeof runGatewayOrchestrator>>;
+}): GatewayResolution {
+  return {
+    agentType: args.orchestratorResult.agentType,
+    needsRag: args.orchestratorResult.needsRag,
+    thinkingLevel: args.orchestratorResult.thinkingLevel,
+    gatewayReasoning: args.orchestratorResult.reasoning,
+    loadingHints: args.orchestratorResult.loadingHints,
+    directResponse: args.orchestratorResult.directResponse,
+    preContext: {
+      memory: args.memory,
+      ragContext: args.orchestratorResult.ragContext,
+      queryEmbedding: args.orchestratorResult.queryEmbedding,
+      ragMeta: args.orchestratorResult.ragMeta,
+    },
+  };
+}
+
+function buildAgentOptions(args: {
+  userId: string;
+  profileId: string;
+  userQuery: string;
+  sessionId: string;
+  hasAttachment: boolean;
+  profile: ProfileDto | null;
+  thinkingLevel: AgentCallOptions["thinkingLevel"];
+  needsRag: boolean;
+  preContext: PreRunContext;
+  responseMode: "quick" | "full";
+}): AgentCallOptions {
+  return {
+    userId: args.userId,
+    profileId: args.profileId,
+    userQuery: args.userQuery,
+    sessionId: args.sessionId,
+    hasAttachment: args.hasAttachment,
+    queryEmbedding: args.preContext.queryEmbedding,
+    profile: args.profile,
+    thinkingLevel: args.thinkingLevel,
+    needsRag: args.needsRag,
+    preContext: args.preContext,
+    responseMode: args.responseMode,
+  };
+}
+
+async function fetchPreparedProfile(
+  profileId: string,
+): Promise<ProfileDto | null> {
+  const profile = await getCachedProfile(profileId).catch(() => null);
+  return profile && "kind" in profile ? profile : null;
+}
+
+async function resolveGatewayState(args: {
+  userId: string;
+  profileId: string;
+  profile: ProfileDto | null;
+  originalUserQuery: string;
+  userQuery: string;
+  hasAttachment: boolean;
+  isContinuationTurn: boolean;
+  lastAgentType?: string;
+  groundingCache?: SessionGroundingCacheDocument[];
+  gatewayMetadata: GatewayMetadata;
+  sessionId: string;
+  responseMode: "quick" | "full";
+}): Promise<GatewayResolution> {
+  await runPreflightChecks({
+    userId: args.userId,
+    userQuery: args.originalUserQuery.trim(),
+    skipGuardrail: args.isContinuationTurn,
+  });
+
+  const knownProfileIntentHint = args.hasAttachment
+    ? null
+    : await classifyKnownProfileIntent(args.userQuery);
+
+  const orchestratorArgs = {
+    userId: args.userId,
+    profileId: args.profileId,
+    userQuery: args.userQuery,
+    profile: args.profile,
+    hasAttachment: args.hasAttachment,
+    isContinuationTurn: args.isContinuationTurn,
+    lastAgentType: args.lastAgentType,
+    recentMessages:
+      args.gatewayMetadata.recentMessages.length > 1
+        ? args.gatewayMetadata.recentMessages
+        : undefined,
+    attachmentMetadata:
+      args.gatewayMetadata.attachmentMetadata.length > 0
+        ? args.gatewayMetadata.attachmentMetadata
+        : undefined,
+    reportHandoff: args.gatewayMetadata.reportHandoff,
+    groundingCache: args.groundingCache ?? undefined,
+    sessionId: args.sessionId,
+    knownProfileIntentHint,
+    responseMode: args.responseMode,
+    evaluatorModel:
+      (process.env.AI_RAG_EVALUATOR_MODEL as "lite" | "fast" | "pro") ?? "fast",
+    repairModel:
+      (process.env.AI_RAG_REPAIR_MODEL as "lite" | "fast" | "pro") ?? "fast",
+    webFallbackTimeoutMs: Number.parseInt(
+      process.env.AI_WEB_FALLBACK_TIMEOUT_MS ?? "5000",
+      10,
+    ),
+  } as const;
+
+  const prefersDirectProfileFastPath =
+    !args.hasAttachment && knownProfileIntentHint !== null;
+
+  if (prefersDirectProfileFastPath) {
+    const orchestratorResult = await runGatewayOrchestrator(orchestratorArgs);
+    if (orchestratorResult.directResponse) {
+      return buildGatewayResolution({ memory: null, orchestratorResult });
+    }
+
+    const memory = await fetchMemory(args.profileId);
+    return buildGatewayResolution({ memory, orchestratorResult });
+  }
+
+  const [memory, orchestratorResult] = await Promise.all([
+    fetchMemory(args.profileId),
+    runGatewayOrchestrator(orchestratorArgs),
+  ]);
+
+  return buildGatewayResolution({ memory, orchestratorResult });
 }
 
 // ── Use case ──────────────────────────────────────────────────────────────────
@@ -332,136 +840,16 @@ export class PrepareChatUseCase extends UseCase<
     return PrepareChatSchema.parse(input);
   }
 
-  // eslint-disable-next-line max-lines-per-function
   protected async run(input: PrepareChatInput): Promise<PrepareChatResult> {
     const { userId, profileId, body } = input;
-
-    // ── 1. Validate the single incoming message ────────────────────────────
-    // The client sends only the latest message (server-managed persistence).
-    // We load the full conversation history from Firestore and prepend it.
-    const validationResult = await safeValidateUIMessages({
-      messages: [body.message],
-    });
-    if (!validationResult.success || !validationResult.data.length) {
-      throw ApiError.badRequest("message is required.");
-    }
-    const incomingMessage: UIMessage = {
-      ...validationResult.data[0],
-      // Strip step-start boundaries before model processing. These are
-      // structural UI markers for multi-step rendering, not semantic content.
-      parts: validationResult.data[0].parts.filter(
-        (p) => p.type !== "step-start",
-      ),
-    };
-
-    // ── 2. Load history from Firestore and append incoming message ────────────
-    let toolOutputMerge: { messageId: string; content: string } | undefined;
-    let messages: UIMessage[];
-    if (body.sessionId) {
-      const historyDtos = await messageRepository.listAllForSession(
-        userId,
-        profileId,
-        body.sessionId,
-      );
-      const history =
-        historyDtos.length > 0 ? historyDtos.map(toUIMessage) : [];
-
-      // Deduplicate: if the incoming message ID exists in history
-      // (e.g. assistant message with tool outputs from auto-send), merge
-      // tool output parts into the history version.
-      const existingIdx = history.findIndex((m) => m.id === incomingMessage.id);
-      if (existingIdx >= 0) {
-        const incomingToolOutputs = collectOutputAvailableToolParts(
-          incomingMessage.parts,
-        );
-        if (incomingToolOutputs.length > 0) {
-          const mergeResult = mergeToolOutputsIntoAssistantParts(
-            history[existingIdx].parts,
-            incomingToolOutputs,
-          );
-          console.log(
-            `[PrepareChatUseCase] Merge(existing assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
-          );
-          // Capture the merged content for Firestore persistence, then replace
-          // the history slot with the live SDK-structured incomingMessage so the
-          // model sees a fresh "tool output just arrived" signal (not a plain-JSON
-          // DB reconstruction which loses SDK runtime metadata).
-          toolOutputMerge = {
-            messageId: history[existingIdx].id,
-            content: JSON.stringify(mergeResult.mergedParts),
-          };
-          history[existingIdx] = incomingMessage;
-        }
-        messages = history;
-      } else if (incomingMessage.role === "assistant") {
-        // Tool-output auto-send: the SDK-generated message ID won't match
-        // any Firestore doc ID. Find the last assistant in history instead.
-        const lastAsstIdx = history.findLastIndex(
-          (m) => m.role === "assistant",
-        );
-        if (lastAsstIdx >= 0) {
-          const incomingToolOutputs = collectOutputAvailableToolParts(
-            incomingMessage.parts,
-          );
-          if (incomingToolOutputs.length > 0) {
-            const mergeResult = mergeToolOutputsIntoAssistantParts(
-              history[lastAsstIdx].parts,
-              incomingToolOutputs,
-            );
-            console.log(
-              `[PrepareChatUseCase] Merge(last assistant): incoming=${incomingToolOutputs.length}, byId=${mergeResult.mergedById}, fallback=${mergeResult.mergedByFallback}, unresolved=${mergeResult.unresolved}`,
-            );
-            // Capture merged content for persistence; replace slot with the live
-            // SDK-structured incomingMessage for correct model continuation.
-            toolOutputMerge = {
-              messageId: history[lastAsstIdx].id,
-              content: JSON.stringify(mergeResult.mergedParts),
-            };
-            history[lastAsstIdx] = incomingMessage;
-          }
-          messages = history;
-        } else {
-          messages = [...history, incomingMessage];
-        }
-      } else {
-        messages = [...history, incomingMessage];
-      }
-    } else {
-      messages = [incomingMessage];
-    }
+    const { incomingMessage, messages, toolOutputMerge } =
+      await prepareConversation({ userId, profileId, body });
 
     // ── 3. Extract message context ────────────────────────────────────────
     const ctxStart = performance.now();
     const ctx = extractMessageContext(messages, body.attachmentUrls);
-
-    // On continuation turns (tool-output auto-send), the last "user" message
-    // is a stale query from the original turn. Override userQuery with the
-    // actual content that was just answered so gateway routing + RAG are
-    // semantically current.
-    if (incomingMessage.role === "assistant") {
-      const answeredParts = collectOutputAvailableToolParts(
-        incomingMessage.parts,
-      );
-      if (answeredParts.length > 0) {
-        const qaPairs = answeredParts
-          .map((p) => {
-            const tPart = p as ToolPartLike;
-            const input = asObject(tPart.input);
-            const output = asObject(tPart.output);
-            const toolName = getToolPartName(p);
-            if (toolName === "askQuestion") {
-              const q = typeof input?.question === "string" ? input.question : "";
-              const a = typeof output?.answer === "string" ? output.answer : JSON.stringify(output);
-              return q ? `Question: ${q}\nAnswer: ${a}` : null;
-            }
-            return null;
-          })
-          .filter(Boolean);
-        if (qaPairs.length > 0) {
-          ctx.userQuery = qaPairs.join("\n\n");
-        }
-      }
-    }
+    const originalUserQuery = ctx.userQuery;
+    applyContinuationContextOverride({ incomingMessage, ctx });
 
     console.log(
       `[PrepareChatUseCase] Context extraction: ${(performance.now() - ctxStart).toFixed(0)}ms`,
@@ -469,143 +857,71 @@ export class PrepareChatUseCase extends UseCase<
 
     // ── 4. Resolve sessionId ─────────────────────────────────────────────────
     const sessionId = body.sessionId || crypto.randomUUID();
+    const responseMode = body.chatMode ?? "quick";
 
     // ── 5. Gateway routing ────────────────────────────────────────────────
     const gatewayStart = performance.now();
     const isContinuationTurn = incomingMessage.role === "assistant";
-
-    // Load persisted agent type for cross-worker session affinity
-    let lastAgentType: string | undefined;
-    if (body.sessionId) {
-      const session = await sessionRepository.findById(
-        userId,
-        profileId,
-        body.sessionId,
-      );
-      lastAgentType = session?.lastAgentType;
-    }
-
-    // Fast-path: continuation turns (askQuestion answers) stay with the same
-    // specialist. Skip gateway LLM routing, skip RAG (answer context is
-    // already in the conversation), use low thinking (acknowledge + next Q).
-    let agentType: AgentType;
-    let needsRag: boolean;
-    let thinkingLevel: "low" | "medium" | "high";
-    let gatewayReasoning: string;
-    let loadingHints: string[];
-
-    if (isContinuationTurn && lastAgentType) {
-      agentType = lastAgentType as AgentType;
-      needsRag = false;
-      thinkingLevel = "low";
-      gatewayReasoning = "continuation-fast-path";
-      loadingHints = ["Continuing assessment..."];
-      console.log(
-        `[PrepareChatUseCase] Continuation fast-path → ${agentType} (skip gateway + RAG)`,
-      );
-    } else {
-      const recentMessages = messages
-        .filter((m) => m.role === "user")
-        .slice(-4)
-        .map((m) => m.parts.find((p) => p.type === "text"))
-        .filter((p): p is { type: "text"; text: string } => p?.type === "text")
-        .map((p) => p.text);
-
-      const attachmentMetadata = ctx.storableParts
-        .filter(
-          (p) =>
-            (p.type as string) === "file" || (p.type as string) === "image",
-        )
-        .map((p) => ({
-          url: (p.url as string) ?? "",
-          mediaType: (p.mediaType as string) ?? "application/octet-stream",
-          fileName: (p.fileName as string | undefined) ?? undefined,
-        }));
-
-      const reportHandoff = findLatestReportHandoff(messages);
-
-      const gatewayDecision = await gatewayAgent.decide({
-        userQuery: ctx.userQuery,
-        hasAttachment: ctx.hasAttachment,
-        attachmentMetadata:
-          attachmentMetadata.length > 0 ? attachmentMetadata : undefined,
-        reportHandoff,
-        recentMessages: recentMessages.length > 1 ? recentMessages : undefined,
-        userId,
-        sessionId,
-        lastAgentType,
-      });
-
-      agentType = gatewayDecision.agent;
-      needsRag = gatewayDecision.needsRag;
-      thinkingLevel = gatewayDecision.thinkingLevel;
-      gatewayReasoning = gatewayDecision.reasoning;
-      loadingHints = gatewayDecision.loadingHints;
-    }
-
-    // ── 6. Prefetch context (guardrail + credit + memory + RAG) ───────────
-    // Runs all expensive operations once before the agent streams.
-    // Throws GuardrailError or CreditsExhaustedError (handled by WithContext).
-    const preContext: PreRunContext = await prefetchContext({
+    const { lastAgentType, groundingCache } = await loadSessionRoutingState({
       userId,
       profileId,
-      userQuery: ctx.userQuery,
+      sessionId: body.sessionId,
+    });
+    const [gatewayMetadata, profile] = await Promise.all([
+      buildGatewayMetadata(userId, messages, ctx),
+      fetchPreparedProfile(profileId),
+    ]);
+
+    const {
+      agentType,
       needsRag,
+      thinkingLevel,
+      gatewayReasoning,
+      loadingHints,
+      directResponse,
+      preContext,
+    } = await resolveGatewayState({
+      userId,
+      profileId,
+      profile,
+      originalUserQuery,
+      userQuery: ctx.userQuery,
       hasAttachment: ctx.hasAttachment,
+      isContinuationTurn,
+      lastAgentType,
+      groundingCache,
+      gatewayMetadata,
+      sessionId,
+      responseMode,
     });
 
     console.log(
-      `[PrepareChatUseCase] Gateway + prefetch: ${agentType} (thinking: ${thinkingLevel}, rag: ${needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
+      `[PrepareChatUseCase] Gateway + prefetch: ${agentType} (mode: ${responseMode}, thinking: ${thinkingLevel}, rag: ${needsRag}, ${(performance.now() - gatewayStart).toFixed(0)}ms)`,
     );
-    console.log(
-      `[PrepareChatUseCase] Gateway reasoning: ${gatewayReasoning}`,
-    );
+    console.log(`[PrepareChatUseCase] Gateway reasoning: ${gatewayReasoning}`);
 
-    // ── 7. Resolve agent (needed before sanitization to know valid tools) ─
+    // ── 8. Resolve agent (needed before sanitization to know valid tools) ─
     const agent = AGENTS[agentType] ?? triageNurseAgent;
 
-    // ── 8. Sanitize messages ──────────────────────────────────────────────
-    // Strip open/incomplete tool calls (input-available, approval-requested).
-    // output-available parts are kept unconditionally — they are completed
-    // historical context the model must see to continue correctly.
-    const sanitizedMessages: UIMessage[] = messages.map((m) => {
-      if (m.role !== "assistant") return m;
-      // Only strip "open" tool call states (input-available, approval-requested).
-      // output-available parts represent completed historical tool results and
-      // must be preserved regardless of which agent is now handling the session —
-      // stripping them would remove the tool answer context the model needs to
-      // continue (e.g. referral confirmed → dentistry continuation).
-      const needsFilter = m.parts.some(
-        (p) =>
-          isToolPartLike(p) &&
-          (p.state === "input-available" || p.state === "approval-requested"),
-      );
-      if (!needsFilter) return m;
-      return {
-        ...m,
-        parts: m.parts.filter(
-          (p) =>
-            !isToolPartLike(p) ||
-            (p.state !== "input-available" && p.state !== "approval-requested"),
-        ),
-      };
-    });
+    // ── 9. Sanitize messages ──────────────────────────────────────────────
+    const sanitizedMessages = sanitizeMessagesForAgent(messages, agent);
     console.log(
       `[PrepareChatUseCase] Routing to ${agentType.toUpperCase()} agent`,
     );
 
-    // ── 9. Build options ──────────────────────────────────────────────────
-    const options: AgentCallOptions = {
+    // ── 10. Build options ─────────────────────────────────────────────────
+    const options = buildAgentOptions({
       userId,
       profileId,
       userQuery: ctx.userQuery,
       sessionId,
       hasAttachment: ctx.hasAttachment,
-      queryEmbedding: preContext.queryEmbedding,
+      profile,
       thinkingLevel,
       needsRag,
       preContext,
-    };
+      responseMode,
+    });
 
     return {
       agent,
@@ -616,6 +932,8 @@ export class PrepareChatUseCase extends UseCase<
       loadingHints,
       sessionId,
       ctx,
+      gatewayReasoning,
+      directResponse,
       toolOutputMerge,
     };
   }

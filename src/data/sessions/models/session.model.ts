@@ -1,6 +1,30 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
 
+export interface SessionGroundingEvaluation {
+  stage: "initial" | "internal-repair" | "web-fallback" | "failed";
+  reason: string;
+  scores: {
+    relevance: number;
+    grounding: number;
+    coverage: number;
+    freshness: number;
+    sourceTrust: number;
+  };
+}
+
+export interface SessionGroundingCacheDocument {
+  agentType: string;
+  query: string;
+  normalizedQuery: string;
+  queryEmbedding?: number[];
+  context: string;
+  responseMode: "quick" | "full";
+  hasAttachment?: boolean;
+  evaluation?: SessionGroundingEvaluation;
+  updatedAt: Timestamp;
+}
+
 // ── Firestore document shape ──────────────────────────────────────────────────
 
 export interface SessionDocument {
@@ -8,15 +32,21 @@ export interface SessionDocument {
   /** Stored for reference; the authoritative scoping is the path: profiles/{profileId}/sessions */
   profileId: string;
   title: string;
+  /** Optional normalized title for future search/index migration. */
+  titleLower?: string;
   messageCount: number;
   /** The last agent type that handled this session (persisted for cross-worker routing). */
   lastAgentType?: string;
+  /** Denormalized one-line preview from the latest message in this session. */
+  lastMessagePreview?: string;
   /** Accumulated token usage across all assistant messages in this session. */
   totalUsage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
+  /** Latest strong grounding context available for reuse in this session. */
+  groundingCache?: SessionGroundingCacheDocument[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -30,6 +60,8 @@ export interface SessionDto {
   title: string;
   messageCount: number;
   lastAgentType?: string;
+  /** Denormalized one-line preview from the latest message in this session. */
+  lastMessagePreview?: string;
   /** Accumulated token usage across all assistant messages in this session. */
   totalUsage?: {
     promptTokens: number;
@@ -47,7 +79,7 @@ export const CreateSessionSchema = z.object({
   /** Firestore path segment: profiles/{profileId}/sessions */
   profileId: z.string().min(1, { message: "profileId is required" }),
   /** Optional explicit Firestore document ID (client-generated UUID). */
-  id: z.string().uuid({ message: "id must be a valid UUID" }).optional(),
+  id: z.uuid({ message: "id must be a valid UUID" }).optional(),
   title: z
     .string()
     .min(1, { message: "title must not be empty" })
@@ -97,6 +129,9 @@ export const ListSessionsPaginatedSchema = z.object({
   profileId: z.string().min(1, { message: "profileId is required" }),
   limit: z.number().int().min(1).max(100).optional().default(20),
   cursor: z.string().optional(),
+  agent: z.string().optional(),
+  q: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional().default("desc"),
 });
 
 export type ListSessionsPaginatedInput = z.infer<
@@ -121,6 +156,9 @@ export function toSessionDto(id: string, doc: SessionDocument): SessionDto {
     title: doc.title,
     messageCount: doc.messageCount,
     ...(doc.lastAgentType && { lastAgentType: doc.lastAgentType }),
+    ...(doc.lastMessagePreview && {
+      lastMessagePreview: doc.lastMessagePreview,
+    }),
     ...(doc.totalUsage && { totalUsage: doc.totalUsage }),
     createdAt: doc.createdAt.toDate().toISOString(),
     updatedAt: doc.updatedAt.toDate().toISOString(),

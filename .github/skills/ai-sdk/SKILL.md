@@ -9,12 +9,14 @@ description: "**AI SDK SKILL** — Vercel AI SDK v6 best practices, agent archit
 
 1. **Streaming over generating** — always prefer `streamText` / `ToolLoopAgent.stream()` for interactive chat. Reserve `generateText` for batch/background tasks.
 2. **`createAgent()` factory** — every specialist agent is built via the functional `createAgent(config)` factory in `src/data/shared/service/agents/base/agent.ts`. Never instantiate `ToolLoopAgent` directly from API routes.
-3. **Middleware composition** — credit gating, RAG, memory, and cache are all middleware. Add new cross-cutting concerns as middleware, not inline logic.
+3. **LangGraph owns orchestration** — route selection, RAG gating, grounding reuse, and agentic RAG execution belong in LangGraph orchestration services, not inline API-route branching.
 4. **Tools are per-request** — `buildTools(options)` creates fresh tool closures bound to `userId`, `profileId`, `sessionId`. Never share tool state across requests.
 5. **Always consume the stream** — `streamText` uses backpressure; unconsumed streams hang. Always `return result.toUIMessageStreamResponse()`.
 6. **Schema `.describe()`** — add `.describe("...")` to every Zod schema property in tool inputs and structured outputs. This dramatically improves model accuracy.
 7. **`after()` for persistence** — never `await` Firestore writes in the streaming response path. Use Next.js `after()` for background persistence.
 8. **UseCase is the entry point** — API routes call use cases, which call agent `stream()`. Never call agents directly from route handlers.
+9. **Preflight before orchestration** — guardrail and credit checks run before LangGraph orchestration and before any expensive RAG work starts.
+10. **PreContext injection over repeated fetches** — agents should consume precomputed `preContext` assembled in `PrepareChatUseCase`; avoid re-running routing or retrieval logic inside the agent loop.
 
 ---
 
@@ -23,21 +25,29 @@ description: "**AI SDK SKILL** — Vercel AI SDK v6 best practices, agent archit
 ```
 Client (useChat) → POST /api/chat
   ↓
-PrepareChatUseCase (validate, gateway routing)
+PrepareChatUseCase
+  ├─ validate incoming UIMessage
+  ├─ load Firestore history
+  ├─ runPreflightChecks()       // guardrail + credit
+  └─ Promise.all([
+       fetchMemory(),
+       runGatewayOrchestrator()  // LangGraph routing + RAG gating + grounding reuse
+     ])
   ↓
-Gateway Agent (keyword → cache → default → LLM routing)
+Gateway LangGraph
+  route_query → gate_rag → resolve_grounding → run_rag? → generate_loading_hints → finalize
   ↓ selects
-Specialist Agent (clinical | dietPlanner | prescription | labReport | patient)
+Specialist Agent (generalMedicine | cardiology | mentalHealth | ...)
   ↓ agent.stream()
-createAgent().stream() → builds middleware → ToolLoopAgent
+createAgent().stream() → LangGraph agent runtime prep → middleware-wrapped ToolLoopAgent
   ↓
-Middleware Chain: guardrail → credit → memory → RAG → cachedContent → toolInputExamples
+Middleware Chain: preContext → cachedContent → toolInputExamples (+ devtools in dev)
   ↓
-ToolLoopAgent (multi-step tool loop with smoothStream)
+ToolLoopAgent (multi-step tool loop with smoothStream + reasoning)
   ↓
-createUIMessageStream (data-progress + agent stream merge) → client
+createUIMessageStream (progress + reasoning + merged agent stream) → client
   ↓ after()
-Background: persist messages + extract memories + bust cache tags
+Background: persist messages + assessments + evidence + grounding + memories + cache invalidation
 ```
 
 ---
@@ -47,20 +57,25 @@ Background: persist messages + extract memories + bust cache tags
 | File                                                   | Purpose                                                             |
 | ------------------------------------------------------ | ------------------------------------------------------------------- |
 | `src/data/shared/service/agents/base/agent.ts`         | `createAgent()` factory — builds agents with middleware chain       |
-| `src/data/shared/service/agents/gateway/agent.ts`      | Gateway routing — 4-tier decision (keyword → cache → default → LLM) |
+| `src/data/shared/service/agents/base/langgraph-agent-execution.service.ts` | LangGraph runtime for per-agent setup (prompt/tools/context) |
+| `src/data/shared/service/agents/gateway/langgraph-gateway-orchestrator.service.ts` | LangGraph gateway orchestration for routing, RAG gating, grounding reuse |
+| `src/data/shared/service/agents/gateway/grounding-layer.service.ts` | Session grounding normalization, persistence gating, semantic reuse |
+| `src/data/shared/service/agents/gateway/agent.ts`      | Gateway routing heuristics + keyword rules used by orchestrator |
 | `src/data/shared/service/agents/clinical/agent.ts`     | Clinical reasoning agent                                            |
 | `src/data/shared/service/agents/diet-planner/agent.ts` | 7-day meal plan agent                                               |
 | `src/data/shared/service/agents/prescription/agent.ts` | Prescription writing agent                                          |
 | `src/data/shared/service/agents/lab-report/agent.ts`   | Lab report analysis agent                                           |
 | `src/data/shared/service/agents/patient/agent.ts`      | Patient profile/medication retrieval                                |
-| `src/data/shared/service/middleware/`                  | All middleware: guardrail, credit, RAG, memory, cached-content      |
+| `src/data/shared/service/middleware/pre-run.ts`        | Preflight checks + memory fetch before orchestration                |
+| `src/data/shared/service/middleware/pre-context.middleware.ts` | Inject precomputed memory/RAG state into the model prompt |
+| `src/data/shared/service/middleware/`                  | Remaining middleware utilities (cached-content, etc.)               |
 | `src/data/shared/service/ai.service.ts`                | AI service — model access, extractObject, extractChoice             |
 | `src/data/shared/service/context-cache.service.ts`     | Google Gemini context caching                                       |
 | `src/app/api/chat/route.ts`                            | Chat API route — streaming response + background persistence        |
 | `src/ui/ai/hooks/use-messages.ts`                      | Client message state, DB hydration, optimistic sync, pagination     |
 | `src/ui/ai/messages/messages.tsx`                      | Chat thread renderer                                                |
 | `src/ui/ai/tools/tool-part-renderer.tsx`               | Tool UI dispatcher (questions, approvals, results)                  |
-| `src/data/sessions/use-cases/prepare-chat.use-case.ts` | PrepareChatUseCase — validate, route, sanitize, build options       |
+| `src/data/sessions/use-cases/prepare-chat.use-case.ts` | PrepareChatUseCase — validate, preflight, orchestrate, sanitize, build options |
 | `docs/vercel-ai-sdk.md`                                | Full AI SDK v6 reference documentation                              |
 
 ### Ecosystem Libraries
@@ -280,15 +295,12 @@ const myMiddleware: LanguageModelMiddleware = {
 
 | Middleware                       | File                                      | Purpose                                                                  |
 | -------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------ |
-| `guardrailMiddleware`            | `middleware/guardrail.middleware.ts`      | Block harmful / injected / off-topic input (keyword + LLM, no credit)    |
-| `creditMiddleware`               | `middleware/credit.middleware.ts`         | Consume 1 credit per LLM call; throw `CreditsExhaustedError` if depleted |
-| `memoryMiddleware`               | `middleware/memory.middleware.ts`         | Inject cross-session patient memories into prompt                        |
-| `ragMiddleware`                  | `middleware/rag.middleware.ts`            | Fetch medical records (KNN + reranking) + clinical guidelines            |
+| `preContextMiddleware`           | `middleware/pre-context.middleware.ts`    | Inject precomputed memory/RAG context assembled before streaming         |
 | `cachedContentMiddleware`        | `middleware/cached-content.middleware.ts` | Strip system/tools when Google cache is active                           |
 | `addToolInputExamplesMiddleware` | AI SDK built-in                           | Inject tool input examples into descriptions                             |
 | `devToolsMiddleware`             | `@ai-sdk/devtools` (dev only)             | AI SDK DevTools integration — only included in development               |
 
-**Order matters**: guardrail runs first so blocked messages never consume a credit. Credit runs before RAG so depleted users never trigger expensive vector search.
+**Important**: guardrail, credit, memory fetch, routing, and RAG gating now happen before streaming in `PrepareChatUseCase` + LangGraph orchestration. The runtime middleware chain should stay lean.
 
 ### Composing Middleware
 
@@ -730,6 +742,8 @@ message.parts.map((part) => {
 
 ## 8. Gateway Routing
 
+> Current best practice: the exported gateway agent is a routing primitive, but the production request path should go through `runGatewayOrchestrator()` so routing, grounding reuse, and agentic RAG decisions stay in one LangGraph state machine.
+
 ### 4-Tier Decision Strategy
 
 ```
@@ -764,6 +778,106 @@ function inferNeedsRag(query: string, hasAttachment?: boolean): boolean {
 ```
 
 **RECORD_HINTS** — keyword list that triggers RAG for short queries. When adding new patient data types, add corresponding patterns here or RAG won't fire.
+
+## 8.1 LangGraph Gateway Best Practices
+
+### Use the orchestrator as the single decision hub
+
+The production chat path should use:
+
+- `runPreflightChecks()` before orchestration
+- `fetchMemory()` in parallel with orchestration
+- `runGatewayOrchestrator()` for:
+  - route selection
+  - RAG gating
+  - session grounding reuse
+  - fresh agentic RAG fallback
+  - loading hint generation
+
+Do **not** duplicate these decisions in:
+
+- API routes
+- agent middleware
+- specialist tools
+- client-side code
+
+### Preferred LangGraph node shape
+
+Keep gateway graphs explicit and stable:
+
+1. `route_query`
+2. `gate_rag`
+3. `resolve_grounding`
+4. `run_rag` or `skip_rag`
+5. `generate_loading_hints`
+6. `finalize`
+
+### Grounding reuse rules
+
+Session grounding reuse should be attempted **before** fresh RAG and should only reuse entries that are:
+
+- from the same agent
+- strong enough by evaluation score
+- not expired
+- compatible with the requested response mode
+- not contaminated by attachment-specific context
+
+Prefer exact normalized-query matches first, then semantic reuse using overlap + embeddings.
+
+### Keep LangGraph output narrow
+
+Gateway orchestrators should return only what downstream streaming needs:
+
+- `agentType`
+- `thinkingLevel`
+- `needsRag`
+- `reasoning`
+- `loadingHints`
+- `ragContext`
+- `queryEmbedding`
+- `ragMeta`
+
+## 8.2 AI SDK + LangGraph Integration Pattern
+
+### Recommended split of responsibilities
+
+| Layer | Responsibility |
+| --- | --- |
+| `PrepareChatUseCase` | validate input, load history, run preflight, call LangGraph orchestrator, assemble `preContext` |
+| LangGraph gateway | choose agent, decide whether data is needed, reuse grounding, run agentic RAG if needed |
+| `createAgent().stream()` | build tools, compose model middleware, stream via `ToolLoopAgent` |
+| `preContextMiddleware` | inject the already-computed memory/RAG context |
+| `after()` | persist response-side effects |
+
+### What not to do
+
+Do **not**:
+
+- call RAG middleware and LangGraph RAG for the same request path
+- re-run routing inside specialist agents
+- compute loading hints in both orchestrator and UI
+- let API routes handcraft agent-specific prompt context
+
+### Reasoning support
+
+For AI SDK + Gemini + LangGraph:
+
+- orchestrator decides `thinkingLevel`
+- provider should enable `includeThoughts: true`
+- `createAgentUIStream(..., { sendReasoning: true })` should be used so UI can render reasoning
+- reasoning shown to users should come from model output, not internal framework labels
+
+### Persistence pattern with LangGraph
+
+When a LangGraph orchestration path is used, persist in `after()`:
+
+1. user message (if real user turn)
+2. assistant message
+3. assessments and derived observations
+4. evidence metadata
+5. session grounding cache (if quality threshold is met)
+6. session agent affinity
+7. extracted memories
 
 ### inferThinkingLevel
 
@@ -1549,3 +1663,13 @@ async function myStep() {
 - [ ] Add graceful degradation (timeouts, fallbacks)
 - [ ] Respect `cachedContent` flag if injecting into prompt
 - [ ] Test multi-step tool loops (middleware runs per LLM call, not per request)
+
+## Checklist: Updating LangGraph Flows
+
+- [ ] Keep request orchestration inside LangGraph service files, not route handlers
+- [ ] Reuse shared node helpers instead of adding inline anonymous branching
+- [ ] Return a stable typed output object from the graph
+- [ ] Ensure gateway reasoning and loading hints are user-facing only — never expose framework names
+- [ ] Reuse session grounding before running fresh RAG
+- [ ] Persist only strong grounding snapshots after successful assistant completion
+- [ ] Keep AI SDK streaming path unchanged: orchestrate first, then stream once

@@ -38,6 +38,14 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
     "docx",
 };
 
+const MIME_FILTER_MAP: Record<string, string[]> = {
+  image: ["image/jpeg", "image/png", "image/gif", "image/webp", "image/heic"],
+  pdf: ["application/pdf"],
+  word: [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
+};
+
 function buildStorageObjectName(mimeType: string): string {
   const extension = MIME_EXTENSION_MAP[mimeType] ?? "bin";
   return `${randomUUID()}.${extension}`;
@@ -49,6 +57,30 @@ const gcThumbnailPath = (profileId: string, fileId: string) =>
 
 /** Signed URL expiry — 7 days (GCS maximum for service-account-signed URLs). */
 const SIGNED_URL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+function applyMimeTypeFilter(base: Query, mimeType?: string): Query {
+  if (!mimeType) return base;
+
+  const mimes = MIME_FILTER_MAP[mimeType];
+  if (mimes?.length === 1) {
+    return base.where("mimeType", "==", mimes[0]);
+  }
+  if (mimes && mimes.length > 1) {
+    return base.where("mimeType", "in", mimes);
+  }
+  return base;
+}
+
+function applyListFilters(
+  base: Query,
+  opts: { label?: string; mimeType?: string },
+): Query {
+  let query = base;
+  if (opts.label) {
+    query = query.where("label", "==", opts.label);
+  }
+  return applyMimeTypeFilter(query, opts.mimeType);
+}
 
 // ── Repository ────────────────────────────────────────────────────────────────
 
@@ -209,38 +241,16 @@ export const fileRepository = {
       label?: string;
       mimeType?: string;
       q?: string;
+      sortDir?: "asc" | "desc";
     },
   ): Promise<PaginatedFiles> {
-    let query: Query = filesCol(profileId);
+    let query: Query = applyListFilters(filesCol(profileId), {
+      label: opts.label,
+      mimeType: opts.mimeType,
+    });
 
-    if (opts.label) {
-      query = query.where("label", "==", opts.label);
-    }
-
-    if (opts.mimeType) {
-      // Map short aliases to real MIME prefixes
-      const mimeMap: Record<string, string[]> = {
-        image: [
-          "image/jpeg",
-          "image/png",
-          "image/gif",
-          "image/webp",
-          "image/heic",
-        ],
-        pdf: ["application/pdf"],
-        word: [
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ],
-      };
-      const mimes = mimeMap[opts.mimeType];
-      if (mimes && mimes.length === 1) {
-        query = query.where("mimeType", "==", mimes[0]);
-      } else if (mimes && mimes.length > 1) {
-        query = query.where("mimeType", "in", mimes);
-      }
-    }
-
-    query = query.orderBy("createdAt", "desc");
+    const sortDir = opts.sortDir ?? "desc";
+    query = query.orderBy("createdAt", sortDir);
 
     if (opts.cursor) {
       query = query.startAfter(Timestamp.fromDate(new Date(opts.cursor)));
@@ -266,30 +276,10 @@ export const fileRepository = {
     // Count total matching docs only on the first page (no cursor)
     let totalCount: number | undefined;
     if (!opts.cursor) {
-      const countQuery: Query = filesCol(profileId);
-      // Re-apply same filters (but not orderBy/limit/startAfter)
-      let cq = countQuery;
-      if (opts.label) cq = cq.where("label", "==", opts.label);
-      if (opts.mimeType) {
-        const mimeMap: Record<string, string[]> = {
-          image: [
-            "image/jpeg",
-            "image/png",
-            "image/gif",
-            "image/webp",
-            "image/heic",
-          ],
-          pdf: ["application/pdf"],
-          word: [
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          ],
-        };
-        const mimes = mimeMap[opts.mimeType];
-        if (mimes && mimes.length === 1)
-          cq = cq.where("mimeType", "==", mimes[0]);
-        else if (mimes && mimes.length > 1)
-          cq = cq.where("mimeType", "in", mimes);
-      }
+      const cq = applyListFilters(filesCol(profileId), {
+        label: opts.label,
+        mimeType: opts.mimeType,
+      });
       const countSnap = await cq.count().get();
       totalCount = countSnap.data().count;
     }

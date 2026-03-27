@@ -4,7 +4,7 @@ import { useAuth } from "@/ui/providers/auth-provider";
 import {
     useProfileQuery,
     chatKeys,
-} from "@/app/(portal)/patient/_query";
+} from "@/app/(portal)/user/_query";
 import { useQueryClient } from "@tanstack/react-query";
 import { HeroCard } from "./_sections/hero-card";
 import { PersonalInfoSection } from "./_sections/personal-info";

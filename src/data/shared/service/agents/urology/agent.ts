@@ -7,6 +7,9 @@ import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 export const urologyAgent = createAgent({
   id: "urology",
   buildSystemPrompt: () => buildUrologyPrompt(),
+  assessmentConfig: {
+    adaptiveMode: true,
+  },
   buildTools: () => ({
     startAssessment: startAssessmentTool,
     askQuestion: askQuestionTool,

@@ -71,7 +71,7 @@ export function LandingHeader() {
             size="sm"
             radius="xl"
             component={Link}
-            href="/patient/assistant"
+            href="/user/assistant"
           >
             <StartAssessmentLabel />
           </Button>

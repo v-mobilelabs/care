@@ -64,6 +64,7 @@ export class FileService {
       label: input.label,
       mimeType: input.mimeType,
       q: input.q,
+      sortDir: input.sortDir,
     });
   }
 

@@ -62,15 +62,60 @@ function fnv1aHash(str: string): string {
   return hash.toString(36);
 }
 
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalizeValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, canonicalizeValue(nestedValue)]),
+    );
+  }
+
+  return value;
+}
+
+function buildToolDeclarationsKey(
+  toolDeclarations?: GoogleToolDeclaration[],
+): string {
+  if (!toolDeclarations?.length) return "";
+
+  return JSON.stringify(
+    [...toolDeclarations]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((toolDeclaration) => canonicalizeValue(toolDeclaration)),
+  );
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 const CACHE_TTL_SECONDS = 30 * 60; // 30 minutes
 const CACHE_REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+function hasVertexEnvironment(): boolean {
+  return (
+    !!process.env.GOOGLE_VERTEX_PROJECT ||
+    !!process.env.GOOGLE_VERTEX_LOCATION ||
+    !!process.env.GOOGLE_VERTEX_API_KEY
+  );
+}
+
 export class ContextCacheService {
   /** In-memory cache: agentId → CacheEntry */
   private readonly entries = new Map<string, CacheEntry>();
+
+  /**
+   * Whether explicit AI Studio cachedContents API can be used right now.
+   * When false, callers should skip expensive declaration conversion work.
+   */
+  isExplicitCacheAvailable(): boolean {
+    if (hasVertexEnvironment()) return false;
+    return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+  }
 
   /**
    * Get an existing cached content resource or create a new one.
@@ -86,22 +131,12 @@ export class ContextCacheService {
     // Vertex provider currently does not use the AI Studio cachedContents API.
     // If Vertex env is configured, skip explicit cache creation and rely on
     // provider/native caching behavior.
-    const usingVertex =
-      !!process.env.GOOGLE_VERTEX_PROJECT ||
-      !!process.env.GOOGLE_VERTEX_LOCATION ||
-      !!process.env.GOOGLE_VERTEX_API_KEY;
-    if (usingVertex) return null;
+    if (!this.isExplicitCacheAvailable()) return null;
 
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!apiKey) return null;
 
-    const toolsKey = toolDeclarations?.length
-      ? JSON.stringify(
-          toolDeclarations
-            .map((t) => t.name)
-            .sort((a, b) => a.localeCompare(b)),
-        )
-      : "";
+    const toolsKey = buildToolDeclarationsKey(toolDeclarations);
     const contentHash = fnv1aHash(systemPrompt + modelId + toolsKey);
     const existing = this.entries.get(agentId);
 
@@ -224,6 +259,12 @@ export class ContextCacheService {
   /** Remove a specific agent's cache entry from memory. */
   invalidate(agentId: string): void {
     this.entries.delete(agentId);
+  }
+
+  /** Remove both the standard and fast cache entries for an agent. */
+  invalidateFamily(agentId: string): void {
+    this.invalidate(agentId);
+    this.invalidate(`${agentId}:fast`);
   }
 
   /** Clear all in-memory cache entries. */

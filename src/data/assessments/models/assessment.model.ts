@@ -10,6 +10,15 @@ export interface QaPair {
   answer: string;
 }
 
+// ── Validated question (from AI-generated assessment skeleton) ────────────────
+
+export interface ValidatedQuestion {
+  question: string;
+  type: "text" | "choice" | "scale" | "binary";
+  options?: string[];
+  rationale?: string;
+}
+
 export interface AssessmentActionCard {
   toolCallId?: string;
   title: string;
@@ -37,6 +46,10 @@ export interface AssessmentDocument {
   guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
+  /** Whether this assessment uses adaptive question logic */
+  adaptiveMode?: boolean;
+  /** Pre-generated + validated questions (if adaptiveMode = true) */
+  validatedQuestions?: ValidatedQuestion[];
   status?: AssessmentStatus;
   startedAt?: Timestamp;
   completedAt?: Timestamp;
@@ -62,6 +75,8 @@ export interface AssessmentDto {
   guidelinesFollowed?: string[];
   estimatedQuestions?: number;
   estimatedMinutes?: string;
+  adaptiveMode?: boolean;
+  validatedQuestions?: ValidatedQuestion[];
   status?: AssessmentStatus;
   startedAt?: string;
   completedAt?: string;
@@ -80,6 +95,15 @@ const QaPairSchema = z.object({
   questionType: z.string().min(1),
   options: z.array(z.string()).optional(),
   answer: z.string().min(1),
+});
+
+// ── Validated question schema ─────────────────────────────────────────────────
+
+const ValidatedQuestionSchema = z.object({
+  question: z.string().min(10),
+  type: z.enum(["text", "choice", "scale", "binary"]),
+  options: z.array(z.string()).optional(),
+  rationale: z.string().optional(),
 });
 
 const ActionCardSchema = z.object({
@@ -102,6 +126,8 @@ export const CreateAssessmentSchema = z.object({
   guidelinesFollowed: z.array(z.string().min(1)).optional(),
   estimatedQuestions: z.number().int().min(1).max(30).optional(),
   estimatedMinutes: z.string().optional(),
+  adaptiveMode: z.boolean().optional(),
+  validatedQuestions: z.array(ValidatedQuestionSchema).optional(),
   status: z.enum(["active", "completed", "abandoned"]).optional(),
   startedAt: z.iso.datetime().optional(),
   completedAt: z.iso.datetime().optional(),

@@ -1,11 +1,11 @@
 "use client";
-import { Group, Loader, Paper, Text, ThemeIcon } from "@mantine/core";
+import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconExclamationCircle } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import type { ReactElement } from "react";
 import type { UIMessagePart, UIDataTypes, UITools } from "ai";
-import { isToolPart, getToolPartName, getToolPartState, extractToolInput } from "@/ui/ai/types";
+import { isToolPart, getToolPartName, getToolPartState, extractToolInput, extractToolOutput } from "@/ui/ai/types";
 import type { AskQuestionInput, StartAssessmentInput } from "@/ui/ai/types";
 import { ActionCardCard } from "./action-card";
 import { AssessmentPrefaceCard } from "./assessment-preface-card";
@@ -21,7 +21,10 @@ import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/presc
 import type { SubmitReportInput } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import type { SubmitReferralRequestInput } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
 import { confirmReferral, dismissReferral } from "@/data/referrals/actions";
+import { trackEvent } from "@/lib/analytics";
+import { buildReferralContinuationMessage } from "@/lib/build-referral-continuation-message";
 import { colors } from "@/ui/tokens";
+import Link from "@/ui/link";
 
 
 // ── Friendly tool name mapping ────────────────────────────────────────────────
@@ -122,16 +125,6 @@ async function executeReferralAction<T extends { ok: boolean; error?: string }>(
     }
 }
 
-function buildReferralContinuationMessage(
-    specialist: string,
-    reason?: string,
-    reportLabel?: string,
-): string {
-    const reportPart = reportLabel ? `my ${reportLabel}` : "my recent imaging";
-    const reasonPart = reason ? ` The radiologist noted: ${reason}.` : "";
-    return `I have been referred to you from radiology after reviewing ${reportPart}.${reasonPart} Please begin my ${specialist} consultation.`;
-}
-
 type ReferralConfirmOptions = Readonly<{
     sessionId?: string;
     specialist: string;
@@ -150,6 +143,10 @@ async function handleReferralConfirm(opts: ReferralConfirmOptions): Promise<void
     await executeReferralAction(
         () => confirmReferral(sessionId, specialist, reason ?? "", reportLabel),
         async () => {
+            trackEvent({
+                name: "encounter_escalated",
+                params: { reason: reason ?? undefined, agent_type: specialist, session_id: sessionId },
+            });
             showReferralConfirmedNotification(specialist);
             // Auto-send clinically-rich message so specialist agent starts consultation
             try {
@@ -230,6 +227,81 @@ function renderDisplayOnlyTool(part: UIMessagePart<UIDataTypes, UITools>): React
     return null;
 }
 
+type OutcomeLink = Readonly<{
+    href: string;
+    label: string;
+}>;
+
+function getOutcomeLink(part: UIMessagePart<UIDataTypes, UITools>): OutcomeLink | null {
+    const toolName = getToolPartName(part);
+
+    if (toolName === "submitPrescription") {
+        const output = extractToolOutput<{ prescriptionId?: string }>(part, "submitPrescription");
+        if (output?.prescriptionId) {
+            return {
+                href: `/user/health/prescriptions/${output.prescriptionId}`,
+                label: "Open saved prescription",
+            };
+        }
+
+        return {
+            href: "/user/health/prescriptions",
+            label: "View prescriptions",
+        };
+    }
+
+    if (toolName === "submitReport") {
+        return {
+            href: "/user/health/summary",
+            label: "View summary records",
+        };
+    }
+
+    if (toolName === "startAssessment") {
+        return {
+            href: "/user/health/assessments",
+            label: "Open assessments",
+        };
+    }
+
+    if (toolName === "submitReferralRequest") {
+        return {
+            href: "/user/referrals",
+            label: "Review referrals",
+        };
+    }
+
+    return null;
+}
+
+function withOutcomeLink(
+    part: UIMessagePart<UIDataTypes, UITools>,
+    card: ReactElement | null,
+): ReactElement | null {
+    if (card === null) {
+        return null;
+    }
+
+    const outcomeLink = getOutcomeLink(part);
+    if (outcomeLink === null) {
+        return card;
+    }
+
+    return (
+        <Stack gap="xs">
+            {card}
+            <Paper withBorder radius="md" p="xs">
+                <Group justify="space-between" align="center" wrap="nowrap">
+                    <Text size="xs" c="dimmed">Saved to your records for future follow-up</Text>
+                    <Button component={Link} href={outcomeLink.href} size="xs" variant="light" color="primary">
+                        {outcomeLink.label}
+                    </Button>
+                </Group>
+            </Paper>
+        </Stack>
+    );
+}
+
 type InteractiveToolRenderOptions = Readonly<{
     part: UIMessagePart<UIDataTypes, UITools>;
     state: string | null;
@@ -265,7 +337,7 @@ export function ToolPartRenderer({ part, onAnswer, onApproval, answeredIds, isLo
 
     if (!isToolPart(part)) return null;
 
-    const displayOnlyCard = renderDisplayOnlyTool(part);
+    const displayOnlyCard = withOutcomeLink(part, renderDisplayOnlyTool(part));
     if (displayOnlyCard) return displayOnlyCard;
 
     const referralCard = renderReferralPart(part, sessionId, onSendReferralMessage, referralLoading, setReferralLoading);

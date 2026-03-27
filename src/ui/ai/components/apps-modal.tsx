@@ -156,8 +156,8 @@ const ACCOUNT_APPS: AppDef[] = [
     {
         icon: <IconGauge size={ICON_SIZE} style={{ color: APP_ICON_COLOR }} stroke={1.5} />,
         label: "Usage",
-        href: "/patient/usage",
-        match: (p) => p.startsWith("/patient/usage"),
+        href: "/user/usage",
+        match: (p) => p.startsWith("/user/usage"),
     },
     {
         icon: <IconQuestionMark size={ICON_SIZE} style={{ color: APP_ICON_COLOR }} stroke={1.5} />,

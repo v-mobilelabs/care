@@ -54,6 +54,11 @@ export class SessionService {
       input.profileId,
       input.limit,
       input.cursor,
+      {
+        agent: input.agent,
+        q: input.q,
+        sortDir: input.sortDir,
+      },
     );
   }
 

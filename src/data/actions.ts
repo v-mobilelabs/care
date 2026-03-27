@@ -63,3 +63,8 @@ export async function revalidateReferrals() {
   const uid = await requireUserId();
   updateTag(CacheTags.referrals(uid));
 }
+
+export async function revalidateSymptomObservations() {
+  const uid = await requireUserId();
+  updateTag(CacheTags.symptomObservations(uid));
+}

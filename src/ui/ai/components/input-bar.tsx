@@ -1,8 +1,8 @@
 "use client";
 import {
     ActionIcon,
-    Alert,
     Badge,
+    Button,
     Box,
     Card,
     CloseButton,
@@ -11,13 +11,17 @@ import {
     Indicator,
     Loader,
     Menu,
+    Stack,
     Text,
     Textarea,
     Tooltip,
 } from "@mantine/core";
 import {
-    IconAlertCircle,
+    IconBookmarks,
     IconCamera,
+    IconCheck,
+    IconChevronDown,
+    IconDots,
     IconFile,
     IconFileTypePdf,
     IconFileWord,
@@ -28,7 +32,9 @@ import {
     IconPlayerStopFilled,
     IconPlus,
     IconSend,
+    IconStack2,
 } from "@tabler/icons-react";
+import { useMediaQuery } from "@mantine/hooks";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { motion as motionTokens } from "@/ui/tokens";
@@ -53,7 +59,7 @@ export interface InputBarProps {
     status: string;
     /** Called for normal user messages. New local files + selected existing FileRecords. */
     onSend: (text: string, files?: FileList, existingFiles?: FileRecord[]) => void;
-    /** Remaining daily credits (0 disables sending). Undefined = loading. */
+    /** Remaining monthly credits (0 disables sending). Undefined = loading. */
     creditsRemaining?: number;
     /** Stops the current AI response stream. */
     onStop?: () => void;
@@ -74,9 +80,59 @@ export interface InputBarProps {
     showDisclaimer?: boolean;
     /** Total context tokens used vs max context window — drives the ring indicator. */
     contextUsage?: { inputTokens: number; outputTokens: number; maxTokens: number };
+    /** Assistant response depth preference (quick guidance vs full assessment). */
+    chatMode?: "quick" | "full";
+    /** Called when assistant response depth mode changes. */
+    onChatModeChange?: (mode: "quick" | "full") => void;
+    /** Called when the user clicks the session recap indicator. */
+    onOpenRecap?: () => void;
+    /** Called when the user clicks the continuity assessment indicator. */
+    onOpenContinuity?: () => void;
 }
 
+// ── Mode hint copy ────────────────────────────────────────────────────────────
+
+const MODE_HINTS = {
+    quick: "Quick guidance",
+    full: "Full assessment · ~15–20s",
+} as const;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function collectToolCounts(messages: UIMessage[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const message of messages) {
+        if (message.role !== "assistant") continue;
+        for (const part of message.parts) {
+            const type = (part as { type?: string }).type;
+            if (!type?.startsWith("tool-")) continue;
+            const toolName = type.replace("tool-", "");
+            counts.set(toolName, (counts.get(toolName) ?? 0) + 1);
+        }
+    }
+    return counts;
+}
+
+function calculateRecapFindings(messages: UIMessage[]): number {
+    const toolCounts = collectToolCounts(messages);
+    let count = 0;
+    if ((toolCounts.get("startAssessment") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitReport") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitPrescription") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitReferralRequest") ?? 0) > 0) count++;
+    if ((toolCounts.get("actionCard") ?? 0) > 0) count++;
+    return count;
+}
+
+function calculateContinuitySaved(messages: UIMessage[]): number {
+    const toolCounts = collectToolCounts(messages);
+    let count = 0;
+    if ((toolCounts.get("startAssessment") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitReport") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitPrescription") ?? 0) > 0) count++;
+    if ((toolCounts.get("submitReferralRequest") ?? 0) > 0) count++;
+    return count;
+}
 
 function pillFileIcon(mime: string, size = 16) {
     if (mime === "application/pdf") return <IconFileTypePdf size={size} color="var(--mantine-color-red-6)" style={{ flexShrink: 0 }} />;
@@ -85,8 +141,60 @@ function pillFileIcon(mime: string, size = 16) {
 }
 
 const TOOLBAR_ICON_SIZE = 32;
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+
+function RecapIndicator({
+    count,
+    onOpen,
+    size,
+}: Readonly<{ count: number; onOpen?: () => void; size: number }>) {
+    return (
+        <Indicator inline disabled={count === 0} label={count} size={14} color="primary" offset={4}>
+            <Tooltip label={count > 0 ? `${count} key findings` : "No findings yet"} withArrow position="top">
+                <ActionIcon
+                    size={size}
+                    radius="xl"
+                    color={count > 0 ? "primary" : "gray"}
+                    variant={count > 0 ? "light" : "subtle"}
+                    onClick={onOpen}
+                    disabled={count === 0 || !onOpen}
+                    aria-label="Session recap"
+                >
+                    <IconBookmarks size={17} />
+                </ActionIcon>
+            </Tooltip>
+        </Indicator>
+    );
+}
+
+function ContinuityIndicator({
+    count,
+    onOpen,
+    size,
+}: Readonly<{ count: number; onOpen?: () => void; size: number }>) {
+    return (
+        <Indicator inline disabled={count === 0} label={count} size={14} color="primary" offset={4}>
+            <Tooltip label={count > 0 ? `${count} saved` : "No saved items"} withArrow position="top">
+                <ActionIcon
+                    size={size}
+                    radius="xl"
+                    color={count > 0 ? "primary" : "gray"}
+                    variant={count > 0 ? "light" : "subtle"}
+                    onClick={onOpen}
+                    disabled={count === 0 || !onOpen}
+                    aria-label="Continuity assessment"
+                >
+                    <IconStack2 size={17} />
+                </ActionIcon>
+            </Tooltip>
+        </Indicator>
+    );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line max-lines-per-function
 export function InputBar({
     input,
     onInputChange,
@@ -103,7 +211,13 @@ export function InputBar({
     onAnswerFreeText,
     showDisclaimer = true,
     contextUsage,
+    chatMode = "quick",
+    onChatModeChange,
+    onOpenRecap,
+    onOpenContinuity,
 }: Readonly<InputBarProps>) {
+    const isMobile = useMediaQuery("(max-width: 48em)");
+    const toolbarIconSize = isMobile ? 28 : TOOLBAR_ICON_SIZE;
     const outOfCredits = creditsRemaining === 0;
     const hasBlockingToolCall = hasPendingToolCall && !pendingFreeText;
     const isBusy = isLoading || isUploading || hasBlockingToolCall;
@@ -117,6 +231,10 @@ export function InputBar({
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     function fileKey(f: File) { return `${f.name}-${f.lastModified}`; }
+
+    // Calculate recap and continuity indicators
+    const recapCount = calculateRecapFindings(messages);
+    const continuityCount = calculateContinuitySaved(messages);
 
     // Re-focus the input after the AI finishes responding.
     useEffect(() => {
@@ -222,6 +340,9 @@ export function InputBar({
     // ── Unified action button ─────────────────────────────────────────────────
     const hasContent = !!input.trim() || attachments.length > 0 || existingFileAttachments.length > 0;
     const totalAttachments = attachments.length + existingFileAttachments.length;
+    const contextTotalTokens = (contextUsage?.inputTokens ?? 0) + (contextUsage?.outputTokens ?? 0);
+    const contextMaxTokens = contextUsage?.maxTokens ?? 1_048_576;
+    const contextPercent = Math.min(100, Math.round((contextTotalTokens / contextMaxTokens) * 100));
     const actionState = (() => {
         if (isUploading) return "uploading" as const;
         if (isListening) return "listening" as const;
@@ -276,25 +397,6 @@ export function InputBar({
                 }}
             >
                 <Box maw={760} mx="auto">
-                    {/* Out-of-credits warning */}
-                    {outOfCredits && (
-                        <Alert
-                            icon={<IconAlertCircle size={18} />}
-                            color="orange"
-                            variant="light"
-                            mb={10}
-                            radius="lg"
-                            title="Daily credits exhausted"
-                        >
-                            {(() => {
-                                const now = new Date();
-                                const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-                                const formatted = reset.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-                                return `You've used all 10 free credits for today. They reset at ${formatted}.`;
-                            })()}
-                        </Alert>
-                    )}
-
                     {/* Hidden file inputs */}
                     <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" multiple style={{ display: "none" }}
                         onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
@@ -407,79 +509,145 @@ export function InputBar({
                                 />
 
                                 {/* Toolbar */}
-                                <Group justify="space-between" mt="md" px={0} gap={4}>
-                                    {/* Unified file attach menu — Gemini-style "+" button */}
-                                    <Menu shadow="md" radius="lg" position="top-start" withArrow arrowPosition="center">
-                                        <Menu.Target>
-                                            <Indicator inline disabled={totalAttachments === 0} label={totalAttachments} size={14} color="primary" offset={4}>
+                                <Stack gap={4} mt="xs" px={0}>
+                                    <Group justify="space-between" gap={6} wrap="nowrap">
+                                        <Group gap={6} wrap="nowrap">
+                                            <Menu shadow="md" radius="lg" position="top-start" withArrow arrowPosition="center">
+                                                <Menu.Target>
+                                                    <Tooltip label={`Mode: ${MODE_HINTS[chatMode]}`} withArrow position="top">
+                                                        <Button
+                                                            size="compact-xs"
+                                                            radius="xl"
+                                                            color={chatMode === "full" ? "primary" : "gray"}
+                                                            variant={chatMode === "full" ? "light" : "subtle"}
+                                                            aria-label="Response mode"
+                                                            px={8}
+                                                            rightSection={<IconChevronDown size={12} />}
+                                                        >
+                                                            <Text size="xs" fw={700} lh={1}>
+                                                                {chatMode === "quick" ? "Quick" : "Full"}
+                                                            </Text>
+                                                        </Button>
+                                                    </Tooltip>
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Label>Response mode</Menu.Label>
+                                                    <Menu.Item
+                                                        onClick={() => onChatModeChange?.("quick")}
+                                                        rightSection={chatMode === "quick" ? <IconCheck size={14} /> : undefined}
+                                                    >
+                                                        Quick guidance
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        onClick={() => onChatModeChange?.("full")}
+                                                        rightSection={chatMode === "full" ? <IconCheck size={14} /> : undefined}
+                                                    >
+                                                        Full assessment
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+
+                                            {/* Unified file attach menu — Gemini-style "+" button */}
+                                            <Menu shadow="md" radius="lg" position="top-start" withArrow arrowPosition="center">
+                                                <Menu.Target>
+                                                    <Indicator inline disabled={totalAttachments === 0} label={totalAttachments} size={14} color="primary" offset={4}>
+                                                        <ActionIcon
+                                                            size={toolbarIconSize}
+                                                            radius="xl"
+                                                            color={totalAttachments > 0 ? "primary" : "gray"}
+                                                            variant={totalAttachments > 0 ? "light" : "subtle"}
+                                                            disabled={isUploading || hasBlockingToolCall || outOfCredits}
+                                                            aria-label="Attach files"
+                                                        >
+                                                            <IconPlus size={17} style={{
+                                                                transition: `transform ${motionTokens.duration.fast} ${motionTokens.easing.standard}`,
+                                                            }} />
+                                                        </ActionIcon>
+                                                    </Indicator>
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        leftSection={<IconPaperclip size={16} />}
+                                                        onClick={() => fileInputRef.current?.click()}
+                                                    >
+                                                        Upload from device
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<IconFolderOpen size={16} />}
+                                                        onClick={() => setFilePickerOpened(true)}
+                                                    >
+                                                        Browse my files
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<IconCamera size={16} />}
+                                                        onClick={() => cameraInputRef.current?.click()}
+                                                    >
+                                                        Take a photo
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+                                            <RecapIndicator count={recapCount} onOpen={onOpenRecap} size={toolbarIconSize} />
+                                            <ContinuityIndicator count={continuityCount} onOpen={onOpenContinuity} size={toolbarIconSize} />
+                                        </Group>
+
+                                        <Group gap={6} wrap="nowrap">
+                                            {!isMobile && (
+                                                <ContextUsageIndicator
+                                                    inputTokens={contextUsage?.inputTokens ?? 0}
+                                                    outputTokens={contextUsage?.outputTokens ?? 0}
+                                                    maxTokens={contextUsage?.maxTokens ?? 1_048_576}
+                                                />
+                                            )}
+                                            {isMobile && (
+                                                <Menu shadow="md" radius="lg" position="top-end" withArrow arrowPosition="center">
+                                                    <Menu.Target>
+                                                        <ActionIcon
+                                                            size={toolbarIconSize}
+                                                            radius="xl"
+                                                            color="gray"
+                                                            variant="subtle"
+                                                            aria-label="More input bar info"
+                                                        >
+                                                            <IconDots size={17} />
+                                                        </ActionIcon>
+                                                    </Menu.Target>
+                                                    <Menu.Dropdown>
+                                                        <Menu.Label>Conversation status</Menu.Label>
+                                                        <Menu.Item leftSection={<IconBookmarks size={16} />}>
+                                                            Context: {contextPercent}% used
+                                                        </Menu.Item>
+                                                    </Menu.Dropdown>
+                                                </Menu>
+                                            )}
+                                            <Tooltip label={actionCfg.label} withArrow position="top">
                                                 <ActionIcon
-                                                    size={TOOLBAR_ICON_SIZE}
+                                                    size={toolbarIconSize}
                                                     radius="xl"
-                                                    color={totalAttachments > 0 ? "primary" : "gray"}
-                                                    variant={totalAttachments > 0 ? "light" : "subtle"}
-                                                    disabled={isUploading || hasBlockingToolCall || outOfCredits}
-                                                    aria-label="Attach files"
+                                                    color={actionCfg.color}
+                                                    variant={actionCfg.variant}
+                                                    disabled={actionCfg.disabled}
+                                                    onClick={actionCfg.onClick}
+                                                    aria-label={actionCfg.label}
+                                                    style={{
+                                                        transition: `all ${motionTokens.duration.fast} ${motionTokens.easing.standard}`,
+                                                        ...(actionState === "listening" ? { animation: "pulse-ring 1.2s ease-in-out infinite" } : {}),
+                                                    }}
                                                 >
-                                                    <IconPlus size={17} style={{
-                                                        transition: `transform ${motionTokens.duration.fast} ${motionTokens.easing.standard}`,
-                                                    }} />
+                                                    {actionCfg.icon}
                                                 </ActionIcon>
-                                            </Indicator>
-                                        </Menu.Target>
-                                        <Menu.Dropdown>
-                                            <Menu.Item
-                                                leftSection={<IconPaperclip size={16} />}
-                                                onClick={() => fileInputRef.current?.click()}
-                                            >
-                                                Upload from device
-                                            </Menu.Item>
-                                            <Menu.Item
-                                                leftSection={<IconFolderOpen size={16} />}
-                                                onClick={() => setFilePickerOpened(true)}
-                                            >
-                                                Browse my files
-                                            </Menu.Item>
-                                            <Menu.Item
-                                                leftSection={<IconCamera size={16} />}
-                                                onClick={() => cameraInputRef.current?.click()}
-                                            >
-                                                Take a photo
-                                            </Menu.Item>
-                                        </Menu.Dropdown>
-                                    </Menu>
-                                    {/* Context usage ring + action button */}
-                                    <Group gap={6}>
-                                        <ContextUsageIndicator
-                                            inputTokens={contextUsage?.inputTokens ?? 0}
-                                            outputTokens={contextUsage?.outputTokens ?? 0}
-                                            maxTokens={contextUsage?.maxTokens ?? 1_048_576}
-                                        />
-                                        <Tooltip label={actionCfg.label} withArrow position="top">
-                                            <ActionIcon
-                                                size={TOOLBAR_ICON_SIZE}
-                                                radius="xl"
-                                                color={actionCfg.color}
-                                                variant={actionCfg.variant}
-                                                disabled={actionCfg.disabled}
-                                                onClick={actionCfg.onClick}
-                                                aria-label={actionCfg.label}
-                                                style={{
-                                                    transition: `all ${motionTokens.duration.fast} ${motionTokens.easing.standard}`,
-                                                    ...(actionState === "listening" ? { animation: "pulse-ring 1.2s ease-in-out infinite" } : {}),
-                                                }}
-                                            >
-                                                {actionCfg.icon}
-                                            </ActionIcon>
-                                        </Tooltip>
+                                            </Tooltip>
+                                        </Group>
                                     </Group>
-                                </Group>
+                                </Stack>
                             </Card.Section>
                         </Card>
                     </Box>
                     {showDisclaimer && (
-                        <Box my="md">
+                        <Box mt="xs" mb={0}>
                             <Text size="xs" c="dimmed" ta="center" style={{ opacity: 0.7 }}>
-                                CareAI is not a substitute for professional medical advice. Always consult a qualified doctor.
+                                {chatMode === "full"
+                                    ? "Full assessment may take 15–20s · CareAI is not a substitute for professional medical advice."
+                                    : "CareAI is not a substitute for professional medical advice. Always consult a qualified doctor."}
                             </Text>
                         </Box>
                     )}

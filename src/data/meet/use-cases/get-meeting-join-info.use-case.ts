@@ -104,7 +104,7 @@ export class GetMeetingJoinInfoUseCase {
     }
 
     const isDoctor = request.doctorId === userId;
-    const fallback = isDoctor ? "/doctor/dashboard" : "/patient/connect";
+    const fallback = isDoctor ? "/doctor/dashboard" : "/user/connect";
     const conversationId =
       request.doctorId && request.patientId
         ? buildConversationId(request.doctorId, request.patientId)

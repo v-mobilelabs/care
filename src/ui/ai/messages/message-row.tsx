@@ -5,6 +5,8 @@ import { ToolPartRenderer } from "@/ui/ai/tools";
 import { FileMessage, TextMessage } from "@/ui/ai/components/message";
 import { ReasoningBlock } from "@/ui/ai/components/reasoning-block";
 import { DateSeparator } from "@/ui/ai/components/date-separator";
+import { AgentRoutingBadge } from "@/ui/chat/components/agent-routing-badge";
+import type { SpecialistId } from "@/data/specialists/specialists.config";
 
 export interface MessageRowProps {
     msg: UIMessage;
@@ -17,6 +19,8 @@ export interface MessageRowProps {
     messageUsage?: ReadonlyMap<string, { promptTokens: number; completionTokens: number; totalTokens: number }>;
     /** Per-message agent type map (DB-persisted + live overlay). */
     messageAgentTypes?: ReadonlyMap<string, string>;
+    /** Per-message reasoning map (why specialist was selected). */
+    messageReasonings?: ReadonlyMap<string, string>;
     agentType?: string;
     editingId: string | null;
     editingText: string;
@@ -43,6 +47,7 @@ export function MessageRow({
     userInitials,
     messageUsage,
     messageAgentTypes,
+    messageReasonings,
     agentType,
     editingId,
     editingText,
@@ -59,7 +64,17 @@ export function MessageRow({
     onSendReferralMessage,
 }: Readonly<MessageRowProps>) {
     const isUser = msg.role === "user";
+    const isAssistant = !isUser;
     const showDate = timestamp != null && (prevTimestamp == null || new Date(timestamp).toDateString() !== new Date(prevTimestamp).toDateString());
+    
+    // Find the first text part to render the badge before it (only for assistant messages)
+    const firstTextPartIndex = isAssistant 
+        ? msg.parts.findIndex((p) => p.type === "text") 
+        : -1;
+    
+    const agentId = isAssistant ? (messageAgentTypes?.get(msg.id) ?? agentType) : undefined;
+    const reasoning = messageReasonings?.get(msg.id);
+    const showBadge = isAssistant && firstTextPartIndex >= 0 && agentId;
 
     return (
         <Stack
@@ -67,6 +82,12 @@ export function MessageRow({
             style={isNew ? { animation: "msg-enter 0.3s ease-out both" } : undefined}
         >
             {showDate && <DateSeparator date={timestamp} />}
+            {showBadge && agentId && (
+                <AgentRoutingBadge 
+                    agentId={agentId as SpecialistId} 
+                    reasoning={reasoning}
+                />
+            )}
             {msg.parts.map((part, i) => {
                 if (part.type === "reasoning") {
                     return (

@@ -12,6 +12,7 @@ export const chatKeys = {
   messages: (sessionId: string) => ["chat", "messages", sessionId] as const,
   credits: () => ["chat", "credits"] as const,
   conditions: () => ["chat", "conditions"] as const,
+  symptomObservations: () => ["chat", "symptom-observations"] as const,
   soapNotes: () => ["chat", "soap-notes"] as const,
   soapNote: (noteId: string) => ["chat", "soap-notes", noteId] as const,
   files: () => ["chat", "files"] as const,

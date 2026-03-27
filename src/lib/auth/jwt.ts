@@ -29,12 +29,20 @@ export const COOKIE_OPTS = {
  * Canonical user-kind values stored as Firebase custom claims.
  *
  * Extend this tuple (and the union) as new portal types are introduced:
- *   "admin" | "pharmacist" | …
+ *   "pharmacist" | …
  *
  * Derive enums and runtime sets from this single source of truth.
  */
-export const USER_KINDS = ["user", "doctor"] as const;
+export const USER_KINDS = ["user", "doctor", "admin"] as const;
 export type UserKind = (typeof USER_KINDS)[number];
+
+export function coerceUserKind(raw: unknown): UserKind {
+  if (typeof raw !== "string") return "user";
+
+  return (USER_KINDS as readonly string[]).includes(raw)
+    ? (raw as UserKind)
+    : "user";
+}
 
 export interface SessionPayload {
   uid: string;
@@ -67,7 +75,7 @@ export async function verifySessionToken(
     // `kind` is persisted as a Firebase custom claim.
     // Back-compat: tokens written during a brief migration window may carry
     // kind:"patient" — normalise to the canonical "user" value.
-    const kind: UserKind = claims.kind === "doctor" ? "doctor" : "user";
+    const kind = coerceUserKind(claims.kind);
     return { uid, email, kind };
   } catch {
     return null;

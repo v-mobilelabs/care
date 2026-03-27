@@ -1,26 +1,22 @@
 import type { UserKind } from "@/lib/auth/jwt";
 import {
+    IconAdjustments,
     IconAi,
     IconArrowForwardUp,
     IconBrain,
-    IconClipboardHeart,
     IconBook2,
     IconCalendarStats,
     IconChartBar,
-    IconDroplet,
     IconFiles,
-    IconHeart,
     IconHeartbeat,
     IconHistory,
     IconLayoutDashboard,
     IconPhone,
-    IconPillFilled,
     IconSparkles,
     IconStethoscope,
     IconUserCircle,
     IconUsers,
     IconUsersGroup,
-    IconVaccineBottle,
 } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
@@ -31,6 +27,8 @@ export type NavigationItem = {
     label: string;
     icon: ReactNode;
     href: string;
+    beta?: boolean;
+    children?: NavigationItem[];
 };
 
 /**
@@ -67,126 +65,31 @@ export type ApplicationInfo = {
  * ```
  */
 
-const ICON_SIZE = 32;
+const ICON_SIZE = 18;
 const ICON_SIZE_PROFILE = 16;
-export function getNavigationMenus(userKind: UserKind): NavigationMenus {
-    if (userKind === "doctor") {
-        return {
-            navigation: [
-                {
-                    label: "Dashboard",
-                    icon: <IconLayoutDashboard size={ICON_SIZE} />,
-                    href: "/doctor/dashboard",
-                },
-                {
-                    label: "Patients",
-                    icon: <IconUsersGroup size={ICON_SIZE} />,
-                    href: "/doctor/patients",
-                },
-                {
-                    label: "Schedule",
-                    icon: <IconCalendarStats size={ICON_SIZE} />,
-                    href: "/doctor/schedule",
-                },
-                {
-                    label: "Calls",
-                    icon: <IconPhone size={ICON_SIZE} />,
-                    href: "/doctor/calls",
-                },
-                {
-                    label: "Encounters",
-                    icon: <IconStethoscope size={ICON_SIZE} />,
-                    href: "/doctor/encounters",
-                },
-                {
-                    label: "Knowledge Base",
-                    icon: <IconBook2 size={ICON_SIZE} />,
-                    href: "/console/knowledge-base",
-                },
-            ],
-            header: [],
-            profile: [
-                {
-                    label: "Profile",
-                    icon: <IconUserCircle size={ICON_SIZE} />,
-                    href: "/doctor/profile",
-                },
-                {
-                    label: "Settings",
-                    icon: <IconUsers size={ICON_SIZE} />,
-                    href: "/doctor/settings",
-                },
-            ],
-        };
-    }
 
-    // User (patient) navigation
+function getAdminMenus(): NavigationMenus {
     return {
         navigation: [
             {
-                label: "Assistant",
-                icon: <IconSparkles size={ICON_SIZE} />,
-                href: "/patient/assistant",
-            },
-            {
-                label: "History",
-                icon: <IconHistory size={ICON_SIZE} />,
-                href: "/patient/history",
-            },
-            // {
-            //     label: "Doctors",
-            //     icon: <IconStethoscope size={ICON_SIZE} />,
-            //     href: "/patient/doctors",
-            // },
-            // {
-            //     label: "Consult",
-            //     icon: <IconVideo size={ICON_SIZE} />,
-            //     href: "/patient/connect",
-            // },
-            {
-                label: "Prescriptions",
-                icon: <IconVaccineBottle size={ICON_SIZE} />,
-                href: "/patient/prescriptions",
-            },
-            {
-                label: "Medications",
-                icon: <IconPillFilled size={ICON_SIZE} />,
-                href: "/patient/medications",
-            },
-            {
-                label: "Vitals",
-                icon: <IconHeart size={ICON_SIZE} />,
-                href: "/patient/vitals",
-            },
-            {
-                label: "Assessments",
-                icon: <IconClipboardHeart size={ICON_SIZE} />,
-                href: "/patient/assessments",
-            },
-            {
-                label: "Memories",
-                icon: <IconBrain size={ICON_SIZE} />,
-                href: "/patient/memories",
-            },
-            {
-                label: "Lab Reports",
-                icon: <IconDroplet size={ICON_SIZE} />,
-                href: "/patient/lab-reports",
-            },
-            {
-                label: "Referrals",
-                icon: <IconArrowForwardUp size={ICON_SIZE} />,
-                href: "/patient/referrals",
-            },
-            {
-                label: "Files",
-                icon: <IconFiles size={ICON_SIZE} />,
-                href: "/patient/files",
+                label: "Overview",
+                icon: <IconLayoutDashboard size={ICON_SIZE} />,
+                href: "/console",
             },
             {
                 label: "Knowledge Base",
                 icon: <IconBook2 size={ICON_SIZE} />,
                 href: "/console/knowledge-base",
+            },
+            {
+                label: "Evidence",
+                icon: <IconFiles size={ICON_SIZE} />,
+                href: "/console/evidence",
+            },
+            {
+                label: "Metrics",
+                icon: <IconChartBar size={ICON_SIZE} />,
+                href: "/console/metrics",
             },
         ],
         header: [],
@@ -197,31 +100,149 @@ export function getNavigationMenus(userKind: UserKind): NavigationMenus {
                 href: "/profile",
             },
             {
-                label: "Health Details",
-                icon: <IconHeartbeat size={ICON_SIZE_PROFILE} />,
-                href: "/patient/details",
-            },
-            {
-                label: "Usage",
-                icon: <IconChartBar size={ICON_SIZE_PROFILE} />,
-                href: "/patient/usage",
+                label: "Settings",
+                icon: <IconAdjustments size={ICON_SIZE_PROFILE} />,
+                href: "/profile",
             },
         ],
     };
 }
 
-/**
- * Returns application metadata based on user kind
- *
- * @param userKind - The type of user ("user" for patients or "doctor")
- * @returns Application info including id, name, default url, and icon
- *
- * @example
- * ```tsx
- * const application = getApplicationInfo(user.kind);
- * ```
- */
+function getDoctorMenus(): NavigationMenus {
+    return {
+        navigation: [
+            {
+                label: "Dashboard",
+                icon: <IconLayoutDashboard size={ICON_SIZE} />,
+                href: "/doctor/dashboard",
+            },
+            {
+                label: "Patients",
+                icon: <IconUsersGroup size={ICON_SIZE} />,
+                href: "/doctor/patients",
+            },
+            {
+                label: "Schedule",
+                icon: <IconCalendarStats size={ICON_SIZE} />,
+                href: "/doctor/schedule",
+            },
+            {
+                label: "Calls",
+                icon: <IconPhone size={ICON_SIZE} />,
+                href: "/doctor/calls",
+            },
+            {
+                label: "Encounters",
+                icon: <IconStethoscope size={ICON_SIZE} />,
+                href: "/doctor/encounters",
+            },
+        ],
+        header: [],
+        profile: [
+            {
+                label: "Profile",
+                icon: <IconUserCircle size={ICON_SIZE} />,
+                href: "/doctor/profile",
+            },
+            {
+                label: "Settings",
+                icon: <IconUsers size={ICON_SIZE} />,
+                href: "/doctor/settings",
+            },
+        ],
+    };
+}
+
+function getUserMenus(): NavigationMenus {
+    return {
+        navigation: [
+            {
+                label: "Home",
+                icon: <IconLayoutDashboard size={ICON_SIZE} />,
+                href: "/user",
+            },
+            {
+                label: "History",
+                icon: <IconHistory size={ICON_SIZE} />,
+                href: "/user/history",
+            },
+            {
+                label: "Care Team",
+                icon: <IconUsersGroup size={ICON_SIZE} />,
+                href: "/user/specialists",
+                children: [
+                    {
+                        label: "Specialists",
+                        icon: <IconUsersGroup size={ICON_SIZE} />,
+                        href: "/user/specialists",
+                    },
+                    {
+                        label: "Referrals",
+                        icon: <IconArrowForwardUp size={ICON_SIZE} />,
+                        href: "/user/referrals",
+                    },
+                ],
+            },
+            {
+                label: "Health",
+                icon: <IconHeartbeat size={ICON_SIZE} />,
+                href: "/user/health",
+            },
+        ],
+        header: [
+            {
+                label: "Ask AI",
+                icon: <IconSparkles size={ICON_SIZE} />,
+                href: "/user/assistant",
+            },
+        ],
+        profile: [
+            {
+                label: "Profile",
+                icon: <IconUserCircle size={ICON_SIZE_PROFILE} />,
+                href: "/profile",
+            },
+            {
+                label: "Physical Details",
+                icon: <IconHeartbeat size={ICON_SIZE_PROFILE} />,
+                href: "/user/details",
+            },
+            {
+                label: "Memories",
+                icon: <IconBrain size={ICON_SIZE_PROFILE} />,
+                href: "/user/memories",
+            },
+            {
+                label: "Usage",
+                icon: <IconChartBar size={ICON_SIZE_PROFILE} />,
+                href: "/user/usage",
+            },
+        ],
+    };
+}
+
+export function getNavigationMenus(userKind: UserKind): NavigationMenus {
+    if (userKind === "admin") {
+        return getAdminMenus();
+    }
+
+    if (userKind === "doctor") {
+        return getDoctorMenus();
+    }
+
+    return getUserMenus();
+}
+
 export function getApplicationInfo(userKind: UserKind): ApplicationInfo {
+    if (userKind === "admin") {
+        return {
+            id: "admin-console",
+            name: "Admin Console",
+            url: "/console",
+            icon: <IconLayoutDashboard size={ICON_SIZE} />,
+        };
+    }
+
     if (userKind === "doctor") {
         return {
             id: "doctor-portal",
@@ -231,11 +252,10 @@ export function getApplicationInfo(userKind: UserKind): ApplicationInfo {
         };
     }
 
-    // User (patient) application
     return {
         id: "careai-portal",
         name: "CareAI",
-        url: "/patient/assistant",
+        url: "/user",
         icon: <IconAi size={ICON_SIZE} />,
     };
 }

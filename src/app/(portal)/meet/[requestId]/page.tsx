@@ -78,7 +78,7 @@ export default async function MeetPage({
     if (!user) redirect("/auth/login");
 
     const isDoctor = user.kind === "doctor";
-    const fallback = isDoctor ? "/doctor/dashboard" : "/patient/connect";
+    const fallback = isDoctor ? "/doctor/dashboard" : "/user/connect";
 
     // Stream: render animated skeleton immediately while data loads.
     return (

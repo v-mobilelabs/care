@@ -15,6 +15,7 @@ export interface DocumentChunk {
   /** Document type for filtering */
   type:
     | "condition"
+    | "symptom-observation"
     | "medication"
     | "assessment"
     | "soap"

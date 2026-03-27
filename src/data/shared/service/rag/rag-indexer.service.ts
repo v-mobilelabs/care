@@ -219,10 +219,12 @@ export class RAGIndexerService {
     test: LabReportDto,
   ): Promise<void> {
     const biomarkerLines = test.biomarkers
-      .map(
-        (b) =>
-          `${b.name}: ${b.value} ${b.unit}${b.referenceRange ? ` (ref: ${b.referenceRange})` : ""} — ${b.status}`,
-      )
+      .map((b) => {
+        const referenceRange = b.referenceRange
+          ? ` (ref: ${b.referenceRange})`
+          : "";
+        return `${b.name}: ${b.value} ${b.unit}${referenceRange} — ${b.status}`;
+      })
       .join("\n");
 
     const content = [

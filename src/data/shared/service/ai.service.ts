@@ -1,11 +1,11 @@
 // AI Service — server-only. Never import in client components.
-import { google } from "@/data/shared/service/vertex-provider";
 import { generateText, Output, wrapLanguageModel } from "ai";
 import type { LanguageModel, LanguageModelMiddleware, ModelMessage } from "ai";
 import type { z } from "zod";
 import { UsageService } from "@/data/usage/service/lazy-reset-usage.service";
 import { UsageRepository } from "@/data/usage/repositories/usage.repository";
 import { CreditsExhaustedError } from "@/lib/errors";
+import { sharedModels } from "@/data/shared/service/model";
 
 // ── Retry helpers ─────────────────────────────────────────────────────────────
 
@@ -125,17 +125,15 @@ export interface TokenUsage {
  */
 export class AIService {
   /** @internal Raw pro model — use forUser().chat for credit-gated access. */
-  private readonly _chat = google("gemini-3.1-pro");
+  private readonly _chat = sharedModels.pro;
 
-  /** @internal Raw fast model — use forUser().fast for credit-gated access. */
-  private readonly _fast = google("gemini-3.1-flash-lite-preview");
+  /** @internal Raw flash model — use forUser().fast for credit-gated access. */
+  private readonly _fast = sharedModels.fast;
 
   /** @internal Lite model for ultra-fast classification tasks (gateway routing). */
-  private readonly _lite = google("gemini-3.1-flash-lite-preview");
+  private readonly _lite = sharedModels.lite;
 
   private readonly usageService = new UsageService(new UsageRepository());
-
-  constructor() {}
 
   /**
    * Returns credit-gated model instances bound to `userId`.

@@ -27,7 +27,8 @@ async function KBData({ userId }: Readonly<{ userId: string }>) {
 
 export default async function KnowledgeBasePage() {
     const user = await getServerUser();
-    if (!user) return <KnowledgeBaseContent />;
+    if (!user) return null;
+
     return (
         <Suspense fallback={<KnowledgeBaseLoading />}>
             <KBData userId={user.uid} />

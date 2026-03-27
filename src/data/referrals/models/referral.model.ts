@@ -13,6 +13,8 @@ export interface ReferralDocument {
   sessionId: string;
   /** Target specialist (e.g. "cardiology", "dentistry") */
   specialist: string;
+  /** Normalized specialist for case-insensitive lookups */
+  specialistLower?: string;
   /** Clinical reason for the referral */
   reason: string;
   /** Optional label of the triggering report */
@@ -49,13 +51,14 @@ function toIso(ts?: Timestamp): string | undefined {
 }
 
 export function toReferralDto(id: string, doc: ReferralDocument): ReferralDto {
+  const reportLabel = doc.reportLabel;
   return {
     id,
     userId: doc.userId,
     sessionId: doc.sessionId,
     specialist: doc.specialist,
     reason: doc.reason,
-    ...(doc.reportLabel !== undefined ? { reportLabel: doc.reportLabel } : {}),
+    ...(reportLabel ? { reportLabel } : {}),
     status: doc.status,
     ...(doc.acceptedAt ? { acceptedAt: toIso(doc.acceptedAt) } : {}),
     ...(doc.dismissedAt ? { dismissedAt: toIso(doc.dismissedAt) } : {}),
@@ -77,12 +80,16 @@ export const CreateReferralSchema = z.object({
 
 export type CreateReferralInput = z.infer<typeof CreateReferralSchema>;
 
+export type ReferralSortDir = "asc" | "desc";
+
 export const ListReferralsSchema = z.object({
   userId: z.string().min(1, { message: "userId is required" }),
   limit: z.number().int().min(1).max(100).optional().default(20),
   cursor: z.string().optional(),
   status: z.enum(["pending", "accepted", "dismissed", "completed"]).optional(),
   specialist: z.string().optional(),
+  q: z.string().optional(),
+  sortDir: z.enum(["asc", "desc"]).optional().default("desc"),
 });
 
 export type ListReferralsInput = z.infer<typeof ListReferralsSchema>;
@@ -102,3 +109,10 @@ export const UpdateReferralStatusSchema = z.object({
 export type UpdateReferralStatusInput = z.infer<
   typeof UpdateReferralStatusSchema
 >;
+
+export const ReferralRefSchema = z.object({
+  userId: z.string().min(1, { message: "userId is required" }),
+  referralId: z.string().min(1, { message: "referralId is required" }),
+});
+
+export type ReferralRefInput = z.infer<typeof ReferralRefSchema>;

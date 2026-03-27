@@ -63,7 +63,8 @@ function buildLocationContext(
 ): string | null {
   if (!country && !city) return null;
   const loc = [city, country].filter(Boolean).join(", ");
-  return `## Patient Location\n- Location: ${loc}${region ? `\n- Cuisine region: ${region}` : ""}`;
+  const regionLine = region ? `\n- Cuisine region: ${region}` : "";
+  return `## Patient Location\n- Location: ${loc}${regionLine}`;
 }
 
 async function buildCuisineContext(
@@ -132,7 +133,7 @@ export async function buildDietDynamicContext(
         patient?.foodPreferences,
         options.userQuery,
       ),
-      buildGuardrailContext(patient?.dateOfBirth),
+      buildGuardrailContext(profile?.dateOfBirth),
     ].filter(Boolean) as string[];
     return parts.join("\n\n");
   } catch (error) {
