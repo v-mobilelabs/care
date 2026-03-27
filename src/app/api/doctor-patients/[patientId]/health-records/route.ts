@@ -6,6 +6,7 @@ import { ListAssessmentsUseCase } from "@/data/assessments";
 import { ListLabReportsUseCase } from "@/data/lab-reports";
 import { GetProfileUseCase } from "@/data/profile";
 import { GetPatientUseCase } from "@/data/patients";
+import { ListSymptomObservationsUseCase } from "@/data/symptom-observations";
 
 // GET /api/doctor-patients/[patientId]/health-records
 // Returns the full health record portfolio for a patient the doctor
@@ -27,13 +28,18 @@ export const GET = WithContext(
     }
 
     // ── Fetch all health data in parallel ─────────────────────────────────
-    const [medications, assessments, labReports, profile, patient] =
+    const [medications, assessments, labReports, profile, patient, symptoms] =
       await Promise.all([
         new ListMedicationsUseCase().execute({ userId: patientId }),
         new ListAssessmentsUseCase().execute({ userId: patientId }),
         new ListLabReportsUseCase().execute({ userId: patientId }),
         new GetProfileUseCase().execute({ userId: patientId }),
         new GetPatientUseCase().execute({ userId: patientId }),
+        new ListSymptomObservationsUseCase().execute({
+          userId: patientId,
+          limit: 100,
+          sortDir: "desc",
+        }),
       ]);
 
     return NextResponse.json({
@@ -53,6 +59,7 @@ export const GET = WithContext(
       medications,
       assessments,
       labReports,
+      symptoms: symptoms.observations,
     });
   },
 );

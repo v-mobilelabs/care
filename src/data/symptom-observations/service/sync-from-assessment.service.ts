@@ -1,4 +1,6 @@
 import { CreateSymptomObservationUseCase } from "@/data/symptom-observations";
+import { normalizeClinicalSymptomTerm } from "./clinical-symptom-normalizer";
+import { normalizeClinicalTermsWithLlm } from "./llm-clinical-symptom-normalizer.service";
 
 export interface AssessmentQaForSymptomSync {
   toolCallId?: string;
@@ -24,7 +26,7 @@ function parseSeverityFromAnswer(answer: string): number | undefined {
     return Math.round(numeric);
   }
 
-  const match = trimmed.match(/\b(10|[0-9])\b/);
+  const match = /\b(10|\d)\b/.exec(trimmed);
   if (!match) return undefined;
 
   const parsed = Number(match[1]);
@@ -40,14 +42,35 @@ function isNegativeBinaryAnswer(answer: string): boolean {
 
 function normalizeSymptomLabel(question: string): string {
   return question
-    .replace(/[?\s]+$/g, "")
+    .replaceAll(/[?\s]+$/g, "")
     .trim()
     .slice(0, 160);
 }
 
+function extractSymptomFromQuestion(question: string): string | null {
+  const cleaned = normalizeSymptomLabel(question);
+  if (!cleaned) return null;
+
+  const patterns = [
+    /^(?:do you have|are you having|are you experiencing|have you had|did you notice)\s+(.+)$/i,
+    /^(?:is there|any)\s+(.+)$/i,
+    /^(?:rate|describe)\s+(?:your\s+)?(.+)$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(cleaned);
+    const value = match?.[1]?.trim();
+    if (value) {
+      return value.replaceAll(/^(a|an|any|the)\s+/i, "").trim();
+    }
+  }
+
+  return null;
+}
+
 function normalizeAnswerLabel(answer: string): string {
   return answer
-    .replace(/[?\s]+$/g, "")
+    .replaceAll(/[?\s]+$/g, "")
     .trim()
     .slice(0, 160);
 }
@@ -66,7 +89,8 @@ function splitMultiChoiceAnswer(answer: string): string[] {
 }
 
 function pickSymptomLabel(pair: AssessmentQaForSymptomSync): string {
-  const questionLabel = normalizeSymptomLabel(pair.question);
+  const questionLabel =
+    extractSymptomFromQuestion(pair.question) ?? normalizeSymptomLabel(pair.question);
   const answerLabel = normalizeAnswerLabel(pair.answer);
 
   if (!answerLabel || isGenericAnswerLabel(answerLabel)) return questionLabel;
@@ -80,7 +104,7 @@ function pickSymptomLabel(pair: AssessmentQaForSymptomSync): string {
 
   if (pair.questionType.trim().toLowerCase() === "multi_choice") {
     const fragments = splitMultiChoiceAnswer(answerLabel);
-    if (fragments.length > 0) return normalizeAnswerLabel(fragments[0]!);
+    if (fragments.length > 0) return normalizeAnswerLabel(fragments[0]);
   }
 
   return questionLabel;
@@ -94,8 +118,10 @@ function toIdempotencyKey(args: {
   answer: string;
 }): string {
   const runId = args.runId ?? "session";
-  const normalizedSymptom = args.symptom.toLowerCase().replace(/\s+/g, "-");
-  const normalizedAnswer = args.answer.toLowerCase().replace(/\s+/g, "-");
+  const normalizedSymptom = args.symptom
+    .toLowerCase()
+    .replaceAll(/\s+/g, "-");
+  const normalizedAnswer = args.answer.toLowerCase().replaceAll(/\s+/g, "-");
 
   const parts = [args.sessionId, runId];
   if (args.toolCallId) {
@@ -121,7 +147,7 @@ function buildSymptomEntryFromQa(
   if (!symptom) return null;
 
   return {
-    symptom,
+    symptom: normalizeClinicalSymptomTerm(symptom),
     answer,
     severity: type === "scale" ? parseSeverityFromAnswer(answer) : undefined,
     toolCallId: pair.toolCallId,
@@ -148,15 +174,27 @@ export async function syncSymptomObservationsFromAssessment(args: {
 
   if (entries.length === 0) return;
 
+  const llmNormalizedSymptoms = await normalizeClinicalTermsWithLlm({
+    userId: args.userId,
+    terms: entries.map((entry) => entry.symptom),
+  });
+
+  const normalizedEntries = entries.map((entry, index) => ({
+    ...entry,
+    symptom: normalizeClinicalSymptomTerm(
+      llmNormalizedSymptoms[index] ?? entry.symptom,
+    ),
+  }));
+
   await Promise.all(
-    entries.map(async (entry) =>
+    normalizedEntries.map(async (entry) =>
       new CreateSymptomObservationUseCase().execute({
         userId: args.userId,
         sessionId: args.sessionId,
         assessmentId: args.assessmentId,
         conditionId: args.conditionId,
         symptom: entry.symptom,
-        ...(entry.severity !== undefined ? { severity: entry.severity } : {}),
+        ...(entry.severity === undefined ? {} : { severity: entry.severity }),
         notes: args.condition
           ? `${entry.answer}\n\nCondition context: ${args.condition}`
           : entry.answer,
