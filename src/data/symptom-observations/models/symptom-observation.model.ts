@@ -107,24 +107,42 @@ export function toSymptomObservationDto(
 
 // ── DTO — inbound (create) ────────────────────────────────────────────────────
 
-export const CreateSymptomObservationSchema = z.object({
-  userId: z.string().min(1, { message: "userId is required" }),
-  idempotencyKey: z.string().min(1).max(200).optional(),
-  conditionId: z.string().optional(),
-  sessionId: z.string().optional(),
-  assessmentId: z.string().optional(),
-  symptom: z.string().trim().min(1, { message: "symptom is required" }),
-  severity: z.number().int().min(0).max(10).optional(),
-  state: SymptomObservationStateSchema.optional(),
-  source: SymptomObservationSourceSchema.default("manual"),
-  onset: z.string().optional(),
-  duration: z.string().optional(),
-  triggers: z.array(z.string()).optional(),
-  alleviators: z.array(z.string()).optional(),
-  associatedSymptoms: z.array(z.string()).optional(),
-  notes: z.string().optional(),
-  observedAt: z.string().datetime().optional(),
-});
+export const CreateSymptomObservationSchema = z
+  .object({
+    userId: z.string().min(1, { message: "userId is required" }),
+    idempotencyKey: z.string().min(1).max(200).optional(),
+    conditionId: z.string().optional(),
+    sessionId: z.string().optional(),
+    assessmentId: z.string().optional(),
+    symptom: z.string().trim().min(1, { message: "symptom is required" }),
+    severity: z.number().int().min(0).max(10).optional(),
+    state: SymptomObservationStateSchema.optional(),
+    source: SymptomObservationSourceSchema.default("manual"),
+    onset: z.string().optional(),
+    duration: z.string().optional(),
+    triggers: z.array(z.string()).optional(),
+    alleviators: z.array(z.string()).optional(),
+    associatedSymptoms: z.array(z.string()).optional(),
+    notes: z.string().optional(),
+    observedAt: z.string().datetime().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.source === "assessment" && !value.assessmentId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["assessmentId"],
+        message: "assessmentId is required when source is assessment",
+      });
+    }
+
+    if (value.source === "chat" && !value.sessionId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sessionId"],
+        message: "sessionId is required when source is chat",
+      });
+    }
+  });
 
 export type CreateSymptomObservationInput = z.infer<
   typeof CreateSymptomObservationSchema

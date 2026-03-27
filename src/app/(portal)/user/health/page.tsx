@@ -11,7 +11,7 @@ import {
     getCachedAssessments,
 } from "@/data/cached";
 import { HealthHubContent } from "./_content";
-import HealthLoading from "./loading";
+import { HealthLoadingContent } from "./loading";
 
 async function HealthHubData({ userId }: Readonly<{ userId: string }>) {
     const queryClient = getQueryClient();
@@ -54,7 +54,7 @@ export default async function HealthHubPage() {
                     </Text>
                 </Stack>
                 {user ? (
-                    <Suspense fallback={<HealthLoading />}>
+                    <Suspense fallback={<HealthLoadingContent />}>
                         <HealthHubData userId={user.uid} />
                     </Suspense>
                 ) : (

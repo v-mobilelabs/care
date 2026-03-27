@@ -15,7 +15,7 @@ import {
     Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconActivity, IconUser } from "@tabler/icons-react";
+import { IconActivity, IconAlertTriangle, IconUser } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
 import { colors, spacing } from "@/ui/tokens";
@@ -54,6 +54,7 @@ interface FormValues {
     weight: string;
     activityLevel: string;
     foodPreferences: string[];
+    allergies: string[];
 }
 
 const GENDER_OPTIONS = [
@@ -80,6 +81,21 @@ const WEIGHT_MARKS = [
     { value: 30, label: "30" },
     { value: 70, label: "70" },
     { value: 120, label: "120" },
+];
+
+const ALLERGY_SUGGESTIONS = [
+    "No known allergies",
+    "Peanuts",
+    "Tree nuts",
+    "Milk / dairy",
+    "Egg",
+    "Soy",
+    "Wheat / gluten",
+    "Shellfish",
+    "Fish",
+    "Sesame",
+    "Penicillin",
+    "Sulfa drugs",
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -214,6 +230,7 @@ export function OnboardingModal({
                 values.foodPreferences.length > 0
                     ? values.foodPreferences
                     : undefined,
+            allergies: values.allergies,
         });
     }
 
@@ -275,6 +292,7 @@ export function OnboardingModal({
             weight: currentPatient?.weight ? String(currentPatient.weight) : "70",
             activityLevel: currentPatient?.activityLevel ?? "",
             foodPreferences: currentPatient?.foodPreferences ?? [],
+            allergies: currentPatient?.allergies ?? [],
         },
         validate: {
             name: (v) =>
@@ -282,11 +300,11 @@ export function OnboardingModal({
             phone: (v) =>
                 !profileComplete && !v.trim() ? "Phone number is required" : null,
             gender: (v) =>
-                                !profileComplete && !v
-                                        ? "Please select your gender"
-                                        : v === "Prefer not to say"
-                                            ? "Please select a valid gender"
-                                            : null,
+                !profileComplete && !v
+                    ? "Please select your gender"
+                    : v === "Prefer not to say"
+                        ? "Please select a valid gender"
+                        : null,
             country: (v) =>
                 !profileComplete && !v.trim() ? "Country is required" : null,
             location: (v) =>
@@ -373,206 +391,232 @@ export function OnboardingModal({
                                 stepDescription: { whiteSpace: "nowrap" },
                             }}
                         >
-                        {needsIdentity && (
-                            <Stepper.Step
-                                icon={<IconUser size={14} />}
-                                label="Your Identity"
-                                description="Basic profile"
-                            >
-                            <Stack gap={spacing.sm} mt={spacing.sm}>
-                                <Group gap={6}>
-                                    <IconUser size={15} color={colors.brand} />
-                                    <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                                        Your Identity
-                                    </Text>
-                                </Group>
+                            {needsIdentity && (
+                                <Stepper.Step
+                                    icon={<IconUser size={14} />}
+                                    label="Your Identity"
+                                    description="Basic profile"
+                                >
+                                    <Stack gap={spacing.sm} mt={spacing.sm}>
+                                        <Group gap={6}>
+                                            <IconUser size={15} color={colors.brand} />
+                                            <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                                                Your Identity
+                                            </Text>
+                                        </Group>
 
-                                {(() => {
-                                    if (needsIdentity) {
-                                        return (
-                                            <>
-                                                <TextInput
-                                                    size="sm"
-                                                    label="Full name"
-                                                    placeholder="Jane Smith"
-                                                    {...form.getInputProps("name")}
-                                                />
-                                                <TextInput
-                                                    size="sm"
-                                                    label="Phone number"
-                                                    placeholder="+1 555 000 0000"
-                                                    {...form.getInputProps("phone")}
-                                                />
-                                                <Radio.Group
-                                                    label="Gender"
-                                                    {...form.getInputProps("gender")}
-                                                >
-                                                    <Group mt={6}>
-                                                        {GENDER_OPTIONS.map((option) => (
-                                                            <Radio
-                                                                key={option.value}
-                                                                size="sm"
-                                                                value={option.value}
-                                                                label={option.label}
-                                                            />
-                                                        ))}
-                                                    </Group>
-                                                </Radio.Group>
-                                                <TextInput
-                                                    size="sm"
-                                                    label="Location"
-                                                    placeholder="Chennai"
-                                                    {...form.getInputProps("location")}
-                                                />
-                                                <TextInput
-                                                    size="sm"
-                                                    label="Date of birth"
-                                                    placeholder="DD/MM/YYYY"
-                                                    {...form.getInputProps("dateOfBirth")}
-                                                />
-                                                <Select
-                                                    size="sm"
-                                                    label="Country"
-                                                    placeholder="Select country"
-                                                    searchable
-                                                    data={COUNTRIES}
-                                                    {...form.getInputProps("country")}
-                                                />
-                                            </>
-                                        );
-                                    }
-
-                                    return (
-                                        <Text size="sm" c="dimmed">
-                                            Identity details are already complete.
-                                        </Text>
-                                    );
-                                })()}
-                            </Stack>
-                            </Stepper.Step>
-                        )}
-
-                        {needsHealth && (
-                            <Stepper.Step
-                                icon={<IconActivity size={14} />}
-                                label="Health"
-                                description="Vitals, activity, food"
-                            >
-                            <Stack gap="md" mt={spacing.sm}>
-                                <Group gap={6}>
-                                    <IconActivity size={15} color={colors.success} />
-                                    <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                                        Health Profile
-                                    </Text>
-                                </Group>
-
-                                {(() => {
-                                    if (needsHealth) {
-                                        return (
-                                            <>
-                                                <Group grow align="flex-start" gap="md">
-                                                    <Stack gap="xs">
-                                                        <Text size="sm" fw={500}>
-                                                            Height (cm)
-                                                        </Text>
-                                                        <Slider
+                                        {(() => {
+                                            if (needsIdentity) {
+                                                return (
+                                                    <>
+                                                        <TextInput
                                                             size="sm"
-                                                            min={120}
-                                                            max={220}
-                                                            step={1}
-                                                            marks={HEIGHT_MARKS}
-                                                            value={form.values.height === "" ? 170 : Number(form.values.height)}
-                                                            onChange={(v) => form.setFieldValue("height", String(v))}
-                                                            label={(value) => `${value} cm`}
+                                                            label="Full name"
+                                                            placeholder="Jane Smith"
+                                                            {...form.getInputProps("name")}
                                                         />
-                                                        {form.errors.height && (
-                                                            <Text size="xs" c="danger">
-                                                                {form.errors.height}
-                                                            </Text>
-                                                        )}
-                                                    </Stack>
-                                                    <Stack gap="xs">
-                                                        <Text size="sm" fw={500}>
-                                                            Weight (kg)
-                                                        </Text>
-                                                        <Slider
+                                                        <TextInput
                                                             size="sm"
-                                                            min={30}
-                                                            max={200}
-                                                            step={1}
-                                                            marks={WEIGHT_MARKS}
-                                                            value={form.values.weight === "" ? 70 : Number(form.values.weight)}
-                                                            onChange={(v) => form.setFieldValue("weight", String(v))}
-                                                            label={(value) => `${value} kg`}
+                                                            label="Phone number"
+                                                            placeholder="+1 555 000 0000"
+                                                            {...form.getInputProps("phone")}
                                                         />
-                                                        {form.errors.weight && (
-                                                            <Text size="xs" c="danger">
-                                                                {form.errors.weight}
-                                                            </Text>
-                                                        )}
-                                                    </Stack>
-                                                </Group>
-                                                <Stack gap="xs" mt="md">
-                                                    <Text size="sm" fw={500}>
-                                                        Activity level
-                                                    </Text>
-                                                    <Chip.Group
-                                                        multiple={false}
-                                                        value={form.values.activityLevel}
-                                                        onChange={(value) =>
-                                                            form.setFieldValue("activityLevel", String(value ?? ""))
-                                                        }
-                                                    >
-                                                        <Group gap="xs">
-                                                            {ACTIVITY_OPTIONS.map((option) => (
-                                                                <Chip key={option.value} value={option.value} size="sm">
-                                                                    {option.label.split(" — ")[0]}
-                                                                </Chip>
-                                                            ))}
-                                                        </Group>
-                                                    </Chip.Group>
-                                                    {form.errors.activityLevel && (
-                                                        <Text size="xs" c="danger">
-                                                            {form.errors.activityLevel}
-                                                        </Text>
-                                                    )}
-                                                </Stack>
-                                                <Stack gap="xs" mt="xs">
-                                                    <Text size="sm" fw={500}>
-                                                        Food preferences
-                                                    </Text>
-                                                    <Chip.Group
-                                                        multiple
-                                                        value={form.values.foodPreferences}
-                                                        onChange={(value) =>
-                                                            form.setFieldValue("foodPreferences", value)
-                                                        }
-                                                    >
-                                                        <Group gap="xs">
-                                                            {FOOD_PREFERENCE_SUGGESTIONS.map((option) => (
-                                                                <Chip key={option} value={option} size="sm">
-                                                                    {option}
-                                                                </Chip>
-                                                            ))}
-                                                        </Group>
-                                                    </Chip.Group>
-                                                </Stack>
-                                                <Text size="xs" c="dimmed" mt="xs">
-                                                    Height, weight, and activity are used to personalise nutrition and care suggestions.
+                                                        <Radio.Group
+                                                            label="Gender"
+                                                            {...form.getInputProps("gender")}
+                                                        >
+                                                            <Group mt={6}>
+                                                                {GENDER_OPTIONS.map((option) => (
+                                                                    <Radio
+                                                                        key={option.value}
+                                                                        size="sm"
+                                                                        value={option.value}
+                                                                        label={option.label}
+                                                                    />
+                                                                ))}
+                                                            </Group>
+                                                        </Radio.Group>
+                                                        <TextInput
+                                                            size="sm"
+                                                            label="Location"
+                                                            placeholder="Chennai"
+                                                            {...form.getInputProps("location")}
+                                                        />
+                                                        <TextInput
+                                                            size="sm"
+                                                            label="Date of birth"
+                                                            placeholder="DD/MM/YYYY"
+                                                            {...form.getInputProps("dateOfBirth")}
+                                                        />
+                                                        <Select
+                                                            size="sm"
+                                                            label="Country"
+                                                            placeholder="Select country"
+                                                            searchable
+                                                            data={COUNTRIES}
+                                                            {...form.getInputProps("country")}
+                                                        />
+                                                    </>
+                                                );
+                                            }
+
+                                            return (
+                                                <Text size="sm" c="dimmed">
+                                                    Identity details are already complete.
                                                 </Text>
-                                            </>
-                                        );
-                                    }
+                                            );
+                                        })()}
+                                    </Stack>
+                                </Stepper.Step>
+                            )}
 
-                                    return (
-                                        <Text size="sm" c="dimmed">
-                                            Health profile details are already complete.
-                                        </Text>
-                                    );
-                                })()}
-                            </Stack>
-                            </Stepper.Step>
-                        )}
+                            {needsHealth && (
+                                <Stepper.Step
+                                    icon={<IconActivity size={14} />}
+                                    label="Health"
+                                    description="Vitals, activity, food"
+                                >
+                                    <Stack gap="md" mt={spacing.sm}>
+                                        <Group gap={6}>
+                                            <IconActivity size={15} color={colors.success} />
+                                            <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                                                Health Profile
+                                            </Text>
+                                        </Group>
+
+                                        {(() => {
+                                            if (needsHealth) {
+                                                return (
+                                                    <>
+                                                        <Group grow align="flex-start" gap="md">
+                                                            <Stack gap="xs">
+                                                                <Text size="sm" fw={500}>
+                                                                    Height (cm)
+                                                                </Text>
+                                                                <Slider
+                                                                    size="sm"
+                                                                    min={120}
+                                                                    max={220}
+                                                                    step={1}
+                                                                    marks={HEIGHT_MARKS}
+                                                                    value={form.values.height === "" ? 170 : Number(form.values.height)}
+                                                                    onChange={(v) => form.setFieldValue("height", String(v))}
+                                                                    label={(value) => `${value} cm`}
+                                                                />
+                                                                {form.errors.height && (
+                                                                    <Text size="xs" c="danger">
+                                                                        {form.errors.height}
+                                                                    </Text>
+                                                                )}
+                                                            </Stack>
+                                                            <Stack gap="xs">
+                                                                <Text size="sm" fw={500}>
+                                                                    Weight (kg)
+                                                                </Text>
+                                                                <Slider
+                                                                    size="sm"
+                                                                    min={30}
+                                                                    max={200}
+                                                                    step={1}
+                                                                    marks={WEIGHT_MARKS}
+                                                                    value={form.values.weight === "" ? 70 : Number(form.values.weight)}
+                                                                    onChange={(v) => form.setFieldValue("weight", String(v))}
+                                                                    label={(value) => `${value} kg`}
+                                                                />
+                                                                {form.errors.weight && (
+                                                                    <Text size="xs" c="danger">
+                                                                        {form.errors.weight}
+                                                                    </Text>
+                                                                )}
+                                                            </Stack>
+                                                        </Group>
+                                                        <Stack gap="xs" mt="md">
+                                                            <Text size="sm" fw={500}>
+                                                                Activity level
+                                                            </Text>
+                                                            <Chip.Group
+                                                                multiple={false}
+                                                                value={form.values.activityLevel}
+                                                                onChange={(value) =>
+                                                                    form.setFieldValue("activityLevel", String(value ?? ""))
+                                                                }
+                                                            >
+                                                                <Group gap="xs">
+                                                                    {ACTIVITY_OPTIONS.map((option) => (
+                                                                        <Chip key={option.value} value={option.value} size="sm">
+                                                                            {option.label.split(" — ")[0]}
+                                                                        </Chip>
+                                                                    ))}
+                                                                </Group>
+                                                            </Chip.Group>
+                                                            {form.errors.activityLevel && (
+                                                                <Text size="xs" c="danger">
+                                                                    {form.errors.activityLevel}
+                                                                </Text>
+                                                            )}
+                                                        </Stack>
+                                                        <Stack gap="xs" mt="xs">
+                                                            <Text size="sm" fw={500}>
+                                                                Food preferences
+                                                            </Text>
+                                                            <Chip.Group
+                                                                multiple
+                                                                value={form.values.foodPreferences}
+                                                                onChange={(value) =>
+                                                                    form.setFieldValue("foodPreferences", value)
+                                                                }
+                                                            >
+                                                                <Group gap="xs">
+                                                                    {FOOD_PREFERENCE_SUGGESTIONS.map((option) => (
+                                                                        <Chip key={option} value={option} size="sm">
+                                                                            {option}
+                                                                        </Chip>
+                                                                    ))}
+                                                                </Group>
+                                                            </Chip.Group>
+                                                        </Stack>
+                                                        <Stack gap="xs" mt="xs">
+                                                            <Group gap={6}>
+                                                                <IconAlertTriangle size={15} color={colors.warning} />
+                                                                <Text size="sm" fw={500}>
+                                                                    Allergies
+                                                                </Text>
+                                                            </Group>
+                                                            <Chip.Group
+                                                                multiple
+                                                                value={form.values.allergies}
+                                                                onChange={(value) =>
+                                                                    form.setFieldValue("allergies", value)
+                                                                }
+                                                            >
+                                                                <Group gap="xs">
+                                                                    {ALLERGY_SUGGESTIONS.map((option) => (
+                                                                        <Chip key={option} value={option} size="sm">
+                                                                            {option}
+                                                                        </Chip>
+                                                                    ))}
+                                                                </Group>
+                                                            </Chip.Group>
+                                                            <Text size="xs" c="dimmed">
+                                                                Leave all options unselected if you are unsure — you can update this later.
+                                                            </Text>
+                                                        </Stack>
+                                                        <Text size="xs" c="dimmed" mt="xs">
+                                                            Height, weight, and activity are used to personalise nutrition and care suggestions.
+                                                        </Text>
+                                                    </>
+                                                );
+                                            }
+
+                                            return (
+                                                <Text size="sm" c="dimmed">
+                                                    Health profile details are already complete.
+                                                </Text>
+                                            );
+                                        })()}
+                                    </Stack>
+                                </Stepper.Step>
+                            )}
 
                         </Stepper>
                     </Box>

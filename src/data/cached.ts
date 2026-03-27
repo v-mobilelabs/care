@@ -30,7 +30,14 @@ export const CacheTags = {
   symptomObservations: (userId: string) => `symptom-observations:${userId}`,
   referrals: (userId: string) => `referrals:${userId}`,
   metrics: (profileId: string) => `metrics:${profileId}`,
+  medicationMatchUser: (userId: string) => `medication-match:${userId}`,
+  medicationMatch: (userId: string, query: string) =>
+    `medication-match:${userId}:${query}`,
 } as const;
+
+function normalizeCacheQuery(query: string): string {
+  return query.toLowerCase().replaceAll(/\s+/g, " ").trim();
+}
 
 // ── Cached usage (credits / minutes / storage) ──────────────────────────────
 
@@ -170,6 +177,37 @@ export async function getCachedMedicationsWithFilters(
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.q ? { q: filters.q } : {}),
     ...(filters.sortDir ? { sortDir: filters.sortDir } : {}),
+  });
+}
+
+export async function getCachedMedicationMatches(args: {
+  userId: string;
+  profileId: string;
+  query: string;
+  limit?: number;
+}) {
+  "use cache";
+  const normalizedQuery = normalizeCacheQuery(args.query);
+  cacheTag(CacheTags.medicationMatchUser(args.userId));
+  cacheTag(CacheTags.medicationMatch(args.userId, normalizedQuery));
+  cacheLife("minutes");
+
+  const { runMedicationMatchGraph } =
+    await import("@/workflow/medication-match.workflow");
+
+  const req = new Request("http://internal/api/medications/match", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: args.query,
+      ...(args.limit ? { limit: args.limit } : {}),
+    }),
+  });
+
+  return runMedicationMatchGraph({
+    userId: args.userId,
+    profileId: args.profileId,
+    req,
   });
 }
 

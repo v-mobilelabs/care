@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { ExtractPrescriptionUseCase } from "@/data/prescriptions";
+import { runPrescriptionExtractByFileGraph } from "@/workflow/prescription-api-flow.workflow";
 
 // Re-export types so existing client code that imports from this path keeps working
 export type { ExtractedMedication, ExtractResult } from "@/data/prescriptions";
@@ -10,7 +10,7 @@ export type { ExtractedMedication, ExtractResult } from "@/data/prescriptions";
 // CreditsExhaustedError propagates to WithContext → standard 402 response.
 export const POST = WithContext<{ fileId: string }>(
   async ({ user, profileId }, { fileId }) => {
-    const prescription = await new ExtractPrescriptionUseCase().execute({
+    const prescription = await runPrescriptionExtractByFileGraph({
       userId: user.uid,
       profileId,
       fileId,

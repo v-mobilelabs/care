@@ -40,7 +40,7 @@ import {
   fetchMemory,
 } from "@/data/shared/service/middleware/pre-run";
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
-import { runGatewayOrchestrator } from "@/data/shared/service/agents/gateway/langgraph-gateway-orchestrator.service";
+import { runGatewayOrchestrator } from "@/workflow/gateway-orchestrator.workflow";
 import { classifyKnownProfileIntent } from "@/data/shared/service/agents/gateway/known-profile-intent";
 import { messageRepository } from "../repositories/message.repository";
 import { sessionRepository } from "../repositories/session.repository";
@@ -250,16 +250,13 @@ function readReportHandoffFromPart(
 
     const reasonRaw = input?.reason;
     const reportLabelRaw = input?.reportLabel;
-    const result: ReportHandoffSignal = {
+    return {
       nextSpecialist: nextSpecialistRaw.trim(),
       autoRoute: true,
       reason: typeof reasonRaw === "string" ? reasonRaw : undefined,
       reportLabel:
         typeof reportLabelRaw === "string" ? reportLabelRaw : undefined,
     };
-
-    console.log(`[readReportHandoffFromPart] Found: ${JSON.stringify(result)}`);
-    return result;
   }
 
   // Fallback: legacy/implicit handoff encoded in submitReport input/output.
@@ -284,46 +281,27 @@ function readReportHandoffFromPart(
   const reasonRaw = handoff?.reason ?? output?.handoffReason;
   const reportLabelRaw = input?.reportLabel ?? output?.reportLabel;
 
-  const result: ReportHandoffSignal = {
+  return {
     nextSpecialist: nextSpecialistRaw.trim(),
     autoRoute: typeof autoRouteRaw === "boolean" ? autoRouteRaw : true,
     reason: typeof reasonRaw === "string" ? reasonRaw : undefined,
     reportLabel:
       typeof reportLabelRaw === "string" ? reportLabelRaw : undefined,
   };
-
-  console.log(`[readReportHandoffFromPart] Found: ${JSON.stringify(result)}`);
-  return result;
 }
 
 function findLatestReportHandoff(
   messages: ReadonlyArray<UIMessage>,
 ): ReportHandoffSignal | undefined {
-  console.log(
-    `[findLatestReportHandoff] Searching through ${messages.length} messages`,
-  );
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    console.log(
-      `[findLatestReportHandoff] Checking message ${i}: role=${message.role}, parts=${message.parts.length}`,
-    );
     if (message.role !== "assistant") continue;
 
     for (let j = message.parts.length - 1; j >= 0; j -= 1) {
-      const part = message.parts[j];
-      console.log(
-        `[findLatestReportHandoff] Checking part ${j}: type=${(part as { type?: string }).type}`,
-      );
-      const handoff = readReportHandoffFromPart(part);
-      if (handoff?.autoRoute) {
-        console.log(
-          `[PrepareChatUseCase] Found report handoff: nextSpecialist=${handoff.nextSpecialist}, reason=${handoff.reason}, label=${handoff.reportLabel}`,
-        );
-        return handoff;
-      }
+      const handoff = readReportHandoffFromPart(message.parts[j]);
+      if (handoff?.autoRoute) return handoff;
     }
   }
-  console.log("[findLatestReportHandoff] No handoff found in any message");
   return undefined;
 }
 

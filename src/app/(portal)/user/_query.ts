@@ -246,6 +246,28 @@ export interface PaginatedMedicationsResponse {
   totalCount?: number;
 }
 
+export interface MedicationMatchRecord {
+  id: string;
+  name: string;
+  brandName?: string;
+  genericName?: string;
+  dosage?: string;
+  form?: string;
+  route?: string;
+  drugType?: string;
+  composition?: string[];
+  display: string;
+  source: "knowledge_base" | "web";
+  sourceUrl?: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface MedicationMatchResponse {
+  query: string;
+  resolvedFrom: "knowledge_base" | "web" | "none";
+  matches: MedicationMatchRecord[];
+}
+
 export interface DietFood {
   item: string;
   portion: string;
@@ -356,7 +378,7 @@ export function useInfiniteSessionsQuery(filters?: {
 export function useCreditsQuery() {
   return useQuery({
     queryKey: chatKeys.credits(),
-    queryFn: () => apiFetch<UsageDto>("/api/credits"),
+    queryFn: () => apiFetch<UsageDto>("/api/credits", { cache: "no-store" }),
     placeholderData: keepPreviousData,
   });
 }
@@ -860,6 +882,17 @@ export interface AddMedicationPayload {
   instructions?: string;
   condition?: string;
   status?: MedicationStatus;
+}
+
+export function useMedicationMatchMutation() {
+  return useMutation({
+    mutationFn: (payload: { query: string; limit?: number }) =>
+      apiFetch<MedicationMatchResponse>("/api/medications/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+  });
 }
 
 /** Add a new medication to the user's list. */
@@ -1648,6 +1681,7 @@ export interface PatientRecord {
   hipCm?: number;
   activityLevel?: ActivityLevel;
   foodPreferences?: string[];
+  allergies?: string[];
   bloodGroup?: string;
   consentedAt?: string;
   updatedAt?: string;

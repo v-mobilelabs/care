@@ -31,6 +31,7 @@ const UpsertPatientUseCaseSchema = UpsertPatientSchema.extend({
     "bloodGroup",
     "activityLevel",
     "foodPreferences",
+    "allergies",
     "waistCm",
     "hipCm",
     "neckCm",

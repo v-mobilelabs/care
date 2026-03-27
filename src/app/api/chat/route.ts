@@ -11,9 +11,10 @@ import {
   handleChatStreamError,
   runChatPreparationGraph,
   scheduleChatPersistence,
+  loadChatWorkflowResumeState,
   type PersistPayload,
   streamDirectResponse,
-} from "@/data/shared/service/agents/chat/langgraph-chat-api-flow.service";
+} from "@/workflow/chat-api-flow.workflow";
 
 export const POST = WithContext(async ({ user, profileId, req }) => {
   console.log("[Chat API] Request started");
@@ -39,6 +40,13 @@ export const POST = WithContext(async ({ user, profileId, req }) => {
     directResponse,
     toolOutputMerge,
   } = preparedChat;
+
+  // ─ Optional: Load persisted workflow state from previous turns (recovery/audit) ──────────────
+  // Uncomment to restore context after a failure:
+  // const resumeState = await loadChatWorkflowResumeState({ profileId, sessionId });
+  // if (resumeState?.checkpoint?.nodeName === 'finalize_persistence') {
+  //   // Previous turn completed persistence — safe to continue
+  // }
 
   let persistPayload: PersistPayload | null = null;
 

@@ -52,7 +52,7 @@ import {
   runAgentExecutionGraph,
   type AgentExecutionOptions,
   type AgentThinkingLevel,
-} from "@/data/shared/service/agents/base/langgraph-agent-execution.service";
+} from "@/workflow/agent-execution.workflow";
 import { modelIds, sharedModels } from "@/data/shared/service/model";
 import type { ProfileDto } from "@/data/profile";
 

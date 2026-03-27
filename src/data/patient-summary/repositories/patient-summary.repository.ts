@@ -33,6 +33,7 @@ function buildContentDefaults(): Omit<
     allergies: [],
     riskFactors: [],
     recommendations: [],
+    actionItems: [],
   };
 }
 

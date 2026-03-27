@@ -1,5 +1,4 @@
 import { CreateSymptomObservationUseCase } from "@/data/symptom-observations";
-import { normalizeClinicalSymptomTerm } from "./clinical-symptom-normalizer";
 import { normalizeClinicalTermsWithLlm } from "./llm-clinical-symptom-normalizer.service";
 
 export interface AssessmentQaForSymptomSync {
@@ -16,6 +15,65 @@ type SymptomEntry = {
   severity?: number;
   toolCallId?: string;
 };
+
+const DISALLOWED_SYMPTOM_LABELS = new Set([
+  "patient education",
+  "prolonged duration",
+  "frequent",
+  "frequency",
+  "duration",
+  "severity",
+  "mild",
+  "moderate",
+  "severe",
+  "yes",
+  "no",
+  "none",
+  "not at all",
+  "never",
+]);
+
+function normalizeQuestionType(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isSymptomFocusedQuestion(question: string): boolean {
+  return /\b(symptom|symptoms|complaint|problem|issue|pain|discomfort|swelling|bleeding|rash|cough|fever|headache|nausea|vomiting|dizziness|fatigue|breathlessness|shortness of breath)\b/i.test(
+    question,
+  );
+}
+
+function normalizeLabelForFilter(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9\s-]/g, "")
+    .replaceAll(/\s+/g, " ");
+}
+
+function isDisallowedSymptomLabel(value: string): boolean {
+  const normalized = normalizeLabelForFilter(value);
+  if (!normalized) return true;
+  if (DISALLOWED_SYMPTOM_LABELS.has(normalized)) return true;
+  if (/^\d+(?:\.\d+)?$/.test(normalized)) return true;
+
+  const qualifierOnlyTerms = new Set([
+    "frequent",
+    "frequently",
+    "often",
+    "sometimes",
+    "occasionally",
+    "rare",
+    "rarely",
+    "always",
+    "intermittent",
+    "prolonged",
+    "acute",
+    "chronic",
+  ]);
+
+  return qualifierOnlyTerms.has(normalized);
+}
 
 function parseSeverityFromAnswer(answer: string): number | undefined {
   const trimmed = answer.trim();
@@ -89,8 +147,10 @@ function splitMultiChoiceAnswer(answer: string): string[] {
 }
 
 function pickSymptomLabel(pair: AssessmentQaForSymptomSync): string {
+  const normalizedType = normalizeQuestionType(pair.questionType);
   const questionLabel =
-    extractSymptomFromQuestion(pair.question) ?? normalizeSymptomLabel(pair.question);
+    extractSymptomFromQuestion(pair.question) ??
+    normalizeSymptomLabel(pair.question);
   const answerLabel = normalizeAnswerLabel(pair.answer);
 
   if (!answerLabel || isGenericAnswerLabel(answerLabel)) return questionLabel;
@@ -100,9 +160,18 @@ function pickSymptomLabel(pair: AssessmentQaForSymptomSync): string {
     (option) => option.trim().toLowerCase() === answerLabel.toLowerCase(),
   );
 
-  if (matchedOption) return normalizeAnswerLabel(matchedOption);
+  if (
+    matchedOption &&
+    normalizedType === "multi_choice" &&
+    isSymptomFocusedQuestion(pair.question)
+  ) {
+    return normalizeAnswerLabel(matchedOption);
+  }
 
-  if (pair.questionType.trim().toLowerCase() === "multi_choice") {
+  if (
+    normalizedType === "multi_choice" &&
+    isSymptomFocusedQuestion(pair.question)
+  ) {
     const fragments = splitMultiChoiceAnswer(answerLabel);
     if (fragments.length > 0) return normalizeAnswerLabel(fragments[0]);
   }
@@ -118,9 +187,7 @@ function toIdempotencyKey(args: {
   answer: string;
 }): string {
   const runId = args.runId ?? "session";
-  const normalizedSymptom = args.symptom
-    .toLowerCase()
-    .replaceAll(/\s+/g, "-");
+  const normalizedSymptom = args.symptom.toLowerCase().replaceAll(/\s+/g, "-");
   const normalizedAnswer = args.answer.toLowerCase().replaceAll(/\s+/g, "-");
 
   const parts = [args.sessionId, runId];
@@ -145,9 +212,22 @@ function buildSymptomEntryFromQa(
 
   const symptom = pickSymptomLabel(pair);
   if (!symptom) return null;
+  if (isDisallowedSymptomLabel(symptom)) return null;
+
+  const normalizedQuestionLabel = normalizeLabelForFilter(
+    normalizeSymptomLabel(pair.question),
+  );
+  const normalizedSymptom = normalizeLabelForFilter(symptom);
+
+  if (
+    normalizedSymptom === normalizedQuestionLabel &&
+    !isSymptomFocusedQuestion(pair.question)
+  ) {
+    return null;
+  }
 
   return {
-    symptom: normalizeClinicalSymptomTerm(symptom),
+    symptom,
     answer,
     severity: type === "scale" ? parseSeverityFromAnswer(answer) : undefined,
     toolCallId: pair.toolCallId,
@@ -167,6 +247,18 @@ export async function syncSymptomObservationsFromAssessment(args: {
   condition?: string;
   qa: AssessmentQaForSymptomSync[];
 }) {
+  if (!args.assessmentId) {
+    console.warn(
+      "[SymptomSync] Skipping assessment symptom sync because assessmentId is missing",
+      {
+        userId: args.userId,
+        sessionId: args.sessionId,
+        runId: args.runId,
+      },
+    );
+    return;
+  }
+
   const entries = args.qa
     .map(buildSymptomEntryFromQa)
     .filter(isPresentEntry)
@@ -181,10 +273,14 @@ export async function syncSymptomObservationsFromAssessment(args: {
 
   const normalizedEntries = entries.map((entry, index) => ({
     ...entry,
-    symptom: normalizeClinicalSymptomTerm(
-      llmNormalizedSymptoms[index] ?? entry.symptom,
-    ),
+    symptom: llmNormalizedSymptoms[index] ?? "",
   }));
+
+  if (normalizedEntries.some((entry) => entry.symptom.trim().length === 0)) {
+    throw new Error(
+      "LLM symptom normalization returned an empty assessment symptom.",
+    );
+  }
 
   await Promise.all(
     normalizedEntries.map(async (entry) =>

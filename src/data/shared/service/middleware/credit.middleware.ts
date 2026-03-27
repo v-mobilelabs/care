@@ -4,7 +4,7 @@
  * Wraps both `generate` and `stream` paths so every model invocation
  * is gated regardless of how the agent invokes the model internally.
  *
- * Uses the monthly usage system (`usage/{profile}`) so the deduction is
+ * Uses the monthly usage system (`usage/{uid}`) so the deduction is
  * visible via GET /api/credits which reads from the same collection.
  *
  * Throws `CreditsExhaustedError` (caught by the route handler → 402)
@@ -31,11 +31,8 @@ export function creditMiddleware(userId: string): LanguageModelMiddleware {
   async function gate(): Promise<void> {
     if (consumed) return;
     consumed = true;
-    const usage = await usageService.getUsage(userId);
-    if (usage.credits <= 0) throw new CreditsExhaustedError(0);
-    await usageService.updateUsage(userId, {
-      credits: usage.credits - 1,
-    });
+    const remaining = await usageService.consumeCredit(userId);
+    if (remaining < 0) throw new CreditsExhaustedError(0);
   }
 
   return {

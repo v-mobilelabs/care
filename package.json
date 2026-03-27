@@ -7,6 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "verify:workflow-state": "NODE_ENV=development npx tsx --env-file=.env scripts/workflow-state/check-concurrency-recovery.mts",
     "ai:devtool": "npx @ai-sdk/devtools",
     "seed:nutrition": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-nutrition.ts",
     "seed:admin": "NODE_ENV=development npx tsx --env-file=.env.local scripts/seed/seed-admin-user.ts",

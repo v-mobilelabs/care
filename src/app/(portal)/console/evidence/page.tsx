@@ -1,19 +1,11 @@
 import { Suspense } from "react";
 import { Box, Paper, Text } from "@mantine/core";
 import { getServerUser } from "@/lib/api/server-prefetch";
+import { isAdminUser } from "@/lib/auth/admin";
 import { EvidenceContent } from "./_content";
 import EvidenceLoading from "./loading";
 
 export const metadata = { title: "Evidence Inspector" };
-
-function getAdminEmails(): string[] {
-  const value = process.env.ADMIN_EMAILS;
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => email.length > 0);
-}
 
 export default async function EvidencePage() {
   const user = await getServerUser();
@@ -32,8 +24,7 @@ export default async function EvidencePage() {
     );
   }
 
-  const adminEmails = getAdminEmails();
-  const isAdmin = adminEmails.includes(user.email.toLowerCase());
+  const isAdmin = isAdminUser(user);
 
   if (!isAdmin) {
     return (

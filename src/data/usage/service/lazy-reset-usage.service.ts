@@ -8,7 +8,7 @@ const USAGE_DEFAULTS = {
 };
 
 export class UsageService {
-  constructor(private repo: UsageRepository) {}
+  constructor(private readonly repo: UsageRepository) {}
 
   private getCurrentMonth(): string {
     const now = new Date();
@@ -18,7 +18,7 @@ export class UsageService {
   async getUsage(profile: string): Promise<Usage> {
     let usage = await this.repo.getUsage(profile);
     const currentMonth = this.getCurrentMonth();
-    if (!usage || usage.lastReset !== currentMonth) {
+    if (usage?.lastReset !== currentMonth) {
       usage = {
         profile,
         credits: USAGE_DEFAULTS.credits,
@@ -40,9 +40,10 @@ export class UsageService {
 
   /** Decrement one credit and return the remaining count. Throws nothing — caller checks < 0. */
   async consumeCredit(profile: string): Promise<number> {
-    const usage = await this.getUsage(profile);
-    const remaining = usage.credits - 1;
-    await this.repo.setUsage(profile, { ...usage, credits: remaining });
-    return remaining;
+    return this.repo.consumeCredit({
+      profile,
+      currentMonth: this.getCurrentMonth(),
+      defaults: USAGE_DEFAULTS,
+    });
   }
 }

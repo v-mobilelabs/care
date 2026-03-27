@@ -7,6 +7,7 @@ import {
 } from "ai";
 import { after } from "next/server";
 import { revalidateTag } from "next/cache";
+import { workflowStateService } from "@/data/workflow-state";
 import {
   AddMessageUseCase,
   PrepareChatUseCase,
@@ -17,6 +18,8 @@ import {
 } from "@/data/sessions";
 import type { PrepareChatInput } from "@/data/sessions/use-cases/prepare-chat.use-case";
 import { CreateAssessmentUseCase } from "@/data/assessments";
+import { CreateDietPlanUseCase, type DietDay } from "@/data/diet-plans";
+import { CreatePatientSummaryUseCase } from "@/data/patient-summary";
 import { ListConditionsUseCase } from "@/data/conditions";
 import { syncSymptomObservationsFromAssessment } from "@/data/symptom-observations/service/sync-from-assessment.service";
 import { CacheTags } from "@/data/cached";
@@ -31,9 +34,17 @@ import { contextCacheService } from "@/data/shared/service/context-cache.service
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
 import { getModelIdForThinkingLevel } from "@/data/shared/service/model";
 import {
+  EnhancedDietDaySchema,
+  type EnhancedDietDay,
+} from "@/data/diet-plans/models/nutrition.model";
+import {
   normalizeGroundingQuery,
   shouldPersistGroundingCache,
 } from "@/data/shared/service/agents/gateway/grounding-layer.service";
+import {
+  SubmitReportSchema,
+  type SubmitReportInput,
+} from "@/data/shared/service/agents/base/tools/submit-report.tool";
 
 type AssistantModelMessage = Extract<ModelMessage, { role: "assistant" }>;
 
@@ -153,6 +164,18 @@ export type ChatPersistenceGraphInput = {
   options: BackgroundPersistOptions;
 };
 
+export type ChatWorkflowResumeState = {
+  threadId: string;
+  workflowName: string;
+  threadState?: Record<string, unknown>;
+  checkpoint?: {
+    checkpointId: string;
+    nodeName?: string;
+    state: Record<string, unknown>;
+    createdAt: string;
+  };
+};
+
 type CapturedUsage = {
   promptTokens: number;
   completionTokens: number;
@@ -182,6 +205,66 @@ type ChatPersistenceState = ChatPersistenceGraphInput & {
   skipPersistence: boolean;
   result: { persisted: boolean } | null;
 };
+
+/**
+ * Load persisted workflow state & latest checkpoint for a chat session.
+ *
+ * Use this to restore context after a failure or to check if previous turns
+ * already completed certain operations (e.g., assessment, grounding persistence).
+ *
+ * Example usage in `/api/chat`:
+ * ```ts
+ * const { isUserTurn, preparedChat } = await runChatPreparationGraph(...);
+ * const resumeState = await loadChatWorkflowResumeState({
+ *   profileId,
+ *   sessionId: preparedChat.sessionId,
+ * });
+ * if (resumeState?.checkpoint?.nodeName === 'finalize_persistence') {
+ *   // Previous turn completed persistence — safe to assume state synchronized
+ * }
+ * ```
+ *
+ * Returns `null` if no active thread or checkpoint exists (first chat turn or expired).
+ */
+export async function loadChatWorkflowResumeState(args: {
+  profileId: string;
+  sessionId: string;
+  threadId?: string;
+}): Promise<ChatWorkflowResumeState | null> {
+  const threadId = args.threadId ?? args.sessionId;
+
+  const [thread, checkpoint] = await Promise.all([
+    workflowStateService.getActiveThreadState({
+      profileId: args.profileId,
+      sessionId: args.sessionId,
+      threadId,
+    }),
+    workflowStateService.getLatestActiveCheckpoint({
+      profileId: args.profileId,
+      sessionId: args.sessionId,
+      threadId,
+    }),
+  ]);
+
+  if (!thread && !checkpoint) return null;
+
+  return {
+    threadId,
+    workflowName:
+      thread?.workflowName ?? checkpoint?.workflowName ?? "chat-api-flow",
+    ...(thread ? { threadState: thread.state } : {}),
+    ...(checkpoint
+      ? {
+          checkpoint: {
+            checkpointId: checkpoint.checkpointId,
+            ...(checkpoint.nodeName ? { nodeName: checkpoint.nodeName } : {}),
+            state: checkpoint.state,
+            createdAt: checkpoint.createdAt,
+          },
+        }
+      : {}),
+  };
+}
 
 function toToolPart(part: unknown): ToolPartLike | null {
   if (!part || typeof part !== "object") return null;
@@ -296,6 +379,149 @@ function extractAnsweredQaPairs(parts: unknown[]): ExtractedQaPair[] {
   return out;
 }
 
+function normalizeDietDayMeal(
+  meal: EnhancedDietDay["meals"]["breakfast"],
+): DietDay["meals"][number] {
+  return {
+    name: meal.name,
+    time: meal.time,
+    foods: meal.foods.map((food) => ({
+      item: food.item,
+      portion: food.portion,
+      calories: food.calories,
+      ...(food.weight_grams ? { weight: food.weight_grams } : {}),
+      nutrition: {
+        protein: food.macros.protein_g,
+        carbs: food.macros.carbs_g,
+        fat: food.macros.fats_g,
+        fiber: food.macros.fiber_g,
+      },
+      ...(food.allergens.length > 0 ? { allergens: food.allergens } : {}),
+      dietaryType: food.dietaryType,
+    })),
+    totalCalories: meal.totalCalories,
+  };
+}
+
+function normalizeDietDay(day: EnhancedDietDay): DietDay {
+  const { breakfast, lunch, snack, dinner } = day.meals;
+  return {
+    day: day.day,
+    meals: [
+      normalizeDietDayMeal(breakfast),
+      normalizeDietDayMeal(lunch),
+      normalizeDietDayMeal(snack),
+      normalizeDietDayMeal(dinner),
+    ],
+    totalCalories: day.dailyTotals.calories,
+  };
+}
+
+function extractSubmittedDietDays(parts: unknown[]): EnhancedDietDay[] {
+  const latestByDay = new Map<number, EnhancedDietDay>();
+
+  for (const raw of parts) {
+    const part = toToolPart(raw);
+    if (part?.type !== "tool-submitDailyPlan") continue;
+    if (part.state !== "output-available" && part.state !== "result") {
+      continue;
+    }
+
+    const payload = part.input ?? part.args;
+    const parsed = EnhancedDietDaySchema.safeParse(payload);
+    if (!parsed.success) continue;
+    latestByDay.set(parsed.data.day_number, parsed.data);
+  }
+
+  return [...latestByDay.values()].sort((a, b) => a.day_number - b.day_number);
+}
+
+async function syncDietPlanFromAssistantParts(args: {
+  userId: string;
+  sessionId: string;
+  parts: unknown[];
+}): Promise<void> {
+  const submittedDays = extractSubmittedDietDays(args.parts);
+  if (submittedDays.length === 0) return;
+
+  const weeklyPlan = submittedDays.map(normalizeDietDay);
+  const totalCalories =
+    submittedDays.reduce((sum, day) => sum + day.dailyTotals.calories, 0) /
+    submittedDays.length;
+
+  await new CreateDietPlanUseCase().execute({
+    userId: args.userId,
+    sessionId: args.sessionId,
+    condition: "Personalized nutrition plan",
+    overview:
+      "AI-generated weekly diet plan created during this session for follow-up and tracking.",
+    totalDailyCalories: Math.round(totalCalories),
+    weeklyPlan,
+    recommended: [],
+    avoid: [],
+    tips: [],
+  });
+}
+
+function extractLatestSubmittedReport(
+  parts: unknown[],
+): SubmitReportInput | null {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = toToolPart(parts[index]);
+    if (part?.type !== "tool-submitReport") continue;
+    if (part.state !== "output-available" && part.state !== "result") {
+      continue;
+    }
+
+    const payload = part.input ?? part.args;
+    const parsed = SubmitReportSchema.safeParse(payload);
+    if (!parsed.success) continue;
+    return parsed.data;
+  }
+
+  return null;
+}
+
+async function syncPatientSummaryFromAssistantParts(args: {
+  userId: string;
+  sessionId: string;
+  parts: unknown[];
+}): Promise<void> {
+  const report = extractLatestSubmittedReport(args.parts);
+  if (!report) return;
+
+  const recommendations = [
+    ...(report.recommendations ?? []),
+    ...(report.recommendedFollowUp ?? []),
+  ];
+
+  const narrativeBlocks = [
+    report.summary,
+    report.findings ? `Findings: ${report.findings}` : undefined,
+    report.impression ? `Impression: ${report.impression}` : undefined,
+    report.limitations ? `Limitations: ${report.limitations}` : undefined,
+  ].filter((value): value is string =>
+    Boolean(value && value.trim().length > 0),
+  );
+
+  const narrative = narrativeBlocks.join("\n\n");
+  if (narrative.length === 0) return;
+
+  await new CreatePatientSummaryUseCase().execute({
+    userId: args.userId,
+    sessionId: args.sessionId,
+    title: report.title,
+    narrative,
+    chiefComplaints: [],
+    diagnoses: [],
+    medications: [],
+    vitals: [],
+    allergies: [],
+    riskFactors: report.criticalFindings ?? [],
+    recommendations,
+  });
+}
+
 function getErrorStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
 
@@ -316,6 +542,14 @@ function getErrorStatusCode(error: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function isFirestoreMissingUpdateTargetError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
+  if (statusCode !== 5) return false;
+
+  const errorText = getErrorText(error).toLowerCase();
+  return errorText.includes("no document to update");
 }
 
 function getErrorText(error: unknown): string {
@@ -816,16 +1050,17 @@ export function handleAgentStreamFinish(args: {
   const isContinuationTurn = args.isUserTurn
     ? false
     : Boolean(args.toolOutputMerge);
+  const previousParts = parseStoredParts(args.toolOutputMerge?.content);
+  const nextPersistedParts = isContinuationTurn
+    ? [...previousParts, ...storableParts]
+    : storableParts;
   const continuationHasDelta = isContinuationTurn
-    ? hasPartsDelta(
-        parseStoredParts(args.toolOutputMerge?.content),
-        storableParts,
-      )
+    ? hasPartsDelta(previousParts, nextPersistedParts)
     : true;
 
   if (hasMeaningfulContent && continuationHasDelta) {
     args.setPersistPayload({
-      responseParts: storableParts,
+      responseParts: nextPersistedParts,
       userContent:
         args.ctx.storableParts.length > 0
           ? JSON.stringify(args.ctx.storableParts)
@@ -839,7 +1074,6 @@ export function handleAgentStreamFinish(args: {
     const emptyReason = hasMeaningfulContent
       ? "no continuation delta"
       : "no meaningful parts";
-    const previousParts = parseStoredParts(args.toolOutputMerge?.content);
     console.warn(
       `[Chat API] Empty model response (${emptyReason}). finishReason: ${finishReason ?? "unknown"}, ` +
         `totalOutput: ${args.usageState.totalOutputTokens}, zeroOutputSteps: ${args.usageState.zeroOutputSteps}`,
@@ -1071,15 +1305,47 @@ async function persistAssistantMessageNode(
       console.log(
         "[Chat API] Updating existing assistant message (continuation)...",
       );
-      await messageRepository.updateContent(
-        state.userId,
-        state.profileId,
-        state.sessionId,
-        state.persistPayload.continuationMessageId,
-        JSON.stringify(state.persistPayload.responseParts),
-        state.capturedUsage,
-      );
-      return { assistantMessageId: state.persistPayload.continuationMessageId };
+      try {
+        await messageRepository.updateContent(
+          state.userId,
+          state.profileId,
+          state.sessionId,
+          state.persistPayload.continuationMessageId,
+          JSON.stringify(state.persistPayload.responseParts),
+          state.capturedUsage,
+        );
+        return {
+          assistantMessageId: state.persistPayload.continuationMessageId,
+        };
+      } catch (updateError) {
+        if (!isFirestoreMissingUpdateTargetError(updateError)) {
+          throw updateError;
+        }
+
+        console.warn(
+          "[Chat API] Continuation target missing; creating a new assistant message instead.",
+          {
+            sessionId: state.sessionId,
+            profileId: state.profileId,
+            missingMessageId: state.persistPayload.continuationMessageId,
+          },
+        );
+
+        const savedAssistant = await new AddMessageUseCase().execute({
+          userId: state.userId,
+          profileId: state.profileId,
+          sessionId: state.sessionId,
+          role: "assistant",
+          content: JSON.stringify(state.persistPayload.responseParts),
+          ...(state.capturedUsage ? { usage: state.capturedUsage } : {}),
+          agentType: state.agentType,
+        });
+
+        console.log(
+          "[Chat API] Assistant message recreated after missing continuation target.",
+        );
+        return { assistantMessageId: savedAssistant.id };
+      }
     }
 
     console.log("[Chat API] Saving assistant message to Firestore...");
@@ -1118,6 +1384,34 @@ async function persistAssistantArtifactsNode(
     specialtyAgent: state.agentType,
     parts: state.persistPayload.responseParts,
   });
+
+  try {
+    await syncDietPlanFromAssistantParts({
+      userId: state.userId,
+      sessionId: state.sessionId,
+      parts: state.persistPayload.responseParts,
+    });
+  } catch (dietPlanSyncError) {
+    console.error("[Chat API] Diet plan sync failed:", {
+      sessionId: state.sessionId,
+      profileId: state.profileId,
+      error: dietPlanSyncError,
+    });
+  }
+
+  try {
+    await syncPatientSummaryFromAssistantParts({
+      userId: state.userId,
+      sessionId: state.sessionId,
+      parts: state.persistPayload.responseParts,
+    });
+  } catch (patientSummarySyncError) {
+    console.error("[Chat API] Patient summary sync failed:", {
+      sessionId: state.sessionId,
+      profileId: state.profileId,
+      error: patientSummarySyncError,
+    });
+  }
 
   try {
     await captureEvidenceForAssistantMessage({
@@ -1196,6 +1490,7 @@ async function finalizePersistenceNode(
   revalidateTag(CacheTags.sessions(state.userId), "seconds");
   revalidateTag(CacheTags.assessments(state.userId), "minutes");
   revalidateTag(CacheTags.medications(state.userId), "minutes");
+  revalidateTag(CacheTags.patientSummaries(state.userId), "minutes");
   revalidateTag(CacheTags.symptomObservations(state.userId), "minutes");
 
   try {
@@ -1228,6 +1523,46 @@ async function finalizePersistenceNode(
   return { result: { persisted: true } };
 }
 
+async function saveWorkflowStateNode(
+  state: ChatPersistenceState,
+): Promise<Partial<ChatPersistenceState>> {
+  try {
+    const threadState = {
+      agentType: state.agentType,
+      responseMode: state.options.responseMode ?? "quick",
+      thinkingLevel: state.options.thinkingLevel ?? "low",
+      lastTurnAt: new Date().toISOString(),
+    };
+    const checkpointState = {
+      ...threadState,
+      hasAttachment: state.options.hasAttachment ?? false,
+      persisted: state.result?.persisted ?? false,
+    };
+    await Promise.all([
+      workflowStateService.setThreadState({
+        userId: state.userId,
+        profileId: state.profileId,
+        sessionId: state.sessionId,
+        threadId: state.sessionId,
+        workflowName: "chat-api-flow",
+        state: threadState,
+      }),
+      workflowStateService.createCheckpoint({
+        userId: state.userId,
+        profileId: state.profileId,
+        sessionId: state.sessionId,
+        threadId: state.sessionId,
+        workflowName: "chat-api-flow",
+        nodeName: "finalize_persistence",
+        state: checkpointState,
+      }),
+    ]);
+  } catch (wfErr) {
+    console.error("[Chat API] Failed to save workflow state:", wfErr);
+  }
+  return {};
+}
+
 const chatPersistenceGraph = new StateGraph(
   Annotation.Root({
     isUserTurn: Annotation<boolean>(),
@@ -1251,12 +1586,14 @@ const chatPersistenceGraph = new StateGraph(
   .addNode("persist_assistant_message", persistAssistantMessageNode)
   .addNode("persist_assistant_artifacts", persistAssistantArtifactsNode)
   .addNode("finalize_persistence", finalizePersistenceNode)
+  .addNode("save_workflow_state", saveWorkflowStateNode)
   .addEdge(START, "persist_user")
   .addEdge("persist_user", "decide_assistant_persistence")
   .addEdge("decide_assistant_persistence", "persist_assistant_message")
   .addEdge("persist_assistant_message", "persist_assistant_artifacts")
   .addEdge("persist_assistant_artifacts", "finalize_persistence")
-  .addEdge("finalize_persistence", END)
+  .addEdge("finalize_persistence", "save_workflow_state")
+  .addEdge("save_workflow_state", END)
   .compile();
 
 export async function runChatPersistenceGraph(

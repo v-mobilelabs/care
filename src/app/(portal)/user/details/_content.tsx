@@ -17,6 +17,7 @@ export function DetailsContent() {
         weight: patient?.weight ?? 0,
         bloodGroup: patient?.bloodGroup ?? "",
         foodPreferences: patient?.foodPreferences ?? [],
+        allergies: patient?.allergies ?? [],
         activityLevel: patient?.activityLevel ?? "",
         sex: patient?.sex ?? "",
     };

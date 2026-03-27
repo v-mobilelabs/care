@@ -23,11 +23,19 @@ const VitalSchema = z.object({
   unit: z.string().optional(),
 });
 
+const SummaryActionItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+  status: z.enum(["pending", "done", "skipped"]),
+  updatedAt: z.string().min(1),
+});
+
 // ── Nested types ──────────────────────────────────────────────────────────────
 
 export type Diagnosis = z.infer<typeof DiagnosisSchema>;
 export type Medication = z.infer<typeof MedicationSchema>;
 export type Vital = z.infer<typeof VitalSchema>;
+export type SummaryActionItem = z.infer<typeof SummaryActionItemSchema>;
 
 export interface PatientSummaryContent {
   sessionId?: string;
@@ -40,6 +48,7 @@ export interface PatientSummaryContent {
   allergies: string[];
   riskFactors: string[];
   recommendations: string[];
+  actionItems: SummaryActionItem[];
 }
 
 // ── Firestore document shape ──────────────────────────────────────────────────
@@ -59,6 +68,7 @@ export interface PatientSummaryDocument {
   allergies: string[];
   riskFactors: string[];
   recommendations: string[];
+  actionItems: SummaryActionItem[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -81,11 +91,148 @@ export interface PatientSummaryDto {
   allergies: string[];
   riskFactors: string[];
   recommendations: string[];
+  actionItems: SummaryActionItem[];
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
 
 // ── Mapper ────────────────────────────────────────────────────────────────────
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function normalizeDiagnoses(value: unknown): Diagnosis[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const diagnosis = item as Partial<Diagnosis>;
+    if (typeof diagnosis.name !== "string" || diagnosis.name.length === 0) {
+      return [];
+    }
+    if (typeof diagnosis.status !== "string" || diagnosis.status.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        name: diagnosis.name,
+        status: diagnosis.status,
+        ...(typeof diagnosis.icd10 === "string" ? { icd10: diagnosis.icd10 } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeMedications(value: unknown): Medication[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const medication = item as Partial<Medication>;
+    if (typeof medication.name !== "string" || medication.name.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        name: medication.name,
+        ...(typeof medication.dosage === "string" ? { dosage: medication.dosage } : {}),
+        ...(typeof medication.frequency === "string" ? { frequency: medication.frequency } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeVitals(value: unknown): Vital[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const vital = item as Partial<Vital>;
+    if (typeof vital.name !== "string" || vital.name.length === 0) {
+      return [];
+    }
+    if (typeof vital.value !== "string" || vital.value.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        name: vital.name,
+        value: vital.value,
+        ...(typeof vital.unit === "string" ? { unit: vital.unit } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeActionItems(value: unknown): SummaryActionItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+
+    const actionItem = item as Partial<SummaryActionItem>;
+    if (typeof actionItem.id !== "string" || actionItem.id.length === 0) {
+      return [];
+    }
+    if (typeof actionItem.text !== "string" || actionItem.text.length === 0) {
+      return [];
+    }
+    if (
+      actionItem.status !== "pending" &&
+      actionItem.status !== "done" &&
+      actionItem.status !== "skipped"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id: actionItem.id,
+        text: actionItem.text,
+        status: actionItem.status,
+        updatedAt:
+          typeof actionItem.updatedAt === "string" && actionItem.updatedAt.length > 0
+            ? actionItem.updatedAt
+            : new Date(0).toISOString(),
+      },
+    ];
+  });
+}
+
+function toIsoString(timestamp: Timestamp | undefined): string {
+  if (!timestamp || typeof timestamp.toDate !== "function") {
+    return new Date(0).toISOString();
+  }
+
+  return timestamp.toDate().toISOString();
+}
 
 export function toPatientSummaryDto(
   id: string,
@@ -98,17 +245,18 @@ export function toPatientSummaryDto(
     status: doc.status ?? "active",
     ...(doc.lastUpdatedBy ? { lastUpdatedBy: doc.lastUpdatedBy } : {}),
     ...(doc.sessionId ? { sessionId: doc.sessionId } : {}),
-    title: doc.title,
-    narrative: doc.narrative,
-    chiefComplaints: doc.chiefComplaints,
-    diagnoses: doc.diagnoses,
-    medications: doc.medications,
-    vitals: doc.vitals,
-    allergies: doc.allergies,
-    riskFactors: doc.riskFactors,
-    recommendations: doc.recommendations,
-    createdAt: doc.createdAt.toDate().toISOString(),
-    updatedAt: doc.updatedAt.toDate().toISOString(),
+    title: typeof doc.title === "string" && doc.title.length > 0 ? doc.title : "Patient Summary",
+    narrative: typeof doc.narrative === "string" ? doc.narrative : "",
+    chiefComplaints: normalizeStringArray(doc.chiefComplaints),
+    diagnoses: normalizeDiagnoses(doc.diagnoses),
+    medications: normalizeMedications(doc.medications),
+    vitals: normalizeVitals(doc.vitals),
+    allergies: normalizeStringArray(doc.allergies),
+    riskFactors: normalizeStringArray(doc.riskFactors),
+    recommendations: normalizeStringArray(doc.recommendations),
+    actionItems: normalizeActionItems(doc.actionItems),
+    createdAt: toIsoString(doc.createdAt),
+    updatedAt: toIsoString(doc.updatedAt),
   };
 }
 
@@ -126,6 +274,7 @@ export const CreatePatientSummarySchema = z.object({
   allergies: z.array(z.string()).default([]),
   riskFactors: z.array(z.string()).default([]),
   recommendations: z.array(z.string()).default([]),
+  actionItems: z.array(SummaryActionItemSchema).default([]),
 });
 
 export type CreatePatientSummaryInput = z.infer<
@@ -150,6 +299,7 @@ export const PatchPatientSummaryPatchSchema = z
     allergies: z.array(z.string()).optional(),
     riskFactors: z.array(z.string()).optional(),
     recommendations: z.array(z.string()).optional(),
+    actionItems: z.array(SummaryActionItemSchema).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "patch must include at least one field",

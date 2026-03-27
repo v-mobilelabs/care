@@ -1,66 +1,16 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { WithContext, ApiError } from "@/lib/api/with-context";
+import { WithContext } from "@/lib/api/with-context";
 import {
   ListAllFilesUseCase,
-  UploadFileUseCase,
-  ClassifyFileUseCase,
-  ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE_BYTES,
   type FileLabel,
   FILE_LABELS,
 } from "@/data/files";
+import {
+  runFilesUploadGraph,
+  scheduleFileUploadPostProcessing,
+} from "@/workflow/file-upload-flow.workflow";
 import { CacheTags } from "@/data/cached";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function validateFile(file: File) {
-  if (
-    !ALLOWED_MIME_TYPES.includes(
-      file.type as (typeof ALLOWED_MIME_TYPES)[number],
-    )
-  ) {
-    throw ApiError.badRequest(
-      `Unsupported file type '${file.type}'. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}.`,
-    );
-  }
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw ApiError.badRequest(
-      `File exceeds the ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB limit.`,
-    );
-  }
-}
-
-function schedulePostProcessing(
-  fileId: string,
-  profileId: string,
-  userId: string,
-  name: string,
-  mimeType: string,
-  buffer: Buffer,
-) {
-  after(async () => {
-    await new ClassifyFileUseCase()
-      .execute({ fileId, profileId, userId, name, mimeType, buffer })
-      .catch((e: unknown) => console.error("[files] classify error:", e));
-    revalidateTag(CacheTags.files(userId), "minutes");
-  });
-}
-
-async function parseUploadedFile(req: Request) {
-  const formData = await req.formData().catch(() => null);
-  if (!formData) throw ApiError.badRequest("Expected multipart/form-data.");
-  const file = formData.get("file");
-  if (!(file instanceof File))
-    throw ApiError.badRequest("'file' field is required.");
-  validateFile(file);
-  const sessionId = formData.get("sessionId");
-  return {
-    file,
-    buffer: Buffer.from(await file.arrayBuffer()),
-    sessionId: typeof sessionId === "string" ? sessionId : undefined,
-  };
-}
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -95,26 +45,23 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
 
 // POST /api/files — multipart/form-data upload (sessionId in form data)
 export const POST = WithContext(async ({ user, profileId, req }) => {
-  const { file, buffer, sessionId } = await parseUploadedFile(req);
-  const uploaded = await new UploadFileUseCase().execute({
+  const uploadResult = await runFilesUploadGraph({
     userId: user.uid,
     profileId,
-    sessionId,
-    name: file.name,
-    mimeType: file.type,
-    size: file.size,
-    buffer,
+    req,
   });
 
+  const { uploaded } = uploadResult;
+
   revalidateTag(CacheTags.files(user.uid), "minutes");
-  schedulePostProcessing(
-    uploaded.id,
+  scheduleFileUploadPostProcessing({
+    fileId: uploaded.id,
     profileId,
-    user.uid,
-    file.name,
-    file.type,
-    buffer,
-  );
+    userId: user.uid,
+    name: uploadResult.fileName,
+    mimeType: uploadResult.mimeType,
+    buffer: uploadResult.buffer,
+  });
 
   return NextResponse.json(uploaded, { status: 201 });
 });

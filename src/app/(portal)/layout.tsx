@@ -2,10 +2,10 @@ import { Provider } from "@/ui/providers/provider";
 import { getServerUser } from "@/lib/api/server-prefetch";
 import { GetActiveMeetUseCase } from "@/data/meet";
 import { GetProfileUseCase } from "@/data/profile";
+import { GetUsageUseCase } from "@/data/usage";
 import { getQueryClient } from "@/lib/query/client";
 import { meetSessionKey } from "./meet/[requestId]/_keys";
 import { chatKeys } from "@/ui/ai/keys";
-import { getCachedUsage } from "@/data/cached";
 import { Hydrate } from "@/ui/hydrate";
 import { getApplicationInfo, getNavigationMenus } from "@/ui/navigation";
 import { PortalLayout } from "@/ui/layouts/portal";
@@ -21,7 +21,7 @@ export default async function RootLayout({
     queryClient.setQueryData(meetSessionKey(meet.requestId), meet);
   }
   if (user) {
-    const usage = await getCachedUsage(user.uid);
+    const usage = await new GetUsageUseCase().execute({ profile: user.uid });
     queryClient.setQueryData(chatKeys.credits(), usage);
     if (profile) {
       queryClient.setQueryData(chatKeys.profile(), profile);

@@ -41,11 +41,12 @@ export interface MessageRecord {
   createdAt: string;
 }
 
-export interface CreditsDto {
-  remaining: number;
-  total: number;
-  /** ISO-8601 timestamp at which monthly credits reset. */
-  resetsAt: string;
+export interface UsageDto {
+  credits: number;
+  minutes: number;
+  storage: number;
+  /** ISO YYYY-MM value for monthly reset tracking. */
+  lastReset: string;
 }
 
 export type FileLabel =
@@ -276,7 +277,7 @@ export function useSessionsQuery() {
 export function useCreditsQuery() {
   return useQuery({
     queryKey: chatKeys.credits(),
-    queryFn: () => apiFetch<CreditsDto>("/api/credits"),
+    queryFn: () => apiFetch<UsageDto>("/api/credits", { cache: "no-store" }),
     staleTime: 10_000,
     // Refresh whenever the window is re-focused so the count stays accurate.
     refetchOnWindowFocus: true,
@@ -287,8 +288,8 @@ export function useCreditsQuery() {
 export function useOptimisticDeductCredit() {
   const qc = useQueryClient();
   return () => {
-    qc.setQueryData<CreditsDto>(chatKeys.credits(), (prev) =>
-      prev ? { ...prev, remaining: Math.max(0, prev.remaining - 1) } : prev,
+    qc.setQueryData<UsageDto>(chatKeys.credits(), (prev) =>
+      prev ? { ...prev, credits: Math.max(0, prev.credits - 1) } : prev,
     );
     qc.invalidateQueries({ queryKey: chatKeys.credits() });
   };

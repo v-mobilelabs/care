@@ -53,6 +53,8 @@ export interface KnowledgeBaseDocument {
   content: string;
   /** Free-form tags for filtering and search */
   tags: string[];
+  /** Lowercase-normalized version of tags for fast array-contains queries */
+  tagsNormalized?: string[];
   /** Attribution / origin (e.g. "AHA 2024", "CDSCO", user-entered) */
   source?: string;
   /** URL to the original source document */

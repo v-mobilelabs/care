@@ -65,7 +65,12 @@ export class KnowledgeBaseService {
     await db
       .collection(KB_COLLECTION)
       .doc(entry.id)
-      .update({ embedding: FieldValue.vector(embedding) });
+      .update({
+        embedding: FieldValue.vector(embedding),
+        tagsNormalized: (input.tags ?? [])
+          .map((t) => t.toLowerCase().trim())
+          .filter(Boolean),
+      });
 
     console.log(
       `[KnowledgeBaseService] Created & embedded entry: ${entry.id} (${input.type}/${input.category})`,
@@ -90,7 +95,12 @@ export class KnowledgeBaseService {
     if (input.subcategory !== undefined)
       updateData.subcategory = input.subcategory;
     if (input.content !== undefined) updateData.content = input.content;
-    if (input.tags !== undefined) updateData.tags = input.tags;
+    if (input.tags !== undefined) {
+      updateData.tags = input.tags;
+      updateData.tagsNormalized = input.tags
+        .map((t) => t.toLowerCase().trim())
+        .filter(Boolean);
+    }
     if (input.source !== undefined) updateData.source = input.source;
     if (input.sourceUrl !== undefined) updateData.sourceUrl = input.sourceUrl;
     if (input.status !== undefined) updateData.status = input.status;
@@ -192,6 +202,7 @@ export class KnowledgeBaseService {
     }
 
     // 3. Native vector search
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vectorQuery: VectorQuery = (baseQuery as any).findNearest({
       vectorField: "embedding",
       queryVector: queryEmbedding,
@@ -212,6 +223,38 @@ export class KnowledgeBaseService {
         score: 1, // COSINE distance not returned in findNearest snapshot
       };
     });
+  }
+
+  /**
+   * Fast tag-based lookup using the pre-computed tagsNormalized array.
+   * Avoids embedding computation entirely — sub-second for cache hits.
+   */
+  async searchByNormalizedTag(
+    query: string,
+    options: { topK?: number; type?: KBEntryType } = {},
+  ): Promise<KBSearchResult[]> {
+    const { topK = 8, type: entryType } = options;
+    const normalizedQuery = query.toLowerCase().replaceAll(/\s+/g, " ").trim();
+    if (normalizedQuery.length < 2) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let baseQuery: any = db
+      .collection(KB_COLLECTION)
+      .where("status", "==", "active");
+    if (entryType) {
+      baseQuery = baseQuery.where("type", "==", entryType);
+    }
+
+    const snapshot = await baseQuery
+      .where("tagsNormalized", "array-contains", normalizedQuery)
+      .limit(topK)
+      .get();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return snapshot.docs.map((doc: any) => ({
+      entry: toKnowledgeBaseDto(doc.id, doc.data() as KnowledgeBaseDocument),
+      score: 1,
+    }));
   }
 
   /**

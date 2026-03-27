@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCachedMetricsAggregated } from "@/data/cached";
 import { ApiError, type ApiContext, WithContext } from "@/lib/api/with-context";
+import { isAdminUser } from "@/lib/auth/admin";
 
 export const dynamic = "force-dynamic";
-
-function getAdminEmails(): string[] {
-  const value = process.env.ADMIN_EMAILS;
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => email.length > 0);
-}
 
 function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -33,11 +25,7 @@ const handler = async (ctx: ApiContext) => {
     throw ApiError.badRequest("startDate and endDate must be YYYY-MM-DD.");
   }
 
-  const adminEmails = getAdminEmails();
-  const requesterEmail = ctx.user.email.toLowerCase();
-  const isAdmin = adminEmails.includes(requesterEmail);
-
-  if (!isAdmin) {
+  if (!isAdminUser(ctx.user)) {
     throw ApiError.forbidden("Admin access required.");
   }
 

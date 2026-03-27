@@ -82,7 +82,7 @@ export class LabReportExtractionService {
           ],
         },
       ],
-      { userId: input.userId },
+      { userId: input.userId, useFast: true },
     );
 
     // 5. Upsert: replace an existing record tied to this file, otherwise create new

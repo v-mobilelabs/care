@@ -34,6 +34,7 @@ export class PatientSummaryService {
       allergies: input.allergies,
       riskFactors: input.riskFactors,
       recommendations: input.recommendations,
+      actionItems: input.actionItems,
     });
   }
 

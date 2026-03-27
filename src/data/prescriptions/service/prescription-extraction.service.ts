@@ -94,7 +94,7 @@ export class PrescriptionExtractionService {
           ],
         },
       ],
-      { userId: input.userId },
+      { userId: input.userId, useFast: true },
     );
 
     // 5. Persist the extraction result back to the file document so it survives

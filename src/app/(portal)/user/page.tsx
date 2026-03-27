@@ -3,10 +3,10 @@ import { getServerUser } from "@/lib/api/server-prefetch";
 import { getQueryClient } from "@/lib/query/client";
 import { Hydrate } from "@/ui/hydrate";
 import { chatKeys } from "@/app/(portal)/user/_keys";
+import { GetUsageUseCase } from "@/data/usage";
 import {
     getCachedAssessments,
     getCachedPatientSummaries,
-    getCachedUsage,
     getCachedVitals,
 } from "@/data/cached";
 import { PatientHomeContent } from "./_content";
@@ -18,7 +18,7 @@ async function PatientHomeData({ userId }: Readonly<{ userId: string }>) {
     await Promise.all([
         queryClient.prefetchQuery({
             queryKey: chatKeys.credits(),
-            queryFn: () => getCachedUsage(userId),
+            queryFn: () => new GetUsageUseCase().execute({ profile: userId }),
         }),
         queryClient.prefetchQuery({
             queryKey: [...chatKeys.vitals(), undefined],

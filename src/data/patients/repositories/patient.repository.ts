@@ -40,6 +40,7 @@ export const patientRepository = {
       data.activityLevel = input.activityLevel;
     if (input.foodPreferences !== undefined)
       data.foodPreferences = input.foodPreferences;
+    if (input.allergies !== undefined) data.allergies = input.allergies;
     if (input.bloodGroup !== undefined) data.bloodGroup = input.bloodGroup;
     if (input.consentedAt !== undefined) {
       data.consentedAt = Timestamp.fromDate(new Date(input.consentedAt));

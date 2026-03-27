@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { evidenceRepository } from "@/data/evidence";
 import { ApiError, type ApiContext, WithContext } from "@/lib/api/with-context";
+import { isAdminUser } from "@/lib/auth/admin";
 
 export const dynamic = "force-dynamic";
-
-function getAdminEmails(): string[] {
-  const value = process.env.ADMIN_EMAILS;
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => email.length > 0);
-}
 
 const handler = async (ctx: ApiContext) => {
   const url = new URL(ctx.req.url);
@@ -23,11 +15,7 @@ const handler = async (ctx: ApiContext) => {
     throw ApiError.badRequest("Missing required params: profileId, sessionId");
   }
 
-  const adminEmails = getAdminEmails();
-  const requesterEmail = ctx.user.email.toLowerCase();
-  const isAdmin = adminEmails.includes(requesterEmail);
-
-  if (!isAdmin) {
+  if (!isAdminUser(ctx.user)) {
     throw ApiError.forbidden("Admin access required.");
   }
 

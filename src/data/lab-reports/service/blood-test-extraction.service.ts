@@ -29,7 +29,6 @@ export class BloodTestExtractionService {
     private readonly ai: AIService = aiService,
   ) {}
 
-   
   async extract(input: ExtractBloodTestInput): Promise<BloodTestDto> {
     // 1. Resolve file metadata
     const file = await this.files.getRaw({
@@ -72,7 +71,7 @@ export class BloodTestExtractionService {
           ],
         },
       ],
-      { userId: input.userId },
+      { userId: input.userId, useFast: true },
     );
 
     // 5. Upsert: replace an existing record tied to this file, otherwise create new

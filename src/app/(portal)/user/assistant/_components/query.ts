@@ -291,7 +291,7 @@ export function useSessionsQuery() {
 export function useCreditsQuery() {
   return useQuery({
     queryKey: chatKeys.credits(),
-    queryFn: () => apiFetch<UsageDto>("/api/credits"),
+    queryFn: () => apiFetch<UsageDto>("/api/credits", { cache: "no-store" }),
     staleTime: 10_000,
     refetchOnWindowFocus: true,
     placeholderData: keepPreviousData,
@@ -2052,6 +2052,12 @@ export interface PatientSummaryRecord {
   allergies: string[];
   riskFactors: string[];
   recommendations: string[];
+  actionItems: Array<{
+    id: string;
+    text: string;
+    status: "pending" | "done" | "skipped";
+    updatedAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -2071,6 +2077,7 @@ export interface PatchPatientSummaryPayload {
       | "allergies"
       | "riskFactors"
       | "recommendations"
+      | "actionItems"
     >
   >;
   reason?: "assistant_update" | "doctor_edit" | "system_rebuild";

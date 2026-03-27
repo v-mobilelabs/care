@@ -99,6 +99,12 @@ const REQUIRED_PATIENT_FIELDS: ReadonlyArray<OnboardingFieldDefinition> = [
     askHint:
       "single_choice with options ['Sedentary — little or no exercise', 'Light — 1–3 days / week', 'Moderate — 3–5 days / week', 'Active — 6–7 days / week', 'Very Active — hard exercise daily']",
   },
+  {
+    key: "allergies",
+    label: "Known allergies",
+    askHint:
+      "multi_choice or free_text list (e.g., peanuts, shellfish, penicillin); use [] when no known allergies",
+  },
 ];
 
 // ── Use Case ──────────────────────────────────────────────────────────────────

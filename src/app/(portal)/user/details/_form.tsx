@@ -15,6 +15,7 @@ import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     IconActivity,
+    IconAlertTriangle,
     IconCheck,
     IconDroplet,
     IconRuler2,
@@ -52,6 +53,21 @@ const FOOD_PREFERENCES = [
     "Paleo",
 ];
 
+const ALLERGY_OPTIONS = [
+    "No known allergies",
+    "Peanuts",
+    "Tree nuts",
+    "Milk / dairy",
+    "Egg",
+    "Soy",
+    "Wheat / gluten",
+    "Shellfish",
+    "Fish",
+    "Sesame",
+    "Penicillin",
+    "Sulfa drugs",
+];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
@@ -61,6 +77,7 @@ export interface DetailsFormValues {
     weight: number;
     bloodGroup: string;
     foodPreferences: string[];
+    allergies: string[];
     activityLevel: string;
     sex: string;
 }
@@ -70,6 +87,7 @@ type PatientPatch = Partial<{
     weight: number;
     bloodGroup: string;
     foodPreferences: string[];
+    allergies: string[];
     activityLevel: ActivityLevel;
     sex: "male" | "female";
 }>;
@@ -97,7 +115,7 @@ function usePatientPatch() {
             notifications.show({ title: "Save failed", message: "Please try again.", color: "red" });
         },
         onSettled: () => {
-            void qc.invalidateQueries({ queryKey: key });
+            qc.invalidateQueries({ queryKey: key });
         },
     });
 }
@@ -200,7 +218,7 @@ function SliderField({
 
     function handleChangeEnd(v: number) {
         if (v === initialValue) return;
-        void patch.mutateAsync({ [field]: v } as PatientPatch);
+        patch.mutate({ [field]: v } as PatientPatch);
     }
 
     return (
@@ -249,7 +267,7 @@ function ChipSingle<T extends string>({
     function handleChange(val: string) {
         const next = val as T;
         setSelected(next);
-        void patch.mutateAsync({ [field]: next || undefined } as PatientPatch);
+        patch.mutate({ [field]: next || undefined } as PatientPatch);
     }
 
     return (
@@ -274,18 +292,20 @@ function ChipMulti({
     description,
     options,
     initialValue,
+    field,
 }: Readonly<{
     label: string;
     description?: string;
     options: string[];
     initialValue: string[];
+    field: "foodPreferences" | "allergies";
 }>) {
     const patch = usePatientPatch();
     const [selected, setSelected] = useState<string[]>(initialValue);
 
     function handleChange(vals: string[]) {
         setSelected(vals);
-        void patch.mutateAsync({ foodPreferences: vals });
+        patch.mutate({ [field]: vals });
     }
 
     return (
@@ -328,7 +348,7 @@ export function DetailsForm({ initialValues }: Readonly<DetailsFormProps>) {
                             { value: 200, label: "200" },
                             { value: 250, label: "250" },
                         ]}
-                        initialValue={initialValues.height as number}
+                        initialValue={initialValues.height}
                         field="height"
                     />
                     <SliderField
@@ -344,7 +364,7 @@ export function DetailsForm({ initialValues }: Readonly<DetailsFormProps>) {
                             { value: 140, label: "140" },
                             { value: 200, label: "200" },
                         ]}
-                        initialValue={initialValues.weight as number}
+                        initialValue={initialValues.weight}
                         field="weight"
                     />
                 </Stack>
@@ -391,6 +411,18 @@ export function DetailsForm({ initialValues }: Readonly<DetailsFormProps>) {
                     description="Select all that apply"
                     options={FOOD_PREFERENCES}
                     initialValue={initialValues.foodPreferences}
+                    field="foodPreferences"
+                />
+            </FormCard>
+
+            {/* Allergies */}
+            <FormCard icon={<IconAlertTriangle size={20} />} title="Allergies">
+                <ChipMulti
+                    label="Known allergies"
+                    description="Select all that apply"
+                    options={ALLERGY_OPTIONS}
+                    initialValue={initialValues.allergies}
+                    field="allergies"
                 />
             </FormCard>
         </Stack>

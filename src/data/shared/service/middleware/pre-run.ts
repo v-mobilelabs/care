@@ -16,7 +16,7 @@ import { UsageService } from "@/data/usage/service/lazy-reset-usage.service";
 import { UsageRepository } from "@/data/usage/repositories/usage.repository";
 import { CreditsExhaustedError } from "@/lib/errors";
 import { getCachedMemories } from "@/data/cached";
-import type { RagEvaluationMeta } from "@/data/shared/service/rag/langgraph-rag-orchestrator.service";
+import type { RagEvaluationMeta } from "@/workflow/rag-orchestrator.workflow";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

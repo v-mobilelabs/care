@@ -123,6 +123,51 @@ export type AnalyticsEvent =
   | { name: "insurance_viewed"; params?: Record<string, unknown> }
   | { name: "health_record_viewed"; params?: Record<string, unknown> }
   | {
+      name: "patient_summary_viewed";
+      params?: {
+        summary_id?: string;
+        version?: number;
+        has_diagnoses?: boolean;
+        has_recommendations?: boolean;
+        missing_fields_count?: number;
+        updated_by?: string;
+      };
+    }
+  | {
+      name: "patient_summary_incomplete_seen";
+      params?: {
+        summary_id?: string;
+        version?: number;
+        missing_fields?: string;
+        missing_fields_count?: number;
+      };
+    }
+  | {
+      name: "patient_summary_saved";
+      params?: {
+        summary_id?: string;
+        version?: number;
+        updated_by?: string;
+      };
+    }
+  | {
+      name: "patient_summary_open_linked_session";
+      params?: {
+        summary_id?: string;
+        session_id?: string;
+        version?: number;
+      };
+    }
+  | {
+      name: "patient_summary_action_checked";
+      params?: {
+        summary_id?: string;
+        action_item_id?: string;
+        action_status?: "pending" | "done" | "skipped";
+        version?: number;
+      };
+    }
+  | {
       name: "health_record_exported";
       params?: {
         artifact_type?:

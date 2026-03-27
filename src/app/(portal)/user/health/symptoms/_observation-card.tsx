@@ -30,6 +30,7 @@ import {
     IconTrendingUp,
     IconTrash,
 } from "@tabler/icons-react";
+import Link from "@/ui/link";
 import type {
     SymptomObservationRecord,
     SymptomObservationState,
@@ -115,8 +116,41 @@ const SOURCE_CONFIG: Record<
     migration: { color: "gray", label: "Imported" },
 };
 
-function SourceBadge({ source }: Readonly<{ source: SymptomObservationSource }>) {
+function resolveSourceHref(observation: SymptomObservationRecord): string | undefined {
+    if (observation.source === "assessment" && observation.assessmentId) {
+        return `/user/health/assessments/${observation.assessmentId}`;
+    }
+
+    if (observation.source === "chat" && observation.sessionId) {
+        return `/user/assistant?id=${observation.sessionId}`;
+    }
+
+    return undefined;
+}
+
+function SourceBadge({ observation }: Readonly<{ observation: SymptomObservationRecord }>) {
+    const { source } = observation;
     const { color, label } = SOURCE_CONFIG[source];
+    const href = resolveSourceHref(observation);
+
+    if (href) {
+        return (
+            <Tooltip label="View source" withArrow>
+                <Badge
+                    component={Link}
+                    href={href}
+                    size="xs"
+                    variant="dot"
+                    color={color}
+                    radius="sm"
+                    aria-label={`Open ${label} source`}
+                >
+                    {label}
+                </Badge>
+            </Tooltip>
+        );
+    }
+
     return (
         <Badge size="xs" variant="dot" color={color} radius="sm">
             {label}
@@ -209,42 +243,48 @@ function CardHeader({
     onToggle: () => void;
     onDelete: (id: string) => void;
 }>) {
-    const svColor = observation.severity !== undefined
-        ? severityColor(observation.severity)
-        : "gray";
+    const severity = observation.severity;
+    const hasSeverity = typeof severity === "number";
+    const svColor = hasSeverity ? severityColor(severity) : "gray";
 
     return (
         <Group justify="space-between" wrap="nowrap" gap="xs">
             <Group gap="sm" wrap="nowrap" style={{ flex: 1, overflow: "hidden" }}>
-                {observation.severity !== undefined ? (
-                    <Tooltip
-                        label={`Severity ${observation.severity}/10 — ${severityLabel(observation.severity)}`}
-                        withArrow
-                    >
-                        <Box style={{ flexShrink: 0 }}>
-                            <RingProgress
-                                size={44}
-                                thickness={4}
-                                roundCaps
-                                sections={[{ value: observation.severity * 10, color: svColor }]}
-                                label={
-                                    <Text size="10px" fw={700} ta="center" c={svColor} lh={1}>
-                                        {observation.severity}
-                                    </Text>
-                                }
-                            />
-                        </Box>
-                    </Tooltip>
-                ) : (
-                    <ThemeIcon size={40} radius="xl" color="gray" variant="light">
-                        <IconActivityHeartbeat size={18} />
-                    </ThemeIcon>
-                )}
+                {(() => {
+                    if (hasSeverity) {
+                        return (
+                            <Tooltip
+                                label={`Severity ${severity}/10 — ${severityLabel(severity)}`}
+                                withArrow
+                            >
+                                <Box style={{ flexShrink: 0 }}>
+                                    <RingProgress
+                                        size={44}
+                                        thickness={4}
+                                        roundCaps
+                                        sections={[{ value: severity * 10, color: svColor }]}
+                                        label={
+                                            <Text size="10px" fw={700} ta="center" c={svColor} lh={1}>
+                                                {severity}
+                                            </Text>
+                                        }
+                                    />
+                                </Box>
+                            </Tooltip>
+                        );
+                    }
+
+                    return (
+                        <ThemeIcon size={40} radius="xl" color="gray" variant="light">
+                            <IconActivityHeartbeat size={18} />
+                        </ThemeIcon>
+                    );
+                })()}
                 <Box style={{ overflow: "hidden" }}>
                     <Text fw={600} size="sm" truncate>{observation.symptom}</Text>
                     <Group gap={4} mt={2} wrap="wrap">
                         {observation.state && <StateBadge state={observation.state} />}
-                        <SourceBadge source={observation.source} />
+                        <SourceBadge observation={observation} />
                     </Group>
                 </Box>
             </Group>

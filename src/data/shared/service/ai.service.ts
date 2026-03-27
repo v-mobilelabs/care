@@ -145,11 +145,8 @@ export class AIService {
    */
   forUser(userId: string): { chat: LanguageModel; fast: LanguageModel } {
     const gate = async () => {
-      const usage = await this.usageService.getUsage(userId);
-      if (usage.credits <= 0) throw new CreditsExhaustedError(0);
-      await this.usageService.updateUsage(userId, {
-        credits: usage.credits - 1,
-      });
+      const remaining = await this.usageService.consumeCredit(userId);
+      if (remaining < 0) throw new CreditsExhaustedError(0);
     };
     const creditMiddleware: LanguageModelMiddleware = {
       specificationVersion: "v3",
@@ -194,20 +191,16 @@ export class AIService {
   ): Promise<z.infer<T>> {
     // 1. Credit check (skippable for meta-operations like gateway routing)
     if (!opts.skipCredit) {
-      const usage = await this.usageService.getUsage(opts.userId);
-      if (usage.credits <= 0) {
+      const remaining = await this.usageService.consumeCredit(opts.userId);
+      if (remaining < 0) {
         throw new CreditsExhaustedError(0);
       }
-      await this.usageService.updateUsage(opts.userId, {
-        credits: usage.credits - 1,
-      });
     }
 
-    // 2. Run extraction — lite model bypasses credit-gated wrapper
+    // 2. Run extraction (credit already consumed when needed)
     let model;
     if (opts.useLite) model = this._lite;
-    else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
-    else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
+    else model = opts.useFast ? this._fast : this._chat;
 
     const result = await runWithTransientRetry(() =>
       generateText({
@@ -249,17 +242,13 @@ export class AIService {
     },
   ): Promise<T> {
     if (!opts.skipCredit) {
-      const usage = await this.usageService.getUsage(opts.userId);
-      if (usage.credits <= 0) throw new CreditsExhaustedError(0);
-      await this.usageService.updateUsage(opts.userId, {
-        credits: usage.credits - 1,
-      });
+      const remaining = await this.usageService.consumeCredit(opts.userId);
+      if (remaining < 0) throw new CreditsExhaustedError(0);
     }
 
     let model;
     if (opts.useLite) model = this._lite;
-    else if (opts.skipCredit) model = opts.useFast ? this._fast : this._chat;
-    else model = this.forUser(opts.userId)[opts.useFast ? "fast" : "chat"];
+    else model = opts.useFast ? this._fast : this._chat;
 
     const result = await runWithTransientRetry(() =>
       generateText({

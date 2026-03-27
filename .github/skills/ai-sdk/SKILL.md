@@ -54,29 +54,29 @@ Background: persist messages + assessments + evidence + grounding + memories + c
 
 ## Key Files
 
-| File                                                   | Purpose                                                             |
-| ------------------------------------------------------ | ------------------------------------------------------------------- |
-| `src/data/shared/service/agents/base/agent.ts`         | `createAgent()` factory — builds agents with middleware chain       |
-| `src/data/shared/service/agents/base/langgraph-agent-execution.service.ts` | LangGraph runtime for per-agent setup (prompt/tools/context) |
-| `src/data/shared/service/agents/gateway/langgraph-gateway-orchestrator.service.ts` | LangGraph gateway orchestration for routing, RAG gating, grounding reuse |
-| `src/data/shared/service/agents/gateway/grounding-layer.service.ts` | Session grounding normalization, persistence gating, semantic reuse |
-| `src/data/shared/service/agents/gateway/agent.ts`      | Gateway routing heuristics + keyword rules used by orchestrator |
-| `src/data/shared/service/agents/clinical/agent.ts`     | Clinical reasoning agent                                            |
-| `src/data/shared/service/agents/diet-planner/agent.ts` | 7-day meal plan agent                                               |
-| `src/data/shared/service/agents/prescription/agent.ts` | Prescription writing agent                                          |
-| `src/data/shared/service/agents/lab-report/agent.ts`   | Lab report analysis agent                                           |
-| `src/data/shared/service/agents/patient/agent.ts`      | Patient profile/medication retrieval                                |
-| `src/data/shared/service/middleware/pre-run.ts`        | Preflight checks + memory fetch before orchestration                |
-| `src/data/shared/service/middleware/pre-context.middleware.ts` | Inject precomputed memory/RAG state into the model prompt |
-| `src/data/shared/service/middleware/`                  | Remaining middleware utilities (cached-content, etc.)               |
-| `src/data/shared/service/ai.service.ts`                | AI service — model access, extractObject, extractChoice             |
-| `src/data/shared/service/context-cache.service.ts`     | Google Gemini context caching                                       |
-| `src/app/api/chat/route.ts`                            | Chat API route — streaming response + background persistence        |
-| `src/ui/ai/hooks/use-messages.ts`                      | Client message state, DB hydration, optimistic sync, pagination     |
-| `src/ui/ai/messages/messages.tsx`                      | Chat thread renderer                                                |
-| `src/ui/ai/tools/tool-part-renderer.tsx`               | Tool UI dispatcher (questions, approvals, results)                  |
-| `src/data/sessions/use-cases/prepare-chat.use-case.ts` | PrepareChatUseCase — validate, preflight, orchestrate, sanitize, build options |
-| `docs/vercel-ai-sdk.md`                                | Full AI SDK v6 reference documentation                              |
+| File                                                                | Purpose                                                                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `src/data/shared/service/agents/base/agent.ts`                      | `createAgent()` factory — builds agents with middleware chain                  |
+| `src/workflow/agent-execution.workflow.ts`                          | LangGraph runtime for per-agent setup (prompt/tools/context)                   |
+| `src/workflow/gateway-orchestrator.workflow.ts`                     | LangGraph gateway orchestration for routing, RAG gating, grounding reuse       |
+| `src/data/shared/service/agents/gateway/grounding-layer.service.ts` | Session grounding normalization, persistence gating, semantic reuse            |
+| `src/data/shared/service/agents/gateway/agent.ts`                   | Gateway routing heuristics + keyword rules used by orchestrator                |
+| `src/data/shared/service/agents/clinical/agent.ts`                  | Clinical reasoning agent                                                       |
+| `src/data/shared/service/agents/diet-planner/agent.ts`              | 7-day meal plan agent                                                          |
+| `src/data/shared/service/agents/prescription/agent.ts`              | Prescription writing agent                                                     |
+| `src/data/shared/service/agents/lab-report/agent.ts`                | Lab report analysis agent                                                      |
+| `src/data/shared/service/agents/patient/agent.ts`                   | Patient profile/medication retrieval                                           |
+| `src/data/shared/service/middleware/pre-run.ts`                     | Preflight checks + memory fetch before orchestration                           |
+| `src/data/shared/service/middleware/pre-context.middleware.ts`      | Inject precomputed memory/RAG state into the model prompt                      |
+| `src/data/shared/service/middleware/`                               | Remaining middleware utilities (cached-content, etc.)                          |
+| `src/data/shared/service/ai.service.ts`                             | AI service — model access, extractObject, extractChoice                        |
+| `src/data/shared/service/context-cache.service.ts`                  | Google Gemini context caching                                                  |
+| `src/app/api/chat/route.ts`                                         | Chat API route — streaming response + background persistence                   |
+| `src/ui/ai/hooks/use-messages.ts`                                   | Client message state, DB hydration, optimistic sync, pagination                |
+| `src/ui/ai/messages/messages.tsx`                                   | Chat thread renderer                                                           |
+| `src/ui/ai/tools/tool-part-renderer.tsx`                            | Tool UI dispatcher (questions, approvals, results)                             |
+| `src/data/sessions/use-cases/prepare-chat.use-case.ts`              | PrepareChatUseCase — validate, preflight, orchestrate, sanitize, build options |
+| `docs/vercel-ai-sdk.md`                                             | Full AI SDK v6 reference documentation                                         |
 
 ### Ecosystem Libraries
 
@@ -293,12 +293,12 @@ const myMiddleware: LanguageModelMiddleware = {
 
 ### Existing Middleware Chain (applied in order)
 
-| Middleware                       | File                                      | Purpose                                                                  |
-| -------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------ |
-| `preContextMiddleware`           | `middleware/pre-context.middleware.ts`    | Inject precomputed memory/RAG context assembled before streaming         |
-| `cachedContentMiddleware`        | `middleware/cached-content.middleware.ts` | Strip system/tools when Google cache is active                           |
-| `addToolInputExamplesMiddleware` | AI SDK built-in                           | Inject tool input examples into descriptions                             |
-| `devToolsMiddleware`             | `@ai-sdk/devtools` (dev only)             | AI SDK DevTools integration — only included in development               |
+| Middleware                       | File                                      | Purpose                                                          |
+| -------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| `preContextMiddleware`           | `middleware/pre-context.middleware.ts`    | Inject precomputed memory/RAG context assembled before streaming |
+| `cachedContentMiddleware`        | `middleware/cached-content.middleware.ts` | Strip system/tools when Google cache is active                   |
+| `addToolInputExamplesMiddleware` | AI SDK built-in                           | Inject tool input examples into descriptions                     |
+| `devToolsMiddleware`             | `@ai-sdk/devtools` (dev only)             | AI SDK DevTools integration — only included in development       |
 
 **Important**: guardrail, credit, memory fetch, routing, and RAG gating now happen before streaming in `PrepareChatUseCase` + LangGraph orchestration. The runtime middleware chain should stay lean.
 
@@ -841,13 +841,13 @@ Gateway orchestrators should return only what downstream streaming needs:
 
 ### Recommended split of responsibilities
 
-| Layer | Responsibility |
-| --- | --- |
-| `PrepareChatUseCase` | validate input, load history, run preflight, call LangGraph orchestrator, assemble `preContext` |
-| LangGraph gateway | choose agent, decide whether data is needed, reuse grounding, run agentic RAG if needed |
-| `createAgent().stream()` | build tools, compose model middleware, stream via `ToolLoopAgent` |
-| `preContextMiddleware` | inject the already-computed memory/RAG context |
-| `after()` | persist response-side effects |
+| Layer                    | Responsibility                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `PrepareChatUseCase`     | validate input, load history, run preflight, call LangGraph orchestrator, assemble `preContext` |
+| LangGraph gateway        | choose agent, decide whether data is needed, reuse grounding, run agentic RAG if needed         |
+| `createAgent().stream()` | build tools, compose model middleware, stream via `ToolLoopAgent`                               |
+| `preContextMiddleware`   | inject the already-computed memory/RAG context                                                  |
+| `after()`                | persist response-side effects                                                                   |
 
 ### What not to do
 

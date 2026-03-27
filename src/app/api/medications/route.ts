@@ -53,5 +53,6 @@ export const POST = WithContext(async ({ user, req }) => {
     userId: user.uid,
   });
   revalidateTag(CacheTags.medications(user.uid), "minutes");
+  revalidateTag(CacheTags.medicationMatchUser(user.uid), "minutes");
   return NextResponse.json(medication, { status: 201 });
 });

@@ -24,20 +24,30 @@ import type { SessionGroundingCacheDocument } from "@/data/sessions";
 import type { ProfileDto } from "@/data/profile";
 import { getCachedProfile } from "@/data/cached";
 import { aiService } from "@/data/shared/service/ai.service";
-import { gatewayAgent, type AgentType, type ClinicalRouting } from "./agent";
-import { decideRagRequirement } from "./rag-decision";
-import { ragService } from "../../rag/rag.service";
+import {
+  gatewayAgent,
+  type AgentType,
+  type ClinicalRouting,
+} from "@/data/shared/service/agents/gateway/agent";
+import { decideRagRequirement } from "@/data/shared/service/agents/gateway/rag-decision";
+import { ragService } from "@/data/shared/service/rag/rag.service";
 import {
   runAgenticRagLangGraph,
   type RagEvaluationMeta,
   type AgenticRagGraphInput,
-} from "../../rag/langgraph-rag-orchestrator.service";
-import { tryReuseGrounding } from "./grounding-layer.service";
+} from "@/workflow/rag-orchestrator.workflow";
+import { tryReuseGrounding } from "@/data/shared/service/agents/gateway/grounding-layer.service";
 import {
   buildKnownProfileDirectResponse,
   classifyKnownProfileIntent,
   type KnownProfileIntent,
-} from "./known-profile-intent";
+} from "@/data/shared/service/agents/gateway/known-profile-intent";
+import {
+  directResponseOrGateRag,
+  ragGateRoute,
+  groundingOrRunRag,
+} from "@/workflow/conditions/gateway.conditions";
+import { GATEWAY_NODES } from "@/workflow/edges/node-names";
 
 // ── RAG policy constants ──────────────────────────────────────────────────────
 
@@ -590,41 +600,36 @@ function finalizeNode(state: OrchestratorState): Partial<OrchestratorState> {
 
 function buildOrchestratorGraph() {
   return new StateGraph(OrchestratorAnnotation)
-    .addNode("route_query", routeQueryNode)
-    .addNode("inspect_known_context", inspectKnownContextNode)
-    .addNode("gate_rag", gateRagNode)
-    .addNode("resolve_grounding", resolveGroundingNode)
-    .addNode("run_rag", runRagNode)
-    .addNode("skip_rag", skipRagNode)
-    .addNode("generate_loading_hints", generateLoadingHintsNode)
-    .addNode("finalize", finalizeNode)
-    .addEdge(START, "route_query")
-    .addEdge("route_query", "inspect_known_context")
+    .addNode(GATEWAY_NODES.ROUTE_QUERY, routeQueryNode)
+    .addNode(GATEWAY_NODES.INSPECT_KNOWN_CONTEXT, inspectKnownContextNode)
+    .addNode(GATEWAY_NODES.GATE_RAG, gateRagNode)
+    .addNode(GATEWAY_NODES.RESOLVE_GROUNDING, resolveGroundingNode)
+    .addNode(GATEWAY_NODES.RUN_RAG, runRagNode)
+    .addNode(GATEWAY_NODES.SKIP_RAG, skipRagNode)
+    .addNode(GATEWAY_NODES.GENERATE_LOADING_HINTS, generateLoadingHintsNode)
+    .addNode(GATEWAY_NODES.FINALIZE, finalizeNode)
+    .addEdge(START, GATEWAY_NODES.ROUTE_QUERY)
+    .addEdge(GATEWAY_NODES.ROUTE_QUERY, GATEWAY_NODES.INSPECT_KNOWN_CONTEXT)
     .addConditionalEdges(
-      "inspect_known_context",
-      (state: OrchestratorState) =>
-        state.directResponse ? "finalize" : "gate_rag",
-      { finalize: "finalize", gate_rag: "gate_rag" },
-    )
-    .addConditionalEdges(
-      "gate_rag",
-      (state: OrchestratorState) =>
-        state.needsRag ? "resolve_grounding" : "skip_rag",
-      { resolve_grounding: "resolve_grounding", skip_rag: "skip_rag" },
-    )
-    .addConditionalEdges(
-      "resolve_grounding",
-      (state: OrchestratorState) =>
-        state.groundingReused ? "generate_loading_hints" : "run_rag",
+      GATEWAY_NODES.INSPECT_KNOWN_CONTEXT,
+      directResponseOrGateRag,
       {
-        generate_loading_hints: "generate_loading_hints",
-        run_rag: "run_rag",
+        finalize: GATEWAY_NODES.FINALIZE,
+        gate_rag: GATEWAY_NODES.GATE_RAG,
       },
     )
-    .addEdge("run_rag", "generate_loading_hints")
-    .addEdge("skip_rag", "generate_loading_hints")
-    .addEdge("generate_loading_hints", "finalize")
-    .addEdge("finalize", END)
+    .addConditionalEdges(GATEWAY_NODES.GATE_RAG, ragGateRoute, {
+      resolve_grounding: GATEWAY_NODES.RESOLVE_GROUNDING,
+      skip_rag: GATEWAY_NODES.SKIP_RAG,
+    })
+    .addConditionalEdges(GATEWAY_NODES.RESOLVE_GROUNDING, groundingOrRunRag, {
+      generate_loading_hints: GATEWAY_NODES.GENERATE_LOADING_HINTS,
+      run_rag: GATEWAY_NODES.RUN_RAG,
+    })
+    .addEdge(GATEWAY_NODES.RUN_RAG, GATEWAY_NODES.GENERATE_LOADING_HINTS)
+    .addEdge(GATEWAY_NODES.SKIP_RAG, GATEWAY_NODES.GENERATE_LOADING_HINTS)
+    .addEdge(GATEWAY_NODES.GENERATE_LOADING_HINTS, GATEWAY_NODES.FINALIZE)
+    .addEdge(GATEWAY_NODES.FINALIZE, END)
     .compile();
 }
 

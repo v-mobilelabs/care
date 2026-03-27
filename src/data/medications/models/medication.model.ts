@@ -56,6 +56,28 @@ export interface PaginatedMedications {
   totalCount?: number;
 }
 
+export interface MedicationMatchDto {
+  id: string;
+  name: string;
+  brandName?: string;
+  genericName?: string;
+  dosage?: string;
+  form?: string;
+  route?: string;
+  drugType?: string;
+  composition?: string[];
+  display: string;
+  source: "knowledge_base" | "web";
+  sourceUrl?: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface MedicationMatchResult {
+  query: string;
+  resolvedFrom: "knowledge_base" | "web" | "none";
+  matches: MedicationMatchDto[];
+}
+
 // ── Mapper ────────────────────────────────────────────────────────────────────
 
 export function toMedicationDto(
@@ -139,6 +161,17 @@ export const ListMedicationsPaginatedSchema = z.object({
 
 export type ListMedicationsPaginatedInput = z.infer<
   typeof ListMedicationsPaginatedSchema
+>;
+
+export const SearchMedicationMatchesSchema = z.object({
+  query: z
+    .string()
+    .min(2, { message: "query must contain at least 2 characters" }),
+  limit: z.number().int().min(1).max(20).optional().default(8),
+});
+
+export type SearchMedicationMatchesInput = z.infer<
+  typeof SearchMedicationMatchesSchema
 >;
 
 // ── DTO — inbound (delete) ────────────────────────────────────────────────────

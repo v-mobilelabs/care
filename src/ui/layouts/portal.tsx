@@ -28,6 +28,7 @@ import { SignOutButton } from "../sign-out-button";
 import { IconLogout, IconMoon, IconSun } from "@tabler/icons-react";
 import { Credits } from "../credits";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
+import { MessagesButton } from "../messaging/messages-button";
 import { useMessaging } from "../providers/messaging-provider";
 import Link, { useLinkStatus } from "@/ui/link";
 
@@ -214,6 +215,7 @@ export function PortalLayout({
         </Group>
         <Group gap="sm">
           {menus.header.map((menu) => renderHeaderItem(menu))}
+          <MessagesButton />
           <Menu
             shadow="md"
             width={240}

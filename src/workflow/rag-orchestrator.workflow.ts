@@ -1,14 +1,20 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { ragContextBuilder } from "@/data/shared/service";
 import { knowledgeBaseService } from "@/data/knowledge-base";
-import { queryRepairService } from "./query-repair.service";
+import { queryRepairService } from "@/data/shared/service/rag/query-repair.service";
 import {
   retrievalEvaluatorService,
   type EvaluatorModelTier,
   type RetrievalEvaluation,
-} from "./retrieval-evaluator.service";
-import { webFallbackService } from "./web-fallback.service";
-import { ragService } from "./rag.service";
+} from "@/data/shared/service/rag/retrieval-evaluator.service";
+import { webFallbackService } from "@/data/shared/service/rag/web-fallback.service";
+import { ragService } from "@/data/shared/service/rag/rag.service";
+import {
+  initialEvalRoute,
+  makeRepairEvalRoute,
+  webFallbackEvalRoute,
+} from "@/workflow/conditions/retrieval.conditions";
+import { RAG_NODES } from "@/workflow/edges/node-names";
 
 export type RagEvaluationStage =
   | "initial"
@@ -45,7 +51,9 @@ export interface AgenticRagGraphOutput {
 }
 
 type InternalRetrievalResult = {
-  ragResults: Awaited<ReturnType<typeof ragContextBuilder.buildContext>>["results"];
+  ragResults: Awaited<
+    ReturnType<typeof ragContextBuilder.buildContext>
+  >["results"];
   ragContext: string;
   kbEntries: Awaited<ReturnType<typeof knowledgeBaseService.search>>;
   kbText: string;
@@ -74,7 +82,10 @@ const RagGraphAnnotation = Annotation.Root({
   final: Annotation<AgenticRagGraphOutput | null>(),
 });
 
-function wrapProvenance(type: "patient_record" | "kb" | "web", body: string): string {
+function wrapProvenance(
+  type: "patient_record" | "kb" | "web",
+  body: string,
+): string {
   return `<source type="${type}">\n${body}\n</source>`;
 }
 
@@ -169,7 +180,7 @@ async function retrieveInternalContext(opts: {
 
 function buildGraph() {
   return new StateGraph(RagGraphAnnotation)
-    .addNode("initial_retrieve_evaluate", async (state: GraphState) => {
+    .addNode(RAG_NODES.INITIAL_RETRIEVE_EVALUATE, async (state: GraphState) => {
       const retrieval = await retrieveInternalContext({
         userId: state.input.userId,
         profileId: state.input.profileId,
@@ -200,53 +211,57 @@ function buildGraph() {
         partialFailure: retrieval.partialFailure,
       };
     })
-    .addNode("repair_and_retrieve_evaluate", async (state: GraphState) => {
-      const baseEvaluation = state.evaluation ?? defaultEvaluation("missing-evaluation");
-      const repairedQuery = await queryRepairService.repair({
-        userId: state.input.userId,
-        query: state.input.userQuery,
-        evaluatorReason: baseEvaluation.reason,
-        modelTier: state.input.repairModel,
-      });
+    .addNode(
+      RAG_NODES.REPAIR_AND_RETRIEVE_EVALUATE,
+      async (state: GraphState) => {
+        const baseEvaluation =
+          state.evaluation ?? defaultEvaluation("missing-evaluation");
+        const repairedQuery = await queryRepairService.repair({
+          userId: state.input.userId,
+          query: state.input.userQuery,
+          evaluatorReason: baseEvaluation.reason,
+          modelTier: state.input.repairModel,
+        });
 
-      const repairedEmbedding =
-        repairedQuery.rewrittenQuery === state.input.userQuery
-          ? state.input.queryEmbedding
-          : await ragService.embedQuery(repairedQuery.rewrittenQuery);
+        const repairedEmbedding =
+          repairedQuery.rewrittenQuery === state.input.userQuery
+            ? state.input.queryEmbedding
+            : await ragService.embedQuery(repairedQuery.rewrittenQuery);
 
-      const retrieval = await retrieveInternalContext({
-        userId: state.input.userId,
-        profileId: state.input.profileId,
-        query: repairedQuery.rewrittenQuery,
-        queryEmbedding: repairedEmbedding,
-        broaden: repairedQuery.broadenSearch,
-      });
+        const retrieval = await retrieveInternalContext({
+          userId: state.input.userId,
+          profileId: state.input.profileId,
+          query: repairedQuery.rewrittenQuery,
+          queryEmbedding: repairedEmbedding,
+          broaden: repairedQuery.broadenSearch,
+        });
 
-      const context = joinContextParts([
-        retrieval.kbText ? wrapProvenance("kb", retrieval.kbText) : "",
-        retrieval.ragContext
-          ? wrapProvenance("patient_record", retrieval.ragContext)
-          : "",
-      ]);
+        const context = joinContextParts([
+          retrieval.kbText ? wrapProvenance("kb", retrieval.kbText) : "",
+          retrieval.ragContext
+            ? wrapProvenance("patient_record", retrieval.ragContext)
+            : "",
+        ]);
 
-      const evaluation = await retrievalEvaluatorService.evaluate({
-        userId: state.input.userId,
-        query: state.input.userQuery,
-        ragResults: retrieval.ragResults,
-        kbResults: retrieval.kbEntries,
-        context,
-        modelTier: state.input.evaluatorModel,
-      });
+        const evaluation = await retrievalEvaluatorService.evaluate({
+          userId: state.input.userId,
+          query: state.input.userQuery,
+          ragResults: retrieval.ragResults,
+          kbResults: retrieval.kbEntries,
+          context,
+          modelTier: state.input.evaluatorModel,
+        });
 
-      return {
-        retrieval,
-        context,
-        evaluation,
-        repairedQuery,
-        partialFailure: state.partialFailure || retrieval.partialFailure,
-      };
-    })
-    .addNode("web_fallback_evaluate", async (state: GraphState) => {
+        return {
+          retrieval,
+          context,
+          evaluation,
+          repairedQuery,
+          partialFailure: state.partialFailure || retrieval.partialFailure,
+        };
+      },
+    )
+    .addNode(RAG_NODES.WEB_FALLBACK_EVALUATE, async (state: GraphState) => {
       const webEntries = await webFallbackService.searchMedicalReferences(
         state.input.userQuery,
         { timeoutMs: state.input.webFallbackTimeoutMs },
@@ -273,76 +288,64 @@ function buildGraph() {
         evaluation,
       };
     })
-    .addNode("final_initial", (state: GraphState) => ({
+    .addNode(RAG_NODES.FINAL_INITIAL, (state: GraphState) => ({
       final: {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("initial", state.evaluation),
       },
     }))
-    .addNode("final_repaired", (state: GraphState) => ({
+    .addNode(RAG_NODES.FINAL_REPAIRED, (state: GraphState) => ({
       final: {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("internal-repair", state.evaluation),
       },
     }))
-    .addNode("final_web", (state: GraphState) => ({
+    .addNode(RAG_NODES.FINAL_WEB, (state: GraphState) => ({
       final: {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("web-fallback", state.evaluation),
       },
     }))
-    .addNode("final_failed", (state: GraphState) => ({
+    .addNode(RAG_NODES.FINAL_FAILED, (state: GraphState) => ({
       final: {
         context: null,
         partialFailure: true,
         evaluation: toEvaluationMeta("failed", state.evaluation),
       },
     }))
-    .addEdge(START, "initial_retrieve_evaluate")
+    .addEdge(START, RAG_NODES.INITIAL_RETRIEVE_EVALUATE)
     .addConditionalEdges(
-      "initial_retrieve_evaluate",
-      (state: GraphState) => {
-        if (state.evaluation?.pass) return "final_initial";
-        return "repair_and_retrieve_evaluate";
-      },
+      RAG_NODES.INITIAL_RETRIEVE_EVALUATE,
+      initialEvalRoute,
       {
-        final_initial: "final_initial",
-        repair_and_retrieve_evaluate: "repair_and_retrieve_evaluate",
+        final_initial: RAG_NODES.FINAL_INITIAL,
+        repair_and_retrieve_evaluate: RAG_NODES.REPAIR_AND_RETRIEVE_EVALUATE,
       },
     )
     .addConditionalEdges(
-      "repair_and_retrieve_evaluate",
-      (state: GraphState) => {
-        if (state.evaluation?.pass) return "final_repaired";
-        if (retrievalEvaluatorService.shouldUseWebFallback(state.input.userQuery)) {
-          return "web_fallback_evaluate";
-        }
-        return "final_failed";
-      },
+      RAG_NODES.REPAIR_AND_RETRIEVE_EVALUATE,
+      makeRepairEvalRoute(retrievalEvaluatorService.shouldUseWebFallback),
       {
-        final_repaired: "final_repaired",
-        web_fallback_evaluate: "web_fallback_evaluate",
-        final_failed: "final_failed",
+        final_repaired: RAG_NODES.FINAL_REPAIRED,
+        web_fallback_evaluate: RAG_NODES.WEB_FALLBACK_EVALUATE,
+        final_failed: RAG_NODES.FINAL_FAILED,
       },
     )
     .addConditionalEdges(
-      "web_fallback_evaluate",
-      (state: GraphState) => {
-        if (state.evaluation?.pass) return "final_web";
-        return "final_failed";
-      },
+      RAG_NODES.WEB_FALLBACK_EVALUATE,
+      webFallbackEvalRoute,
       {
-        final_web: "final_web",
-        final_failed: "final_failed",
+        final_web: RAG_NODES.FINAL_WEB,
+        final_failed: RAG_NODES.FINAL_FAILED,
       },
     )
-    .addEdge("final_initial", END)
-    .addEdge("final_repaired", END)
-    .addEdge("final_web", END)
-    .addEdge("final_failed", END)
+    .addEdge(RAG_NODES.FINAL_INITIAL, END)
+    .addEdge(RAG_NODES.FINAL_REPAIRED, END)
+    .addEdge(RAG_NODES.FINAL_WEB, END)
+    .addEdge(RAG_NODES.FINAL_FAILED, END)
     .compile();
 }
 

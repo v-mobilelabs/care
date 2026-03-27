@@ -222,12 +222,26 @@ function resolveFileDisplayUrl(url: string): string {
     return `/api/files/${fileId}`;
 }
 
+function resolveFileThumbnailUrl(url: string): string {
+    if (!url.startsWith("gs://")) {
+        return url;
+    }
+
+    const fileId = extractFileIdFromGcsUri(url);
+    if (!fileId) {
+        return url;
+    }
+
+    return `/api/files/${fileId}/thumbnail`;
+}
+
 export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
     const isPdf = part.mediaType === "application/pdf";
     const isWord = part.mediaType.includes("word") || part.mediaType.includes("officedocument.wordprocessing");
     const isImage = part.mediaType.startsWith("image/");
     const [lightboxOpen, { open: openLightbox, close: closeLightbox }] = useDisclosure(false);
     const displayUrl = resolveFileDisplayUrl(part.url);
+    const thumbnailUrl = resolveFileThumbnailUrl(part.url);
 
     function handleClick() {
         if (isImage) {
@@ -247,7 +261,7 @@ export function FileMessage({ part, isUser }: Readonly<FileMessageProps>) {
                             style={{ cursor: "zoom-in", borderRadius: "var(--mantine-radius-md)", overflow: "hidden", display: "inline-block", position: "relative" }}
                         >
                             <Image
-                                src={displayUrl}
+                                src={thumbnailUrl}
                                 maw={280}
                                 mah={320}
                                 radius="md"

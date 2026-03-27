@@ -17,6 +17,7 @@ export const PATCH = WithContext<{ medicationId: string }>(
       medicationId,
     });
     revalidateTag(CacheTags.medications(user.uid), "minutes");
+    revalidateTag(CacheTags.medicationMatchUser(user.uid), "minutes");
     return NextResponse.json(medication);
   },
 );
@@ -29,6 +30,7 @@ export const DELETE = WithContext<{ medicationId: string }>(
       medicationId,
     });
     revalidateTag(CacheTags.medications(user.uid), "minutes");
+    revalidateTag(CacheTags.medicationMatchUser(user.uid), "minutes");
     return NextResponse.json({ ok: true });
   },
 );
