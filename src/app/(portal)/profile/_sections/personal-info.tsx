@@ -14,23 +14,66 @@ import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconUser } from "@tabler/icons-react";
 import { updateProfile } from "firebase/auth";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "@/ui/providers/auth-provider";
 import { colors } from "@/ui/tokens";
 import { useProfileQuery, useUpdateIdentityMutation } from "@/app/(portal)/user/_query";
 
 const GENDER_DATA = [
-    { value: "man", label: "Man" },
-    { value: "woman", label: "Woman" },
+    { value: "male", label: "Male" },
+    { value: "female", label: "Female" },
+    { value: "other", label: "Other" },
     { value: "non-binary", label: "Non-binary" },
     { value: "prefer-not-to-say", label: "Prefer not to say" },
+];
+
+const PREFERRED_LANGUAGE_OPTIONS = [
+    "English",
+    "Hindi",
+    "Tamil",
+    "Telugu",
+    "Kannada",
+    "Malayalam",
+    "Marathi",
+    "Gujarati",
+    "Bengali",
+    "Punjabi",
+    "Urdu",
+    "Spanish",
+    "French",
+    "German",
+    "Arabic",
+    "Mandarin Chinese",
+    "Japanese",
+    "Other",
 ];
 
 function splitDisplayName(displayName: string | null) {
     if (!displayName) return { firstName: "", lastName: "" };
     const parts = displayName.trim().split(/\s+/);
     return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
+}
+
+function normalizeGenderForForm(gender?: string): string {
+    if (!gender) {
+        return "";
+    }
+
+    const normalized = gender.trim().toLowerCase();
+    if (normalized === "man") {
+        return "male";
+    }
+
+    if (normalized === "woman") {
+        return "female";
+    }
+
+    if (normalized === "prefer not to say") {
+        return "prefer-not-to-say";
+    }
+
+    return normalized;
 }
 
 function validate(values: { firstName: string; lastName: string }) {
@@ -41,32 +84,59 @@ function validate(values: { firstName: string; lastName: string }) {
     return errors;
 }
 
-function PersonalInfoForm({ name, gender }: Readonly<{ name: string | null; gender?: string }>) {
+function PersonalInfoForm({
+    name,
+    gender,
+    preferredLanguage,
+}: Readonly<{ name: string | null; gender?: string; preferredLanguage?: string }>) {
     const { user } = useAuth();
     const [saving, setSaving] = useState(false);
     const updateIdentity = useUpdateIdentityMutation();
 
     const { firstName, lastName } = splitDisplayName(name);
     const form = useForm({
-        initialValues: { firstName, lastName, gender: gender ?? "" },
+        initialValues: {
+            firstName,
+            lastName,
+            gender: normalizeGenderForForm(gender),
+            preferredLanguage: preferredLanguage ?? "",
+        },
         validate,
     });
 
-    async function handleSave(values: { firstName: string; lastName: string; gender: string }) {
+    useEffect(() => {
+        const nextNames = splitDisplayName(name);
+        form.setValues({
+            firstName: nextNames.firstName,
+            lastName: nextNames.lastName,
+            gender: normalizeGenderForForm(gender),
+            preferredLanguage: preferredLanguage ?? "",
+        });
+        // Keep form in sync with async profile query updates.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [name, gender, preferredLanguage]);
+
+    async function handleSave(values: {
+        firstName: string;
+        lastName: string;
+        gender: string;
+        preferredLanguage: string;
+    }) {
         setSaving(true);
         try {
             const displayName = [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(" ");
             const promises: Promise<unknown>[] = [
                 updateIdentity.mutateAsync({
                     name: displayName,
-                    gender: values.gender,
+                    gender: values.gender || undefined,
+                    preferredLanguage: values.preferredLanguage || undefined,
                 }),
             ];
             if (user) promises.push(updateProfile(user, { displayName }));
             await Promise.all(promises);
             notifications.show({
-                title: "Name updated",
-                message: "Your display name has been saved.",
+                title: "Profile updated",
+                message: "Your personal information has been saved.",
                 color: colors.success,
                 icon: <IconCheck size={16} />,
             });
@@ -113,6 +183,15 @@ function PersonalInfoForm({ name, gender }: Readonly<{ name: string | null; gend
                             clearable
                             {...form.getInputProps("gender")}
                         />
+                        <Select
+                            size="sm"
+                            label="Preferred language"
+                            placeholder="Select preferred language"
+                            data={PREFERRED_LANGUAGE_OPTIONS}
+                            searchable
+                            clearable
+                            {...form.getInputProps("preferredLanguage")}
+                        />
                         <Group justify="flex-end" mt={4}>
                             <Button type="submit" color="primary" loading={saving} leftSection={<IconCheck size={16} />}>
                                 Save
@@ -129,5 +208,12 @@ export function PersonalInfoSection() {
     const { data: profile } = useProfileQuery();
     const name = profile?.name ?? null;
     const gender = profile?.gender ?? "";
-    return <PersonalInfoForm key={name ?? "loading"} name={name} gender={gender} />;
+    const preferredLanguage = profile?.preferredLanguage ?? "";
+    return (
+        <PersonalInfoForm
+            name={name}
+            gender={gender}
+            preferredLanguage={preferredLanguage}
+        />
+    );
 }

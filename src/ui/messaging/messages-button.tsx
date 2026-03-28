@@ -11,7 +11,7 @@ import { useMessaging } from "../providers/messaging-provider";
  * Shows an unread-count badge when there are unseen messages.
  */
 export function MessagesButton() {
-    const { toggle, isOpen } = useMessaging();
+    const { open, close, isOpen } = useMessaging();
     const { user } = useAuth();
     const { entries } = useInbox(user?.uid ?? null);
     const unreadCount = entries.reduce((sum, e) => sum + e.unread, 0);
@@ -30,7 +30,14 @@ export function MessagesButton() {
                     color="primary"
                     size="lg"
                     radius="xl"
-                    onClick={toggle}
+                    onClick={() => {
+                        if (isOpen) {
+                            close();
+                            return;
+                        }
+
+                        open();
+                    }}
                     aria-label="Messages"
                 >
                     <AnimatePresence mode="wait" initial={false}>

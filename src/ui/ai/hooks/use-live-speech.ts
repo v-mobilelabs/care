@@ -28,11 +28,17 @@ interface SpeechResultEvent {
 type SpeechRecCtor = new () => SpeechRec;
 
 function getSR(): SpeechRecCtor | undefined {
-  const win = window as typeof window & {
+  const win = globalThis as typeof globalThis & {
     SpeechRecognition?: SpeechRecCtor;
     webkitSpeechRecognition?: SpeechRecCtor;
   };
   return win.SpeechRecognition ?? win.webkitSpeechRecognition;
+}
+
+function mergeTranscript(committed: string, interim: string): string {
+  if (!interim) return committed;
+  if (!committed) return interim;
+  return `${committed} ${interim}`;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -58,6 +64,8 @@ export interface UseLiveSpeechReturn {
   livePhase: LivePhase;
   liveTranscript: string;
   liveAIText: string;
+  liveMessagesSent: number;
+  liveBytesSent: number;
   openLive: () => void;
   closeLive: () => void;
 }
@@ -73,6 +81,8 @@ export function useLiveSpeech({
   const [livePhase, setLivePhase] = useState<LivePhase>("idle");
   const [liveTranscript, setLiveTranscript] = useState("");
   const [liveAIText, setLiveAIText] = useState("");
+  const [liveMessagesSent, setLiveMessagesSent] = useState(0);
+  const [liveBytesSent, setLiveBytesSent] = useState(0);
 
   const liveRecRef = useRef<SpeechRec | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +105,15 @@ export function useLiveSpeech({
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+  }
+
+  function dispatchCommittedSpeech(text: string) {
+    const outboundBytes = new TextEncoder().encode(text).length;
+    liveRecRef.current?.abort();
+    syncLivePhase("thinking");
+    onSendMessage(text);
+    setLiveMessagesSent((prev) => prev + 1);
+    setLiveBytesSent((prev) => prev + outboundBytes);
   }
 
   function startLiveListening() {
@@ -152,17 +171,14 @@ export function useLiveSpeech({
         else interim += t;
       }
       if (final) committed += (committed ? " " : "") + final.trim();
-      setLiveTranscript(
-        committed + (interim ? (committed ? " " : "") + interim : ""),
-      );
+      setLiveTranscript(mergeTranscript(committed, interim));
 
       clearSilenceTimer();
       if (committed.trim()) {
         // 2 200 ms gives a more natural pause before submitting.
         silenceTimerRef.current = setTimeout(() => {
-          liveRecRef.current?.abort();
-          syncLivePhase("thinking");
-          onSendMessage(committed.trim());
+          const outboundText = committed.trim();
+          dispatchCommittedSpeech(outboundText);
           committed = "";
         }, 2200);
       }
@@ -176,6 +192,8 @@ export function useLiveSpeech({
     syncLiveMode(true);
     lastSpokenRef.current = "";
     setLiveAIText("");
+    setLiveMessagesSent(0);
+    setLiveBytesSent(0);
     startLiveListening();
   }
 
@@ -185,7 +203,7 @@ export function useLiveSpeech({
     clearSilenceTimer();
     liveRecRef.current?.abort();
     liveRecRef.current = null;
-    window.speechSynthesis.cancel();
+    globalThis.speechSynthesis.cancel();
     setLiveTranscript("");
     setLiveAIText("");
   }
@@ -227,6 +245,8 @@ export function useLiveSpeech({
     livePhase,
     liveTranscript,
     liveAIText,
+    liveMessagesSent,
+    liveBytesSent,
     openLive,
     closeLive,
   };

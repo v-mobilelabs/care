@@ -7,10 +7,10 @@ import { Messages } from "@/ui/ai/messages";
 import {
     useUploadFileMutation,
     useProfileQuery,
+    usePatientQuery,
     type FileRecord,
     type FileLabel,
 } from "@/app/(portal)/user/_query";
-import { trackEvent } from "@/lib/analytics";
 import { getInitials } from "@/lib/get-initials";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useChatContext, useMessagesContext } from "@/ui/ai/context/chat-context";
@@ -103,6 +103,7 @@ export function ChatContent() {
     const { sessionId } = useChatContext();
     const uploadFile = useUploadFileMutation();
     const { data: profile } = useProfileQuery();
+    const { data: patient } = usePatientQuery();
     const { user } = useAuth();
     const userInitials = getInitials(profile?.name, user?.email);
     const firstName = profile?.name?.split(" ")[0] ?? "there";
@@ -121,8 +122,6 @@ export function ChatContent() {
         addToolApprovalResponse,
         hasPendingToolCall,
         pendingFreeText,
-        chatMode,
-        setChatMode,
         fetchNextPage, hasNextPage, isFetchingNextPage,
         error, regenerate,
     } = useMessagesContext();
@@ -269,16 +268,20 @@ export function ChatContent() {
             onAnswerFreeText={handleAnswer}
             showDisclaimer={hasUserMessages}
             contextUsage={contextUsage}
-            chatMode={chatMode}
-            onChatModeChange={(mode) => {
-                setChatMode(mode);
-                trackEvent({
-                    name: "chat_mode_changed",
-                    params: { mode, session_id: sessionId },
-                });
-            }}
             onOpenRecap={openRecapModal}
             onOpenContinuity={openContinuityModal}
+            liveProfileContext={{
+                name: profile?.name,
+                dateOfBirth: profile?.dateOfBirth,
+                gender: profile?.gender,
+                city: profile?.city,
+                country: profile?.country,
+                heightCm: patient?.height,
+                weightKg: patient?.weight,
+                activityLevel: patient?.activityLevel,
+                bloodGroup: patient?.bloodGroup,
+                allergies: patient?.allergies,
+            }}
         />
     );
 
@@ -404,7 +407,7 @@ export function ChatContent() {
                     </Box>
 
                     <Box maw={760} mx="auto" w="100%" px="lg" my="lg">
-                        <AssistantWelcome chatMode={chatMode} />
+                        <AssistantWelcome />
                     </Box>
 
                     {/* Starter cards */}

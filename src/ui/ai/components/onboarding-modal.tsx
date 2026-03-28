@@ -31,7 +31,7 @@ import {
 
 interface OnboardingModalProps {
     readonly opened: boolean;
-    /** Whether base identity fields are complete (name, phone, gender, country, DOB) */
+    /** Whether base identity fields are complete (name, phone, gender, preferredLanguage, country, DOB) */
     readonly profileComplete: boolean;
     /** Whether patient health fields are complete (height, weight, activityLevel).
      *  Pass true for doctors — they skip the health layer. */
@@ -45,6 +45,7 @@ interface FormValues {
     // Layer 1 — identity
     name: string;
     phone: string;
+    preferredLanguage: string;
     location: string;
     dateOfBirth: string;
     gender: string;
@@ -61,6 +62,27 @@ const GENDER_OPTIONS = [
     { value: "Male", label: "Male" },
     { value: "Female", label: "Female" },
     { value: "Other", label: "Other" },
+];
+
+const PREFERRED_LANGUAGE_OPTIONS = [
+    "English",
+    "Hindi",
+    "Tamil",
+    "Telugu",
+    "Kannada",
+    "Malayalam",
+    "Marathi",
+    "Gujarati",
+    "Bengali",
+    "Punjabi",
+    "Urdu",
+    "Spanish",
+    "French",
+    "German",
+    "Arabic",
+    "Mandarin Chinese",
+    "Japanese",
+    "Other",
 ];
 
 const ACTIVITY_OPTIONS = [
@@ -97,6 +119,14 @@ const ALLERGY_SUGGESTIONS = [
     "Penicillin",
     "Sulfa drugs",
 ];
+
+function isPositiveNumber(value: string): boolean {
+    if (value.trim() === "") {
+        return false;
+    }
+
+    return Number(value) > 0;
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -150,18 +180,11 @@ export function OnboardingModal({
         return "Back";
     }
 
-    function isPositiveNumber(value: string): boolean {
-        if (value.trim() === "") {
-            return false;
-        }
-
-        return Number(value) > 0;
-    }
-
     function isIdentityStepValid(values: FormValues): boolean {
         return (
             values.name.trim() !== "" &&
             values.phone.trim() !== "" &&
+            values.preferredLanguage.trim() !== "" &&
             values.location.trim() !== "" &&
             values.dateOfBirth.trim() !== "" &&
             values.gender !== "" &&
@@ -191,6 +214,7 @@ export function OnboardingModal({
         if (key === "identity") {
             form.validateField("name");
             form.validateField("phone");
+            form.validateField("preferredLanguage");
             form.validateField("location");
             form.validateField("dateOfBirth");
             form.validateField("gender");
@@ -214,6 +238,7 @@ export function OnboardingModal({
         await updateIdentity.mutateAsync({
             name: values.name.trim(),
             phone: values.phone.trim(),
+            preferredLanguage: values.preferredLanguage.trim(),
             gender: values.gender,
             city: values.location.trim(),
             country: values.country.trim(),
@@ -281,6 +306,7 @@ export function OnboardingModal({
         initialValues: {
             name: currentProfile?.name ?? "",
             phone: currentProfile?.phone ?? "",
+            preferredLanguage: currentProfile?.preferredLanguage ?? "",
             location: currentProfile?.city ?? "",
             dateOfBirth: currentProfile?.dateOfBirth ?? "",
             gender:
@@ -299,12 +325,22 @@ export function OnboardingModal({
                 !profileComplete && !v.trim() ? "Full name is required" : null,
             phone: (v) =>
                 !profileComplete && !v.trim() ? "Phone number is required" : null,
+            preferredLanguage: (v) =>
+                !profileComplete && !v.trim()
+                    ? "Preferred language is required"
+                    : null,
             gender: (v) =>
-                !profileComplete && !v
-                    ? "Please select your gender"
-                    : v === "Prefer not to say"
-                        ? "Please select a valid gender"
-                        : null,
+                (() => {
+                    if (!profileComplete && !v) {
+                        return "Please select your gender";
+                    }
+
+                    if (v === "Prefer not to say") {
+                        return "Please select a valid gender";
+                    }
+
+                    return null;
+                })(),
             country: (v) =>
                 !profileComplete && !v.trim() ? "Country is required" : null,
             location: (v) =>
@@ -316,13 +352,13 @@ export function OnboardingModal({
             height: (v) => {
                 if (patientProfileComplete) return null;
                 if (!v) return "Height is required";
-                if (isNaN(Number(v)) || Number(v) <= 0) return "Enter a valid height";
+                if (Number.isNaN(Number(v)) || Number(v) <= 0) return "Enter a valid height";
                 return null;
             },
             weight: (v) => {
                 if (patientProfileComplete) return null;
                 if (!v) return "Weight is required";
-                if (isNaN(Number(v)) || Number(v) <= 0) return "Enter a valid weight";
+                if (Number.isNaN(Number(v)) || Number(v) <= 0) return "Enter a valid weight";
                 return null;
             },
             activityLevel: (v) =>
@@ -420,6 +456,14 @@ export function OnboardingModal({
                                                             label="Phone number"
                                                             placeholder="+1 555 000 0000"
                                                             {...form.getInputProps("phone")}
+                                                        />
+                                                        <Select
+                                                            size="sm"
+                                                            label="Preferred language"
+                                                            placeholder="Select preferred language"
+                                                            searchable
+                                                            data={PREFERRED_LANGUAGE_OPTIONS}
+                                                            {...form.getInputProps("preferredLanguage")}
                                                         />
                                                         <Radio.Group
                                                             label="Gender"

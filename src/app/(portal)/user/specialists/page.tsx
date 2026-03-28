@@ -30,16 +30,7 @@ function SpecialistCard({ specialist }: Readonly<SpecialistCardProps>) {
         background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))",
         transition: "all 200ms ease",
         cursor: "pointer",
-      }}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-        el.style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.boxShadow = "none";
-        el.style.transform = "translateY(0)";
+        boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
       }}
     >
       <Stack gap="md" h="100%">

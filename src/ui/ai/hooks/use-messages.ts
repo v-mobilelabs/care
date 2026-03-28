@@ -74,7 +74,6 @@ function isLastMessageToolOutputsComplete(messages: UIMessage[]): boolean {
 
 // eslint-disable-next-line max-lines-per-function
 export function useMessages(sessionId: string) {
-  const [chatMode, setChatMode] = useState<"quick" | "full">("quick");
   // Pending attachments state for file uploads
   const [pendingAttachments, setPendingAttachments] = useState<
     {
@@ -149,17 +148,6 @@ export function useMessages(sessionId: string) {
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [phraseFading, setPhraseFading] = useState(false);
 
-  useEffect(() => {
-    const storedMode = globalThis.localStorage.getItem("careai-assistant-mode");
-    if (storedMode === "quick" || storedMode === "full") {
-      setChatMode(storedMode);
-    }
-  }, []);
-
-  useEffect(() => {
-    globalThis.localStorage.setItem("careai-assistant-mode", chatMode);
-  }, [chatMode]);
-
   // ── AI SDK chat ───────────────────────────────────────────────────────────
   const {
     messages,
@@ -177,7 +165,7 @@ export function useMessages(sessionId: string) {
       api: "/api/chat",
       body: {
         sessionId,
-        chatMode,
+        chatMode: "full",
         ...(pendingAttachments.length > 0
           ? { attachmentUrls: pendingAttachments }
           : {}),
@@ -578,8 +566,6 @@ export function useMessages(sessionId: string) {
     // Pending attachments for file uploads
     pendingAttachments,
     setPendingAttachments,
-    chatMode,
-    setChatMode,
     // Pending free-text question — when the AI asks a question that requires
     // typed input (free_text, or any unrecognised type), the user answers via
     // the input bar rather than inline question-card buttons.

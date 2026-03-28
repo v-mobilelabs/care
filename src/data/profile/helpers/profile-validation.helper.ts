@@ -34,6 +34,11 @@ export const RequiredProfileField: ReadonlyArray<ProfileFieldDefinition> = [
     description: "Self-identified gender",
   },
   {
+    key: "preferredLanguage",
+    label: "Preferred language",
+    description: "User preferred communication language",
+  },
+  {
     key: "country",
     label: "Country",
     description: "Country of residence",

@@ -56,11 +56,12 @@ export function MessagingProvider({
     }
 
     function toggle() {
-        if (isOpen) {
-            close();
-        } else {
-            open();
-        }
+        setIsOpen((prev) => {
+            if (prev) {
+                setActiveConversationId(null);
+            }
+            return !prev;
+        });
     }
 
     function openConversation(convId: string) {

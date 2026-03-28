@@ -26,6 +26,7 @@ import {
     IconFileWord,
     IconFlag,
     IconHeartbeat,
+    IconLanguage,
     IconPencil,
     IconPlayerStopFilled,
     IconThumbDown,
@@ -65,6 +66,66 @@ function SpeakButton({ msgId, text }: Readonly<{ msgId: string; text: string }>)
             }}
         >
             {isPlaying ? <IconPlayerStopFilled size={14} /> : <IconVolume size={15} />}
+        </ActionIcon>
+    );
+}
+
+interface TranslateApiResponse {
+    translatedText: string;
+    targetLanguage: string;
+}
+
+function TranslateButton({
+    sourceText,
+    onTranslated,
+}: Readonly<{
+    sourceText: string;
+    onTranslated: (translatedText: string, targetLanguage: string) => void;
+}>) {
+    const [loading, setLoading] = useState(false);
+
+    async function handleTranslate(): Promise<void> {
+        if (loading) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: sourceText }),
+            });
+
+            if (!res.ok) {
+                throw new Error("Translation failed");
+            }
+
+            const data = (await res.json()) as TranslateApiResponse;
+            onTranslated(data.translatedText, data.targetLanguage);
+        } catch {
+            notifications.show({
+                title: "Translation failed",
+                message: "Could not translate this message right now. Please try again.",
+                color: "red",
+            });
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <ActionIcon
+            size={28}
+            variant="subtle"
+            color="gray"
+            style={{ opacity: 0.45 }}
+            onClick={() => void handleTranslate()}
+            aria-label="Translate message"
+            title="Translate to preferred language"
+            loading={loading}
+        >
+            <IconLanguage size={15} />
         </ActionIcon>
     );
 }
@@ -555,6 +616,11 @@ function AssistantBubble({ text, isLoading, msgId, usage }: Readonly<{
     msgId: string;
     usage?: TokenUsage;
 }>) {
+    const [translatedText, setTranslatedText] = useState<string | null>(null);
+    const [translatedLanguage, setTranslatedLanguage] = useState<string | null>(null);
+    const [showTranslated, setShowTranslated] = useState(false);
+
+    const renderedText = showTranslated && translatedText ? translatedText : text;
     const memoryRecalls = parseMemoryRecalls(text);
     const hasRecalls = memoryRecalls.length > 0;
     const firstRecallFired = useRef(false);
@@ -572,24 +638,129 @@ function AssistantBubble({ text, isLoading, msgId, usage }: Readonly<{
         <>
             <Group gap={2} mt={4} justify="flex-start" style={{ minHeight: 28 }}>
                 <Box style={{ wordBreak: "break-word" }}>
-                    <Streamdown plugins={{ code, math }} isAnimating={isLoading}>{text}</Streamdown>
+                    <Streamdown plugins={{ code, math }} isAnimating={isLoading}>{renderedText}</Streamdown>
                     {hasRecalls && (
                         <Stack gap={6} mt={8}>
-                            {memoryRecalls.map((recall, idx) => (
-                                <MemoryRecallBadge key={idx} text={recall.text} date={recall.date} />
+                            {memoryRecalls.map((recall) => (
+                                <MemoryRecallBadge key={`${recall.date ?? ""}-${recall.text}`} text={recall.text} date={recall.date} />
                             ))}
                         </Stack>
                     )}
                 </Box>
             </Group>
             <Group gap="sm">
-                <SpeakButton msgId={msgId} text={text} />
+                <SpeakButton msgId={msgId} text={renderedText} />
+                {translatedText ? (
+                    <Button
+                        size="compact-xs"
+                        variant={showTranslated ? "light" : "subtle"}
+                        color="gray"
+                        leftSection={<IconLanguage size={12} />}
+                        onClick={() => setShowTranslated((value) => !value)}
+                    >
+                        {showTranslated
+                            ? "Show original"
+                            : `Show ${translatedLanguage ?? "translation"}`}
+                    </Button>
+                ) : (
+                    <TranslateButton
+                        sourceText={text}
+                        onTranslated={(nextText, language) => {
+                            setTranslatedText(nextText);
+                            setTranslatedLanguage(language);
+                            setShowTranslated(true);
+                        }}
+                    />
+                )}
                 <Text size="xs" c="dimmed">Was this helpful?</Text>
                 <FeedbackBar msgId={msgId} />
                 {usage && <TokenUsageBadge usage={usage} />}
             </Group>
         </>
     );
+}
+
+function getMessageAuthorLabel(isUser: boolean, agentType?: string): string {
+    if (isUser) {
+        return "You";
+    }
+
+    const specialistLabel = getAgentLabel(agentType);
+    if (!specialistLabel) {
+        return "CareAI";
+    }
+
+    return `CareAI · ${specialistLabel}`;
+}
+
+function MessageBody({
+    isEditing,
+    msgId,
+    editingText,
+    isLoading,
+    onEditChange,
+    onEditKeyDown,
+    onEditCancel,
+    onEditSubmit,
+    isUser,
+    text,
+    textRef,
+    expanded,
+    clamped,
+    hovered,
+    onEditStart,
+    onExpand,
+    usage,
+}: Readonly<{
+    isEditing: boolean;
+    msgId: string;
+    editingText: string;
+    isLoading: boolean;
+    onEditChange: (text: string) => void;
+    onEditKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>, msgId: string) => void;
+    onEditCancel: () => void;
+    onEditSubmit: (msgId: string) => void;
+    isUser: boolean;
+    text: string;
+    textRef: React.RefObject<HTMLDivElement | null>;
+    expanded: boolean;
+    clamped: boolean;
+    hovered: boolean;
+    onEditStart: (msgId: string, text: string) => void;
+    onExpand: () => void;
+    usage?: TokenUsage;
+}>) {
+    if (isEditing) {
+        return (
+            <EditingBox
+                msgId={msgId}
+                editingText={editingText}
+                isLoading={isLoading}
+                onEditChange={onEditChange}
+                onEditKeyDown={onEditKeyDown}
+                onEditCancel={onEditCancel}
+                onEditSubmit={onEditSubmit}
+            />
+        );
+    }
+
+    if (isUser) {
+        return (
+            <UserBubble
+                text={text}
+                textRef={textRef}
+                expanded={expanded}
+                clamped={clamped}
+                hovered={hovered}
+                isLoading={isLoading}
+                msgId={msgId}
+                onEditStart={onEditStart}
+                onExpand={onExpand}
+            />
+        );
+    }
+
+    return <AssistantBubble text={text} isLoading={isLoading} msgId={msgId} usage={usage} />;
 }
 
 // ── Main TextMessage component ────────────────────────────────────────────────
@@ -616,6 +787,7 @@ export function TextMessage({
     const [expanded, setExpanded] = useState(false);
     const [clamped, setClamped] = useState(false);
     const textRef = useRef<HTMLDivElement>(null);
+    const authorLabel = getMessageAuthorLabel(isUser, agentType);
 
     useLayoutEffect(() => {
         const el = textRef.current;
@@ -639,12 +811,16 @@ export function TextMessage({
                         ? (userInitials ?? <IconUser size={14} />)
                         : <IconHeartbeat size={14} />}
                 </Avatar>
-                <Text size="sm" c="dimmed" fw={600}>{isUser ? "You" : `CareAI${getAgentLabel(agentType) ? ` · ${getAgentLabel(agentType)}` : ""}`}</Text>
+                <Text size="sm" c="dimmed" fw={600}>{authorLabel}</Text>
             </Group>
 
             <Box pl={isUser ? 0 : 36} pr={isUser ? 36 : 0}>
-                {isEditing ? (
-                    <EditingBox
+                <Box
+                    onMouseEnter={() => setHovered(true)}
+                    onMouseLeave={() => setHovered(false)}
+                >
+                    <MessageBody
+                        isEditing={isEditing}
                         msgId={msgId}
                         editingText={editingText}
                         isLoading={isLoading}
@@ -652,29 +828,17 @@ export function TextMessage({
                         onEditKeyDown={onEditKeyDown}
                         onEditCancel={onEditCancel}
                         onEditSubmit={onEditSubmit}
+                        isUser={isUser}
+                        text={text}
+                        textRef={textRef}
+                        expanded={expanded}
+                        clamped={clamped}
+                        hovered={hovered}
+                        onEditStart={onEditStart}
+                        onExpand={() => setExpanded((value) => !value)}
+                        usage={usage}
                     />
-                ) : (
-                    <Box
-                        onMouseEnter={() => setHovered(true)}
-                        onMouseLeave={() => setHovered(false)}
-                    >
-                        {isUser ? (
-                            <UserBubble
-                                text={text}
-                                textRef={textRef}
-                                expanded={expanded}
-                                clamped={clamped}
-                                hovered={hovered}
-                                isLoading={isLoading}
-                                msgId={msgId}
-                                onEditStart={onEditStart}
-                                onExpand={() => setExpanded((v) => !v)}
-                            />
-                        ) : (
-                            <AssistantBubble text={text} isLoading={isLoading} msgId={msgId} usage={usage} />
-                        )}
-                    </Box>
-                )}
+                </Box>
             </Box>
         </Stack>
     );

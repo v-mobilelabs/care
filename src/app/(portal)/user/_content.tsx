@@ -463,6 +463,24 @@ function getLatestActivityDate(
     return values.toSorted((a, b) => b.localeCompare(a))[0];
 }
 
+function normalizeArrayData<T>(
+    data: unknown,
+    options?: Readonly<{ collectionKey?: string }>,
+): T[] {
+    if (Array.isArray(data)) {
+        return data as T[];
+    }
+
+    if (options?.collectionKey && data && typeof data === "object") {
+        const nested = (data as Record<string, unknown>)[options.collectionKey];
+        if (Array.isArray(nested)) {
+            return nested as T[];
+        }
+    }
+
+    return [];
+}
+
 function getContinuityLabel(totalArtifacts: number): string {
     if (totalArtifacts === 0) return "Starting";
     if (totalArtifacts < 5) return "Building";
@@ -749,12 +767,18 @@ function ActivitySection(props: ActivitySectionProps) {
 export function PatientHomeContent() {
     const { data: profile } = useProfileQuery();
     const { data: usage, isLoading: usageLoading } = useCreditsQuery();
-    const { data: vitals = [], isLoading: vitalsLoading } = useVitalsQuery();
-    const { data: assessments = [], isLoading: assessmentsLoading } = useAssessmentsQuery();
-    const { data: summaries = [], isLoading: summariesLoading } = usePatientSummariesQuery();
+    const { data: vitalsData, isLoading: vitalsLoading } = useVitalsQuery();
+    const { data: assessmentsData, isLoading: assessmentsLoading } = useAssessmentsQuery();
+    const { data: summariesData, isLoading: summariesLoading } = usePatientSummariesQuery();
     const { data: referralsData, isLoading: referralsLoading } = useReferralsInfiniteQuery({
         status: "pending",
     });
+    const vitals = normalizeArrayData<{ measuredAt: string }>(vitalsData);
+    const assessments = normalizeArrayData<{ id?: string; title: string; summary?: string; updatedAt?: string; createdAt: string }>(
+        assessmentsData,
+        { collectionKey: "assessments" },
+    );
+    const summaries = normalizeArrayData<{ narrative: string; updatedAt?: string; createdAt: string }>(summariesData);
     const referrals = referralsData?.pages[0]?.referrals ?? [];
     const referralCount = referrals.length;
 

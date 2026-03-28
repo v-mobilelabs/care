@@ -2,7 +2,6 @@
 import {
     ActionIcon,
     Badge,
-    Button,
     Box,
     Card,
     CloseButton,
@@ -19,8 +18,6 @@ import {
 import {
     IconBookmarks,
     IconCamera,
-    IconCheck,
-    IconChevronDown,
     IconDots,
     IconFile,
     IconFileTypePdf,
@@ -33,15 +30,16 @@ import {
     IconPlus,
     IconSend,
     IconStack2,
+    IconWaveSine,
 } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
-import type { UIMessage } from "ai";
+import { isTextUIPart, type UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
+import { isToolPart } from "@/ui/ai/types";
 import { motion as motionTokens } from "@/ui/tokens";
 
 import { useMic } from "@/ui/ai/hooks/use-mic";
-import { useLiveSpeech } from "@/ui/ai/hooks/use-live-speech";
-import { LiveOverlay } from "@/ui/ai/components/live-overlay";
+import { GeminiLiveStandalone } from "@/ui/ai/components/gemini-live-standalone";
 import { FilePickerDrawer } from "./file-picker-drawer";
 import { ContextUsageIndicator } from "./context-usage-indicator";
 import type { FileRecord } from "@/ui/ai/query";
@@ -53,9 +51,9 @@ export interface InputBarProps {
     input: string;
     onInputChange: (value: string) => void;
     isLoading: boolean;
-    /** Passed through to `useLiveSpeech` for TTS trigger detection. */
+    /** Current chat messages (used for indicators and context UI). */
     messages: UIMessage[];
-    /** Passed through to `useLiveSpeech` to gate TTS until streaming ends. */
+    /** Chat status from useMessages context. */
     status: string;
     /** Called for normal user messages. New local files + selected existing FileRecords. */
     onSend: (text: string, files?: FileList, existingFiles?: FileRecord[]) => void;
@@ -80,22 +78,24 @@ export interface InputBarProps {
     showDisclaimer?: boolean;
     /** Total context tokens used vs max context window — drives the ring indicator. */
     contextUsage?: { inputTokens: number; outputTokens: number; maxTokens: number };
-    /** Assistant response depth preference (quick guidance vs full assessment). */
-    chatMode?: "quick" | "full";
-    /** Called when assistant response depth mode changes. */
-    onChatModeChange?: (mode: "quick" | "full") => void;
     /** Called when the user clicks the session recap indicator. */
     onOpenRecap?: () => void;
     /** Called when the user clicks the continuity assessment indicator. */
     onOpenContinuity?: () => void;
+    /** Optional user profile context used to enrich Gemini Live system instruction. */
+    liveProfileContext?: Readonly<{
+        name?: string;
+        dateOfBirth?: string;
+        gender?: string;
+        city?: string;
+        country?: string;
+        heightCm?: number;
+        weightKg?: number;
+        activityLevel?: string;
+        bloodGroup?: string;
+        allergies?: readonly string[];
+    }>;
 }
-
-// ── Mode hint copy ────────────────────────────────────────────────────────────
-
-const MODE_HINTS = {
-    quick: "Quick guidance",
-    full: "Full assessment · ~15–20s",
-} as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -132,6 +132,152 @@ function calculateContinuitySaved(messages: UIMessage[]): number {
     if ((toolCounts.get("submitPrescription") ?? 0) > 0) count++;
     if ((toolCounts.get("submitReferralRequest") ?? 0) > 0) count++;
     return count;
+}
+
+type SeedToolPart = {
+    type: string;
+    state?: string;
+    input?: unknown;
+    args?: unknown;
+    output?: unknown;
+};
+
+function clampSeedText(value: string, max = 220): string {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (trimmed.length <= max) return trimmed;
+    return `${trimmed.slice(0, max)}…`;
+}
+
+function toCompactSeedJson(value: unknown, max = 280): string {
+    if (value == null) return "";
+
+    try {
+        const seen = new WeakSet<object>();
+        const json = JSON.stringify(value, (_key, current) => {
+            if (typeof current === "string") {
+                return clampSeedText(current, 120);
+            }
+
+            if (Array.isArray(current)) {
+                if (current.length <= 6) return current;
+                return [...current.slice(0, 6), `…(+${current.length - 6} more)`];
+            }
+
+            if (current && typeof current === "object") {
+                if (seen.has(current as object)) {
+                    return "[circular]";
+                }
+                seen.add(current as object);
+            }
+
+            return current;
+        });
+
+        if (!json) return "";
+        if (json.length <= max) return json;
+        return `${json.slice(0, max)}…`;
+    } catch {
+        return "";
+    }
+}
+
+function summarizeAssistantToolPart(part: unknown): string {
+    if (!isToolPart(part)) return "";
+
+    const toolPart = part as SeedToolPart;
+    const toolName = toolPart.type.startsWith("tool-")
+        ? toolPart.type.slice(5)
+        : toolPart.type;
+    const state = toolPart.state ?? "unknown";
+    if (state === "input-streaming") return "";
+
+    const inputJson = toCompactSeedJson(toolPart.input ?? toolPart.args);
+    const outputJson = toCompactSeedJson(toolPart.output);
+
+    let summary = `[Tool ${toolName} • ${state}]`;
+    if (inputJson) {
+        summary += ` input=${inputJson}`;
+    }
+    if (outputJson) {
+        summary += ` output=${outputJson}`;
+    }
+
+    return clampSeedText(summary, 500);
+}
+
+function extractGeminiLiveSeedText(message: UIMessage): string {
+    if (message.role !== "user" && message.role !== "assistant") return "";
+
+    const textParts: string[] = [];
+    const toolParts: string[] = [];
+
+    for (const part of message.parts) {
+        if (isTextUIPart(part)) {
+            textParts.push(part.text);
+            continue;
+        }
+
+        if (message.role !== "assistant") continue;
+
+        const toolSummary = summarizeAssistantToolPart(part);
+        if (toolSummary) toolParts.push(toolSummary);
+    }
+
+    return [...textParts, ...toolParts].join("\n").trim();
+}
+
+function buildGeminiLiveSeedTurns(
+    messages: readonly UIMessage[],
+): ReadonlyArray<Readonly<{ role: "user" | "assistant"; text: string }>> {
+    const turns: Array<Readonly<{ role: "user" | "assistant"; text: string }>> = [];
+
+    for (const message of messages) {
+        if (message.role !== "user" && message.role !== "assistant") continue;
+        const text = extractGeminiLiveSeedText(message);
+
+        if (!text) continue;
+        turns.push({ role: message.role, text });
+    }
+
+    return turns.slice(-24);
+}
+
+function buildGeminiLiveSystemInstruction(
+    profile: InputBarProps["liveProfileContext"],
+): string {
+    const baseLine =
+        "You are CareAI realtime assistant. Be concise, safe, and clinically clear.";
+
+    if (!profile) {
+        return baseLine;
+    }
+
+    const profileParts: string[] = [];
+    if (profile.name) profileParts.push(`name: ${profile.name}`);
+    if (profile.dateOfBirth) profileParts.push(`dateOfBirth: ${profile.dateOfBirth}`);
+    if (profile.gender) profileParts.push(`gender: ${profile.gender}`);
+    if (profile.city || profile.country) {
+        const location = [profile.city, profile.country].filter(Boolean).join(", ");
+        if (location) profileParts.push(`location: ${location}`);
+    }
+    if (profile.heightCm != null) profileParts.push(`heightCm: ${profile.heightCm}`);
+    if (profile.weightKg != null) profileParts.push(`weightKg: ${profile.weightKg}`);
+    if (profile.activityLevel) profileParts.push(`activityLevel: ${profile.activityLevel}`);
+    if (profile.bloodGroup) profileParts.push(`bloodGroup: ${profile.bloodGroup}`);
+    if (profile.allergies && profile.allergies.length > 0) {
+        profileParts.push(`allergies: ${profile.allergies.join(", ")}`);
+    }
+
+    if (profileParts.length > 0) {
+        return [
+            baseLine,
+            `Patient profile context (may be incomplete, do not invent missing fields): ${profileParts.join("; ")}.`,
+            "Use this context for personalization and safety checks. If the user gives newer/conflicting info, prefer the latest user statement.",
+        ].join(" ");
+    }
+
+    return baseLine;
 }
 
 function pillFileIcon(mime: string, size = 16) {
@@ -211,10 +357,9 @@ export function InputBar({
     onAnswerFreeText,
     showDisclaimer = true,
     contextUsage,
-    chatMode = "quick",
-    onChatModeChange,
     onOpenRecap,
     onOpenContinuity,
+    liveProfileContext,
 }: Readonly<InputBarProps>) {
     const isMobile = useMediaQuery("(max-width: 48em)");
     const toolbarIconSize = isMobile ? 28 : TOOLBAR_ICON_SIZE;
@@ -226,6 +371,14 @@ export function InputBar({
     const [filePickerOpened, setFilePickerOpened] = useState(false);
     const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(new Map());
     const [focused, setFocused] = useState(false);
+    const [geminiLiveOpen, setGeminiLiveOpen] = useState(false);
+    const [geminiLiveConnected, setGeminiLiveConnected] = useState(false);
+    const [liveMicStats, setLiveMicStats] = useState({
+        micEnabled: false,
+        bytesPerSecond: 0,
+        totalBytes: 0,
+        micLevel: 0,
+    });
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -235,11 +388,37 @@ export function InputBar({
     // Calculate recap and continuity indicators
     const recapCount = calculateRecapFindings(messages);
     const continuityCount = calculateContinuitySaved(messages);
+    const liveSeedTurns = buildGeminiLiveSeedTurns(messages);
+    const liveSystemInstruction = buildGeminiLiveSystemInstruction(liveProfileContext);
 
     // Re-focus the input after the AI finishes responding.
     useEffect(() => {
         if (!isBusy) textareaRef.current?.focus();
     }, [isBusy]);
+
+    useEffect(() => {
+        if (geminiLiveOpen) return;
+        setGeminiLiveConnected(false);
+        setLiveMicStats({
+            micEnabled: false,
+            bytesPerSecond: 0,
+            totalBytes: 0,
+            micLevel: 0,
+        });
+    }, [geminiLiveOpen]);
+
+    const livePhaseLabel = (() => {
+        if (!geminiLiveOpen) return "idle";
+        if (geminiLiveConnected && liveMicStats.micEnabled) return "listening";
+        if (geminiLiveConnected) return "connected";
+        return "connecting";
+    })();
+
+    const livePhaseColor = (() => {
+        if (livePhaseLabel === "listening") return "teal" as const;
+        if (livePhaseLabel === "connected") return "blue" as const;
+        return "primary" as const;
+    })();
 
     // Auto-focus when a free-text question appears.
     useEffect(() => {
@@ -248,9 +427,6 @@ export function InputBar({
 
     // ── Hooks ─────────────────────────────────────────────────────────────────
     const { isListening, toggleMic } = useMic({ input, setInput: onInputChange });
-
-    const { liveMode, livePhase, liveTranscript, liveAIText, closeLive } =
-        useLiveSpeech({ onSendMessage: (text) => onSend(text), messages, status });
 
     // ── Attachment helpers ────────────────────────────────────────────────────
     function addFiles(files: FileList | null) {
@@ -478,6 +654,36 @@ export function InputBar({
                                     </Group>
                                 )}
 
+                                {/* Inline Gemini Live status */}
+                                {geminiLiveOpen && (
+                                    <Group
+                                        gap={8}
+                                        px="md"
+                                        pt="sm"
+                                        pb={0}
+                                        wrap="nowrap"
+                                        style={{
+                                            animation: "live-glow 1.8s ease-in-out infinite",
+                                        }}
+                                    >
+                                        <Group gap={3} wrap="nowrap" aria-hidden>
+                                            <Box className="live-wave-bar" style={{ height: 8 }} />
+                                            <Box className="live-wave-bar" style={{ height: 12, animationDelay: "120ms" }} />
+                                            <Box className="live-wave-bar" style={{ height: 16, animationDelay: "240ms" }} />
+                                            <Box className="live-wave-bar" style={{ height: 10, animationDelay: "360ms" }} />
+                                        </Group>
+                                        <Badge size="xs" radius="sm" color={livePhaseColor} variant="light">
+                                            Gemini Live • {livePhaseLabel}
+                                        </Badge>
+                                        <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>
+                                            Mic: {Math.round(liveMicStats.micLevel * 100)}% · Tx: {Math.round(liveMicStats.bytesPerSecond / 1024)} KB/s
+                                        </Text>
+                                        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                                            Sent: {Math.round(liveMicStats.totalBytes / 1024)} KB
+                                        </Text>
+                                    </Group>
+                                )}
+
                                 {/* Textarea */}
                                 <Textarea
                                     ref={textareaRef}
@@ -512,41 +718,6 @@ export function InputBar({
                                 <Stack gap={4} mt="xs" px={0}>
                                     <Group justify="space-between" gap={6} wrap="nowrap">
                                         <Group gap={6} wrap="nowrap">
-                                            <Menu shadow="md" radius="lg" position="top-start" withArrow arrowPosition="center">
-                                                <Menu.Target>
-                                                    <Tooltip label={`Mode: ${MODE_HINTS[chatMode]}`} withArrow position="top">
-                                                        <Button
-                                                            size="compact-xs"
-                                                            radius="xl"
-                                                            color={chatMode === "full" ? "primary" : "gray"}
-                                                            variant={chatMode === "full" ? "light" : "subtle"}
-                                                            aria-label="Response mode"
-                                                            px={8}
-                                                            rightSection={<IconChevronDown size={12} />}
-                                                        >
-                                                            <Text size="xs" fw={700} lh={1}>
-                                                                {chatMode === "quick" ? "Quick" : "Full"}
-                                                            </Text>
-                                                        </Button>
-                                                    </Tooltip>
-                                                </Menu.Target>
-                                                <Menu.Dropdown>
-                                                    <Menu.Label>Response mode</Menu.Label>
-                                                    <Menu.Item
-                                                        onClick={() => onChatModeChange?.("quick")}
-                                                        rightSection={chatMode === "quick" ? <IconCheck size={14} /> : undefined}
-                                                    >
-                                                        Quick guidance
-                                                    </Menu.Item>
-                                                    <Menu.Item
-                                                        onClick={() => onChatModeChange?.("full")}
-                                                        rightSection={chatMode === "full" ? <IconCheck size={14} /> : undefined}
-                                                    >
-                                                        Full assessment
-                                                    </Menu.Item>
-                                                </Menu.Dropdown>
-                                            </Menu>
-
                                             {/* Unified file attach menu — Gemini-style "+" button */}
                                             <Menu shadow="md" radius="lg" position="top-start" withArrow arrowPosition="center">
                                                 <Menu.Target>
@@ -588,6 +759,18 @@ export function InputBar({
                                             </Menu>
                                             <RecapIndicator count={recapCount} onOpen={onOpenRecap} size={toolbarIconSize} />
                                             <ContinuityIndicator count={continuityCount} onOpen={onOpenContinuity} size={toolbarIconSize} />
+                                            <Tooltip label={geminiLiveOpen ? "Close Gemini Live" : "Start Gemini Live"} withArrow position="top">
+                                                <ActionIcon
+                                                    size={toolbarIconSize}
+                                                    radius="xl"
+                                                    color="primary"
+                                                    variant={geminiLiveOpen ? "filled" : "subtle"}
+                                                    onClick={() => setGeminiLiveOpen((prev) => !prev)}
+                                                    aria-label={geminiLiveOpen ? "Close Gemini Live" : "Start Gemini Live"}
+                                                >
+                                                    <IconWaveSine size={17} />
+                                                </ActionIcon>
+                                            </Tooltip>
                                         </Group>
 
                                         <Group gap={6} wrap="nowrap">
@@ -645,9 +828,7 @@ export function InputBar({
                     {showDisclaimer && (
                         <Box mt="xs" mb={0}>
                             <Text size="xs" c="dimmed" ta="center" style={{ opacity: 0.7 }}>
-                                {chatMode === "full"
-                                    ? "Full assessment may take 15–20s · CareAI is not a substitute for professional medical advice."
-                                    : "CareAI is not a substitute for professional medical advice. Always consult a qualified doctor."}
+                                CareAI is not a substitute for professional medical advice. Always consult a qualified doctor.
                             </Text>
                         </Box>
                     )}
@@ -659,7 +840,44 @@ export function InputBar({
                 @property --shimmer-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
                 @keyframes shimmer-rotate { to { --shimmer-angle: 360deg; } }
                 @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(250,82,82,.55)}100%{box-shadow:0 0 0 7px rgba(250,82,82,0)}}
+                @keyframes live-glow{0%{opacity:.85}50%{opacity:1}100%{opacity:.85}}
+                @keyframes live-wave{0%{transform:scaleY(.55)}50%{transform:scaleY(1)}100%{transform:scaleY(.55)}}
+                .live-wave-bar{width:3px;border-radius:99px;background:var(--mantine-color-primary-5);animation:live-wave 900ms ease-in-out infinite;transform-origin:center;}
             `}</style>
+
+            <GeminiLiveStandalone
+                title="Gemini Live"
+                autoConnect={geminiLiveOpen}
+                autoStartMic={geminiLiveOpen}
+                renderUi={false}
+                seedTurns={liveSeedTurns}
+                connectGreeting="Greet briefly and ask how you can help."
+                systemInstruction={liveSystemInstruction}
+                onConnectionChange={setGeminiLiveConnected}
+                onInputTranscription={(text) => {
+                    if (!text.trim()) return;
+                    onInputChange(text);
+                }}
+                onMicStatsChange={(stats) => {
+                    setLiveMicStats((prev) => {
+                        const sameEnabled = prev.micEnabled === stats.micEnabled;
+                        const sameBps = prev.bytesPerSecond === stats.bytesPerSecond;
+                        const sameTotal = prev.totalBytes === stats.totalBytes;
+                        const sameLevel = Math.abs(prev.micLevel - stats.micLevel) < 0.02;
+
+                        if (sameEnabled && sameBps && sameTotal && sameLevel) {
+                            return prev;
+                        }
+
+                        return {
+                            micEnabled: stats.micEnabled,
+                            micLevel: stats.micLevel,
+                            bytesPerSecond: stats.bytesPerSecond,
+                            totalBytes: stats.totalBytes,
+                        };
+                    });
+                }}
+            />
 
             {/* File picker drawer */}
             <FilePickerDrawer
@@ -678,15 +896,6 @@ export function InputBar({
                 }}
             />
 
-            {/* Live overlay — rendered outside the box so it overlays the full page */}
-            {liveMode && (
-                <LiveOverlay
-                    livePhase={livePhase}
-                    liveAIText={liveAIText}
-                    liveTranscript={liveTranscript}
-                    onClose={closeLive}
-                />
-            )}
         </>
     );
 }

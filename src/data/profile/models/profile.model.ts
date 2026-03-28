@@ -12,6 +12,8 @@ export interface ProfileDocument {
   photoUrl?: string;
   /** Self-identified gender e.g. "man", "woman", "non-binary", "prefer-not-to-say" */
   gender?: string;
+  /** User preferred language, e.g. "English" */
+  preferredLanguage?: string;
   city?: string;
   country?: string;
   dateOfBirth?: string; // ISO-8601 date string (YYYY-MM-DD)
@@ -33,6 +35,7 @@ export interface ProfileDto {
   country?: string;
   city?: string;
   gender?: string;
+  preferredLanguage?: string;
   /** Flag indicating whether the user has completed the onboarding tour */
   onboardingTourCompleted?: boolean;
   updatedAt: string; // ISO-8601
@@ -56,6 +59,7 @@ export function toProfileDto(base: ProfileDocument): ProfileDto {
     country: base.country,
     dateOfBirth: base.dateOfBirth,
     gender: base.gender,
+    preferredLanguage: base.preferredLanguage,
     onboardingTourCompleted: base.onboardingTourCompleted,
     updatedAt: base.updatedAt.toDate().toISOString(),
   };
@@ -73,6 +77,7 @@ export const UpsertProfileSchema = z.object({
   phone: z.string().optional(),
   photoUrl: z.string().min(1).optional(),
   gender: z.string().optional(),
+  preferredLanguage: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
   /** ISO-8601 date string (YYYY-MM-DD) */

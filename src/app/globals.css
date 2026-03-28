@@ -76,12 +76,6 @@ body {
   visibility: hidden !important;
 }
 
-/* ── Mantine Notifications fix ────────────────────────────────────────────── */
-/* Ensure individual notification items are clickable even though container has pointer-events: none */
-.mantine-Notifications-notification {
-  pointer-events: auto !important;
-}
-
 /* ── NavLink hover fix — inactive items in light mode ─────────────────────── */
 /* Mantine hardcodes inactive hover to gray-0 (near-white), invisible on the  */
 /* light sidebar. Override with a visible primary tint.                        */

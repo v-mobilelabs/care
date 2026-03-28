@@ -8,7 +8,7 @@ import { OnboardingModal } from "./onboarding-modal";
  * with incomplete profiles to fill in required details.
  *
  * Profiles are considered complete when ALL required fields are present:
- * - Identity: name, phone, gender, country, dateOfBirth
+ * - Identity: name, phone, gender, preferredLanguage, country, dateOfBirth
  * - Health: height, weight, activityLevel (for patient users only)
  */
 export function ProfileCompletionGuard({
@@ -20,13 +20,14 @@ export function ProfileCompletionGuard({
 
   // Determine if profile is complete (all required identity fields)
   const profileComplete = Boolean(
-    profileQuery.data &&
-      profileQuery.data.name &&
-      profileQuery.data.phone &&
-      profileQuery.data.gender &&
-      profileQuery.data.gender !== "Prefer not to say" &&
-      profileQuery.data.country &&
-      profileQuery.data.dateOfBirth,
+    profileQuery.data?.name &&
+      profileQuery.data?.phone &&
+      profileQuery.data?.gender &&
+      profileQuery.data?.gender !== "Prefer not to say" &&
+      profileQuery.data?.gender !== "prefer-not-to-say" &&
+      profileQuery.data?.preferredLanguage &&
+      profileQuery.data?.country &&
+      profileQuery.data?.dateOfBirth,
   );
 
   // Determine if patient profile is complete (all required health fields)

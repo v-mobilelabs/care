@@ -43,6 +43,8 @@ export const profileRepository = {
     if (input.phone !== undefined) baseData.phone = input.phone;
     if (input.photoUrl !== undefined) baseData.photoUrl = input.photoUrl;
     if (input.gender !== undefined) baseData.gender = input.gender;
+    if (input.preferredLanguage !== undefined)
+      baseData.preferredLanguage = input.preferredLanguage;
     if (input.city !== undefined) baseData.city = input.city;
     if (input.country !== undefined) baseData.country = input.country;
     if (input.dateOfBirth !== undefined)

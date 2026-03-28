@@ -128,7 +128,9 @@ function normalizeDiagnoses(value: unknown): Diagnosis[] {
       {
         name: diagnosis.name,
         status: diagnosis.status,
-        ...(typeof diagnosis.icd10 === "string" ? { icd10: diagnosis.icd10 } : {}),
+        ...(typeof diagnosis.icd10 === "string"
+          ? { icd10: diagnosis.icd10 }
+          : {}),
       },
     ];
   });
@@ -152,8 +154,12 @@ function normalizeMedications(value: unknown): Medication[] {
     return [
       {
         name: medication.name,
-        ...(typeof medication.dosage === "string" ? { dosage: medication.dosage } : {}),
-        ...(typeof medication.frequency === "string" ? { frequency: medication.frequency } : {}),
+        ...(typeof medication.dosage === "string"
+          ? { dosage: medication.dosage }
+          : {}),
+        ...(typeof medication.frequency === "string"
+          ? { frequency: medication.frequency }
+          : {}),
       },
     ];
   });
@@ -218,7 +224,8 @@ function normalizeActionItems(value: unknown): SummaryActionItem[] {
         text: actionItem.text,
         status: actionItem.status,
         updatedAt:
-          typeof actionItem.updatedAt === "string" && actionItem.updatedAt.length > 0
+          typeof actionItem.updatedAt === "string" &&
+          actionItem.updatedAt.length > 0
             ? actionItem.updatedAt
             : new Date(0).toISOString(),
       },
@@ -245,7 +252,10 @@ export function toPatientSummaryDto(
     status: doc.status ?? "active",
     ...(doc.lastUpdatedBy ? { lastUpdatedBy: doc.lastUpdatedBy } : {}),
     ...(doc.sessionId ? { sessionId: doc.sessionId } : {}),
-    title: typeof doc.title === "string" && doc.title.length > 0 ? doc.title : "Patient Summary",
+    title:
+      typeof doc.title === "string" && doc.title.length > 0
+        ? doc.title
+        : "Patient Summary",
     narrative: typeof doc.narrative === "string" ? doc.narrative : "",
     chiefComplaints: normalizeStringArray(doc.chiefComplaints),
     diagnoses: normalizeDiagnoses(doc.diagnoses),

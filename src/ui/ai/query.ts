@@ -1756,6 +1756,7 @@ export interface ProfileRecord {
   photoUrl?: string;
   /** Self-identified gender */
   gender?: string;
+  preferredLanguage?: string;
   dateOfBirth?: string;
   sex?: Sex;
   height?: number;
@@ -1838,6 +1839,7 @@ export function useUpdateIdentityMutation() {
       phone?: string;
       email?: string;
       gender?: string;
+      preferredLanguage?: string;
       city?: string;
       country?: string;
       dateOfBirth?: string;

@@ -5,6 +5,8 @@ description: "**GEMINI LIVE API SKILL** — Real-time Gemini Live API implementa
 
 # Gemini Live API — Realtime Voice/Video Patterns
 
+_Last reviewed: 2026-03 (Gemini Live docs/API reference)_
+
 ## Golden Rules
 
 1. **Prefer server-to-server for protected backends**; use browser-direct WebSocket only with **ephemeral tokens**.
@@ -111,13 +113,15 @@ A server message may include `usageMetadata` and exactly one primary union field
 
 - Appended directly to conversation history
 - Can interrupt generation
-- Good for seeding initial history (`historyConfig.initialHistoryInClientContent`)
+- For `gemini-3.1-flash-live-preview`, use primarily for initial seeded history (`historyConfig.initialHistoryInClientContent`)
+- When seeding history, send `turnComplete: true` before switching to ongoing `realtimeInput`
 
 ### `realtimeInput`
 
 - For low-latency concurrent streams (`audio`, `video`, `text`)
 - Cross-stream ordering is not guaranteed
 - End-of-turn is derived from activity (automatic VAD or manual activity markers)
+- For `gemini-3.1-flash-live-preview`, use this for ongoing text turns (not `clientContent`)
 
 ### `serverContent`
 
@@ -210,6 +214,7 @@ Model caveat:
 - Audio-only sessions: ~15 minutes without compression
 - Audio+video sessions: ~2 minutes without compression
 - A single connection can be reset by server around ~10 minutes
+- Session resumption handles are valid for up to ~2 hours after last termination
 
 ### Make sessions robust
 
@@ -242,6 +247,8 @@ Ephemeral tokens reduce risk versus embedding long-lived API keys client-side.
 - Keep expiration short
 - `uses: 1` is usually fine (session resumption does not count as additional use)
 - Optionally constrain model/setup fields server-side via token constraints
+- If `uses` is omitted, default is `1`
+- If token windows are omitted, defaults are ~1 minute for starting new sessions and ~30 minutes message lifetime
 
 ---
 
@@ -252,12 +259,14 @@ Current high-impact behavior:
 - Input token limit: 131,072
 - Output token limit: 65,536
 - Supports Live API, search grounding, function calling, audio generation, thinking
+- Native audio output models support `AUDIO` response modality; use output transcription for text UX
 - Does **not** support structured outputs / URL context / code execution in Live mode
 - Migration changes from 2.5:
   - `thinkingLevel` replaces `thinkingBudget`
   - server events can contain multiple parts
   - `clientContent` behavior changed for ongoing turns
   - default `turnCoverage` changed
+  - async function-calling is not supported for 3.1 Live (tool loop is sequential)
 
 ---
 
@@ -283,6 +292,7 @@ If a page introduces live streaming UI, include clear loading/connecting/error s
   - Did you wait for `setupComplete`?
 - Random cut-offs:
   - Are you handling `goAway` and reconnecting with session resumption?
+  - Are you rotating/renewing around server reset windows (~10 min) with latest resumption handle?
 - Users talk over model and audio overlaps:
   - On `interrupted`, clear playback queue instantly.
 - Missing transcripts/audio chunks:
@@ -293,6 +303,7 @@ If a page introduces live streaming UI, include clear loading/connecting/error s
   - Audio chunk size too large; send ~20–40ms chunks.
 - Session expires too quickly:
   - Enable context compression + resumption.
+  - Confirm token `expireTime` and `newSessionExpireTime` are long enough for your interaction flow.
 
 ---
 

@@ -65,7 +65,7 @@ export type ApplicationInfo = {
  * ```
  */
 
-const ICON_SIZE = 18;
+const ICON_SIZE = 14;
 const ICON_SIZE_PROFILE = 16;
 
 function getAdminMenus(): NavigationMenus {
@@ -167,26 +167,19 @@ function getUserMenus(): NavigationMenus {
                 href: "/user/history",
             },
             {
-                label: "Care Team",
-                icon: <IconUsersGroup size={ICON_SIZE} />,
-                href: "/user/specialists",
-                children: [
-                    {
-                        label: "Specialists",
-                        icon: <IconUsersGroup size={ICON_SIZE} />,
-                        href: "/user/specialists",
-                    },
-                    {
-                        label: "Referrals",
-                        icon: <IconArrowForwardUp size={ICON_SIZE} />,
-                        href: "/user/referrals",
-                    },
-                ],
-            },
-            {
                 label: "Health",
                 icon: <IconHeartbeat size={ICON_SIZE} />,
                 href: "/user/health",
+            },
+            {
+                label: "Specialists",
+                icon: <IconUsersGroup size={ICON_SIZE} />,
+                href: "/user/specialists",
+            },
+            {
+                label: "Referrals",
+                icon: <IconArrowForwardUp size={ICON_SIZE} />,
+                href: "/user/referrals",
             },
         ],
         header: [

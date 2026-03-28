@@ -28,6 +28,9 @@ async function PatientHomeData({ userId }: Readonly<{ userId: string }>) {
             queryKey: [...chatKeys.assessments(), undefined],
             queryFn: async () => {
                 const page = await getCachedAssessments(userId);
+                if (Array.isArray(page)) {
+                    return page;
+                }
                 return page.assessments;
             },
         }),

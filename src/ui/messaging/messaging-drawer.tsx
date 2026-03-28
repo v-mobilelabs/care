@@ -3,6 +3,7 @@ import { AppShell } from "@mantine/core";
 import { ConversationList } from "./conversation-list";
 import { MessageThread } from "./message-thread";
 import { useMessaging } from "../providers/messaging-provider";
+import { zIndex } from "@/ui/tokens";
 
 /** Width of the messaging sidebar in px (desktop). */
 export const MESSAGING_SIDEBAR_WIDTH = 400;
@@ -17,7 +18,7 @@ export function MessagingSidebar() {
         useMessaging();
 
     return (
-        <AppShell.Aside style={{ zIndex: 200 }}>
+        <AppShell.Aside zIndex={zIndex.overlay}>
             {activeConversationId ? (
                 <MessageThread
                     conversationId={activeConversationId}

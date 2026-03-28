@@ -1337,10 +1337,15 @@ export function useAssessmentsQuery() {
   return useQuery({
     queryKey: [...chatKeys.assessments(), pid],
     queryFn: async () => {
-      const page = await apiFetch<PaginatedAssessmentsResponse>(
-        "/api/assessments?limit=50",
-      );
-      return page.assessments;
+      const page = await apiFetch<
+        PaginatedAssessmentsResponse | AssessmentRecord[]
+      >("/api/assessments?limit=50");
+
+      if (Array.isArray(page)) {
+        return page;
+      }
+
+      return Array.isArray(page.assessments) ? page.assessments : [];
     },
     staleTime: 30_000,
   });
@@ -1623,9 +1628,11 @@ export function useDeleteManyMemoriesMutation() {
 export interface ProfileRecord {
   userId: string;
   name?: string;
+  phone?: string;
   photoUrl?: string;
   /** Self-identified gender */
   gender?: string;
+  preferredLanguage?: string;
   dateOfBirth?: string;
   sex?: Sex;
   height?: number;
@@ -1738,6 +1745,7 @@ export function useUpdateIdentityMutation() {
       phone?: string;
       email?: string;
       gender?: string;
+      preferredLanguage?: string;
       city?: string;
       country?: string;
     }) =>
