@@ -165,7 +165,7 @@ export function useMessages(sessionId: string) {
       api: "/api/chat",
       body: {
         sessionId,
-        chatMode: "full",
+        chatMode: "quick",
         ...(pendingAttachments.length > 0
           ? { attachmentUrls: pendingAttachments }
           : {}),
@@ -516,6 +516,13 @@ export function useMessages(sessionId: string) {
     return map as ReadonlyMap<string, string>;
   })();
 
+  // ── Helper to append a message directly (for Gemini Live) ────────────────
+  function appendMessage(message: UIMessage): void {
+    startMessagesTransition(() => {
+      setMessages([...messages, message]);
+    });
+  }
+
   return {
     // Chat core
     messages,
@@ -523,6 +530,7 @@ export function useMessages(sessionId: string) {
     messageUsage,
     liveUsage,
     sendMessage,
+    appendMessage,
     stop,
     status,
     isLoading,

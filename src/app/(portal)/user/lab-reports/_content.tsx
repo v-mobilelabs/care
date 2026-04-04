@@ -19,7 +19,6 @@ import {
     ThemeIcon,
     Title,
     Tooltip,
-    UnstyledButton,
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
@@ -69,68 +68,56 @@ function LabReportCard({
     return (
         <Card
             radius="md"
+            p="xs"
+            withBorder
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
+                cursor: "pointer",
+            }}
+            onClick={() => {
+                trackEvent({ name: "lab_report_viewed", params: { record_id: record.id } });
+                router.push(`/user/lab-reports/${record.id}`);
             }}
         >
-            <Card.Section>
-                <UnstyledButton
-                    onClick={() => {
-                        trackEvent({ name: "lab_report_viewed", params: { record_id: record.id } });
-                        router.push(`/user/lab-reports/${record.id}`);
-                    }}
-                    style={{ display: "block", width: "100%" }}
-                    p="md"
-                >
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <ThemeIcon size={28} radius="md" variant="light" color="primary" style={{ flexShrink: 0 }}>
-                            <IconDroplet size={15} />
-                        </ThemeIcon>
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={600} size="sm" truncate="end" lh={1.3}>
-                                {record.testName}
-                            </Text>
-                        </Box>
+            <Group wrap="nowrap" align="center" gap="sm">
+                <ThemeIcon size={32} radius="md" variant="light" color="primary" style={{ flexShrink: 0 }}>
+                    <IconDroplet size={18} />
+                </ThemeIcon>
+
+                <Box style={{ flex: 1, minWidth: 100 }}>
+                    <Text fw={600} size="sm" truncate="end" lh={1.3}>
+                        {record.testName}
+                    </Text>
+                    <Group gap={6} mt={2} wrap="nowrap">
+                        <Text size="xs" c="dimmed" truncate="end">
+                            {record.biomarkers.length} param{record.biomarkers.length !== 1 ? "s" : ""}
+                        </Text>
+                        {(abnormalCount > 0 || criticalCount > 0) && <Text size="xs" c="dimmed">&middot;</Text>}
+                        {abnormalCount > 0 && <Text size="xs" c="yellow.7" fw={500}>{abnormalCount} abn</Text>}
+                        {criticalCount > 0 && <Text size="xs" c="red.7" fw={500}>{criticalCount} crit</Text>}
                     </Group>
-                    <Group gap={6} mt="xs" wrap="wrap">
-                        <Badge variant="light" size="xs" color="gray">
-                            {record.biomarkers.length} parameters
-                        </Badge>
-                        {abnormalCount > 0 && (
-                            <Badge variant="light" size="xs" color="yellow">
-                                {abnormalCount} abnormal
-                            </Badge>
-                        )}
-                        {criticalCount > 0 && (
-                            <Badge variant="filled" size="xs" color="red">
-                                {criticalCount} critical
-                            </Badge>
-                        )}
-                    </Group>
-                </UnstyledButton>
-            </Card.Section>
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" withBorder px="sm">
-                <Group justify="space-between">
-                    <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>
+                </Box>
+
+                <Group gap="xs" wrap="nowrap" align="center" style={{ flexShrink: 0 }}>
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                         <DateText date={record.testDate ?? record.createdAt} />
                     </Text>
-                    <Group gap={2} py={6} justify="flex-end">
-                        <Tooltip label="Delete" withArrow>
-                            <ActionIcon
-                                size={24}
-                                variant="subtle"
-                                color="red"
-                                loading={isPendingDelete}
-                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                aria-label="Delete lab report"
-                            >
-                                <IconTrash size={13} />
-                            </ActionIcon>
-                        </Tooltip>
-                    </Group>
+
+                    <Tooltip label="Delete" withArrow>
+                        <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="red"
+                            loading={isPendingDelete}
+                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            aria-label="Delete lab report"
+                        >
+                            <IconTrash size={14} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
-            </Card.Section>
+            </Group>
         </Card>
     );
 }

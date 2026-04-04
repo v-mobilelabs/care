@@ -1,15 +1,14 @@
 "use client";
 import {
     Badge,
-    Box,
     Group,
-    Paper,
     SimpleGrid,
     Skeleton,
     Stack,
     Text,
     ThemeIcon,
 } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
 import type { ReactNode } from "react";
 import {
     useVitalsQuery,
@@ -17,7 +16,6 @@ import {
     useConditionsQuery,
     useAssessmentsQuery,
 } from "@/app/(portal)/user/_query";
-import { colors } from "@/ui/tokens";
 
 interface KpiPillProps {
     icon: ReactNode;
@@ -29,7 +27,7 @@ interface KpiPillProps {
 
 function KpiPill({ icon, label, value, detail, color }: Readonly<KpiPillProps>) {
     return (
-        <Paper withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
+        <MotionCard interactive blobColor={color.includes("var") ? color : `var(--mantine-color-${color}-6)`} withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
             <Group gap="sm" wrap="nowrap">
                 <ThemeIcon size={36} radius="xl" variant="light" color={color}>
                     {icon}
@@ -50,13 +48,13 @@ function KpiPill({ icon, label, value, detail, color }: Readonly<KpiPillProps>) 
                     </Group>
                 </Stack>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
 function KpiPillSkeleton() {
     return (
-        <Paper withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
+        <MotionCard withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
             <Group gap="sm" wrap="nowrap">
                 <Skeleton circle h={36} w={36} />
                 <Stack gap={4}>
@@ -64,7 +62,7 @@ function KpiPillSkeleton() {
                     <Skeleton height={20} width={80} />
                 </Stack>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -149,7 +147,7 @@ export function KpiStrip() {
                 detail="confirmed"
                 color="indigo"
             />
-            <Paper withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
+            <MotionCard interactive blobColor={riskLevel ? `var(--mantine-color-${RISK_COLOR[riskLevel]}-6)` : "var(--mantine-color-gray-6)"} withBorder radius="xl" p="sm" style={{ flex: 1, minWidth: 140 }}>
                 <Group gap="sm" wrap="nowrap">
                     <ThemeIcon
                         size={36}
@@ -174,7 +172,7 @@ export function KpiStrip() {
                         )}
                     </Stack>
                 </Group>
-            </Paper>
+            </MotionCard>
         </SimpleGrid>
     );
 }

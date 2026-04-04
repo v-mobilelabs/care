@@ -1,4 +1,5 @@
-import { Container, Paper, SimpleGrid, Skeleton, Stack } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
+import { Container, SimpleGrid, Skeleton, Stack } from "@mantine/core";
 
 // ── Field skeleton ────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export default function PatientDetailsLoading() {
                 </Stack>
 
                 {/* Form card */}
-                <Paper withBorder radius="lg" p="xl">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="xl">
                     <Stack gap="md">
                         {/* Height + Weight */}
                         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
@@ -50,7 +51,7 @@ export default function PatientDetailsLoading() {
                         {/* Save button */}
                         <Skeleton height={36} width={120} radius="md" ml="auto" />
                     </Stack>
-                </Paper>
+                </MotionCard>
             </Stack>
         </Container>
     );

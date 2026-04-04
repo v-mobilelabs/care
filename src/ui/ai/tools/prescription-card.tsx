@@ -1,7 +1,7 @@
 "use client";
 import { Accordion, Badge, Box, Button, Card, Divider, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconAlertTriangle, IconCalendarEvent, IconCheck, IconClipboardList, IconDroplet, IconNeedle, IconPill, IconStethoscope, IconX } from "@tabler/icons-react";
-import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
+import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/global-tools/submit-prescription.tool";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -1,9 +1,10 @@
+import { MotionCard } from "@/ui/components/motion-card";
 /**
  * Specialists Page Loading State
  * Skeleton cards while specialists page is loading
  */
 
-import { Container, SimpleGrid, Paper, Stack, Skeleton } from "@mantine/core";
+import { Container, SimpleGrid, Stack, Skeleton } from "@mantine/core";
 
 export default function SpecialistsLoadingPage() {
   return (
@@ -20,7 +21,7 @@ export default function SpecialistsLoadingPage() {
         spacing={{ base: "md", md: "lg" }}
       >
         {Array.from({ length: 21 }).map((_, index) => (
-          <Paper key={index} withBorder radius="lg" p="md">
+          <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={index} withBorder radius="lg" p="md">
             <Stack gap="md" h="100%">
               {/* Header skeleton */}
               <div>
@@ -51,7 +52,7 @@ export default function SpecialistsLoadingPage() {
               {/* Button skeleton */}
               <Skeleton height={36} width="100%" />
             </Stack>
-          </Paper>
+          </MotionCard>
         ))}
       </SimpleGrid>
     </Container>

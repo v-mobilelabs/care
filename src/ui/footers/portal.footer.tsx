@@ -1,7 +1,4 @@
-import { Group, Stack, NavLink, Divider } from "@mantine/core";
-import { Copyright } from "./copyright";
-import Link from "@/ui/link";
-import { IconChartBar } from "@tabler/icons-react";
+import { Stack } from "@mantine/core";
 
 export function PortalFooter() {
   return (

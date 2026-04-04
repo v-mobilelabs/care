@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Badge,
@@ -9,7 +10,6 @@ import {
     Group,
     Image,
     Modal,
-    Paper,
     Skeleton,
     Stack,
     Text,
@@ -203,7 +203,7 @@ function DetailSkeleton() {
 
 function DetailSkeletonCard() {
     return (
-        <Paper withBorder radius="md" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="md">
             <Stack gap="sm">
                 <Stack gap={6}>
                     <Skeleton h={14} w="55%" />
@@ -218,7 +218,7 @@ function DetailSkeletonCard() {
                 <Divider />
                 <DetailSkeletonRows />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -244,11 +244,13 @@ function ReportDetailMain({ record }: Readonly<{ record: LabReportRecord }>) {
 
 function LabReportExplainer({ record }: Readonly<{ record: LabReportRecord }>) {
     return (
-        <Paper
-            withBorder
-            radius="md"
+        <Box
             p="sm"
-            style={{ background: "light-dark(var(--mantine-color-gray-0), rgba(255, 255, 255, 0.02))" }}
+            style={{
+                background: "light-dark(var(--mantine-color-gray-0), rgba(255, 255, 255, 0.02))",
+                borderRadius: 8,
+                border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))"
+            }}
         >
             <Stack gap="xs">
                 <Box>
@@ -298,7 +300,7 @@ function LabReportExplainer({ record }: Readonly<{ record: LabReportRecord }>) {
                     </Group>
                 ) : null}
             </Stack>
-        </Paper>
+        </Box>
     );
 }
 
@@ -311,13 +313,13 @@ function ReportDetailCard({ record, onViewSource, onReExtract, onDelete, isReExt
     isDeleting: boolean;
 }>) {
     return (
-        <Paper withBorder radius="md" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="md">
             <Stack gap="md">
                 <ReportDetailMain record={record} />
                 <ReportActions record={record} onViewSource={onViewSource} onReExtract={onReExtract}
                     onDelete={onDelete} isReExtracting={isReExtracting} isDeleting={isDeleting} />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -364,13 +366,20 @@ function MetaRow({ icon: Icon, text }: Readonly<{ icon: typeof IconBuilding; tex
 function LabMetadata({ record }: Readonly<{ record: LabReportRecord }>) {
     if (!record.labName && !record.orderedBy && !record.labAddress) return null;
     return (
-        <Paper withBorder radius="md" p="sm">
+        <Box
+            p="sm"
+            bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))"
+            style={{
+                borderRadius: 8,
+                border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))"
+            }}
+        >
             <Stack gap={6}>
                 {record.labName && <MetaRow icon={IconBuilding} text={record.labName} />}
                 {record.orderedBy && <MetaRow icon={IconStethoscope} text={`Dr. ${record.orderedBy}`} />}
                 {record.labAddress && <MetaRow icon={IconMapPin} text={record.labAddress} />}
             </Stack>
-        </Paper>
+        </Box>
     );
 }
 

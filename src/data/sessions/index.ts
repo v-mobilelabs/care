@@ -1,7 +1,6 @@
 // ── Models ────────────────────────────────────────────────────────────────────
 export * from "./models/session.model";
 export * from "./models/message.model";
-export * from "./models/file.model";
 
 // ── Repositories ──────────────────────────────────────────────────────────────
 export { sessionRepository } from "./repositories/session.repository";
@@ -27,12 +26,6 @@ export { SetSessionGroundingUseCase } from "./use-cases/set-session-grounding.us
 // Message
 export { AddMessageUseCase } from "./use-cases/add-message.use-case";
 export { ListMessagesUseCase } from "./use-cases/list-messages.use-case";
-
-// Files
-export { ListFilesUseCase } from "./use-cases/list-files.use-case";
-export { UploadFileUseCase } from "./use-cases/upload-file.use-case";
-export { GetFileUseCase } from "./use-cases/get-file.use-case";
-export { DeleteFileUseCase } from "./use-cases/delete-file.use-case";
 
 // Chat
 export { PrepareChatUseCase } from "./use-cases/prepare-chat.use-case";

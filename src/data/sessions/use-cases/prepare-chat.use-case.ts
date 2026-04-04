@@ -9,10 +9,6 @@ import { ApiError } from "@/lib/api/with-context";
 import { extractMessageContext } from "@/lib/chat/helpers";
 import type { MessageContext } from "@/lib/chat/helpers";
 import {
-  prescriptionChatAgent,
-  labReportChatAgent,
-  dietPlannerChatAgent,
-  patientAgent,
   generalMedicineAgent,
   neurologyAgent,
   cardiologyAgent,
@@ -31,17 +27,19 @@ import {
   entAgent,
   ophthalmologyAgent,
   nephrologyAgent,
-  triageNurseAgent,
 } from "@/data/shared/service/agents";
 import type { AgentCallOptions } from "@/data/shared/service/agents/base/agent";
 import type { AgentType } from "@/data/shared/service/agents";
 import {
-  runPreflightChecks,
   fetchMemory,
+  consumeCredit,
 } from "@/data/shared/service/middleware/pre-run";
 import type { PreRunContext } from "@/data/shared/service/middleware/pre-run";
+import { runRegexGuardrailCheck } from "@/data/shared/service/middleware/guardrail.middleware";
 import { runGatewayOrchestrator } from "@/workflow/gateway-orchestrator.workflow";
-import { classifyKnownProfileIntent } from "@/data/shared/service/agents/gateway/known-profile-intent";
+import { classifyRagNeedLLM } from "@/data/shared/service/agents/gateway/rag-classifier.service";
+import { GuardrailError } from "@/lib/errors/guardrail.error";
+import { workflowStateRepository } from "@/data/workflow-state";
 import { messageRepository } from "../repositories/message.repository";
 import { sessionRepository } from "../repositories/session.repository";
 import { toUIMessage } from "../models/message.model";
@@ -324,6 +322,13 @@ export interface PrepareChatResult {
   };
   /** When tool outputs are merged into an existing DB assistant message. */
   toolOutputMerge?: { messageId: string; content: string };
+  /** Checkpoint metadata for inter-node resumption (if checkpoint exists). */
+  checkpointMeta?: {
+    threadId: string;
+    canResume: boolean;
+    latestNodeName?: string;
+    reason: string;
+  };
 }
 
 type PreparedConversation = {
@@ -527,16 +532,14 @@ async function loadSessionRoutingState(args: {
     return { groundingCache: [] };
   }
 
-  const session = await sessionRepository.findById(
-    args.userId,
-    args.profileId,
-    args.sessionId,
-  );
-  const groundingCache = await sessionRepository.getGroundingCache(
-    args.userId,
-    args.profileId,
-    args.sessionId,
-  );
+  const [session, groundingCache] = await Promise.all([
+    sessionRepository.findById(args.userId, args.profileId, args.sessionId),
+    sessionRepository.getGroundingCache(
+      args.userId,
+      args.profileId,
+      args.sessionId,
+    ),
+  ]);
 
   return {
     lastAgentType: session?.lastAgentType,
@@ -627,29 +630,32 @@ function sanitizeMessagesForAgent(
 ): UIMessage[] {
   const supportedToolNames = new Set(Object.keys(agent.tools ?? {}));
 
-  return messages.map((message) => {
-    if (message.role !== "assistant") return message;
+  return messages
+    .map((message) => {
+      if (message.role !== "assistant") return message;
 
-    const sanitizedParts = message.parts.filter((part) => {
-      if (!isToolPartLike(part)) return true;
+      const sanitizedParts = message.parts.filter((part) => {
+        if (!isToolPartLike(part)) return true;
 
-      const toolName = getToolPartName(part);
-      if (!toolName || !supportedToolNames.has(toolName)) {
-        return false;
-      }
+        const toolName = getToolPartName(part);
+        if (!toolName || !supportedToolNames.has(toolName)) {
+          return false;
+        }
 
-      return (
-        part.state !== "input-available" && part.state !== "approval-requested"
-      );
-    });
+        return (
+          part.state !== "input-available" &&
+          part.state !== "approval-requested"
+        );
+      });
 
-    if (sanitizedParts.length === message.parts.length) return message;
+      if (sanitizedParts.length === message.parts.length) return message;
 
-    return {
-      ...message,
-      parts: sanitizedParts,
-    };
-  });
+      return {
+        ...message,
+        parts: sanitizedParts,
+      };
+    })
+    .filter((message) => message.parts.length > 0);
 }
 
 function buildGatewayResolution(args: {
@@ -719,16 +725,26 @@ async function resolveGatewayState(args: {
   gatewayMetadata: GatewayMetadata;
   sessionId: string;
   responseMode: "quick" | "full";
+  creditPromise: Promise<void>;
+  memoryPromise: Promise<string | null>;
 }): Promise<GatewayResolution> {
-  await runPreflightChecks({
-    userId: args.userId,
-    userQuery: args.originalUserQuery.trim(),
-    skipGuardrail: args.isContinuationTurn,
-  });
+  // Regex guardrail is synchronous (0ms) — run first to fail fast
+  if (!args.isContinuationTurn) {
+    runRegexGuardrailCheck(args.originalUserQuery.trim());
+  }
 
-  const knownProfileIntentHint = args.hasAttachment
-    ? null
-    : await classifyKnownProfileIntent(args.userQuery);
+  // ── LLM RAG intent classifier — fire at T=0, await lazily in gate_rag ──
+  //
+  // Strategy: start the lite-model classifier NOW and pass the live Promise +
+  // start timestamp into the orchestrator. gate_rag caps the wait at 800ms total.
+  //   - Warm model (~300ms): resolves before gate_rag checks → 0ms wait.
+  //   - Cold model (~2600ms): gate_rag times out at 800ms → keyword fallback.
+  const ragClassifierStartedAtMs =
+    args.isContinuationTurn || args.hasAttachment ? null : Date.now();
+  const ragIntentClassifierPromise =
+    args.isContinuationTurn || args.hasAttachment
+      ? null // Always deterministic — skip LLM call
+      : classifyRagNeedLLM(args.userQuery, args.userId).catch(() => null);
 
   const orchestratorArgs = {
     userId: args.userId,
@@ -749,7 +765,7 @@ async function resolveGatewayState(args: {
     reportHandoff: args.gatewayMetadata.reportHandoff,
     groundingCache: args.groundingCache ?? undefined,
     sessionId: args.sessionId,
-    knownProfileIntentHint,
+    knownProfileIntentHint: null,
     responseMode: args.responseMode,
     evaluatorModel:
       (process.env.AI_RAG_EVALUATOR_MODEL as "lite" | "fast" | "pro") ?? "fast",
@@ -759,25 +775,46 @@ async function resolveGatewayState(args: {
       process.env.AI_WEB_FALLBACK_TIMEOUT_MS ?? "5000",
       10,
     ),
+    ragIntentClassifierPromise,
+    ragClassifierStartedAtMs,
   } as const;
 
-  const prefersDirectProfileFastPath =
-    !args.hasAttachment && knownProfileIntentHint !== null;
+  // Run credit check, memory fetch, and orchestrator ALL in parallel.
+  // The orchestrator starts immediately (no pre-await on classifier).
+  // gate_rag inside the orchestrator will await the classifier Promise
+  // with a short remaining budget before falling back to keywords.
+  // Use pre-started promises (fired at T=0 in run() before history load).
+  // They run concurrently with prepareConversation + Firestore reads + ctx extraction.
+  const parallelStart = performance.now();
+  const [, memory, orchestratorResult] = await Promise.all([
+    args.creditPromise.then((r) => {
+      console.log(
+        `[PrepareChatUseCase] consumeCredit: ${(performance.now() - parallelStart).toFixed(0)}ms`,
+      );
+      return r;
+    }),
+    args.memoryPromise.then((r) => {
+      console.log(
+        `[PrepareChatUseCase] fetchMemory: ${(performance.now() - parallelStart).toFixed(0)}ms`,
+      );
+      return r;
+    }),
+    runGatewayOrchestrator(orchestratorArgs).then((r) => {
+      console.log(
+        `[PrepareChatUseCase] orchestrator: ${(performance.now() - parallelStart).toFixed(0)}ms`,
+      );
+      return r;
+    }),
+  ]);
 
-  if (prefersDirectProfileFastPath) {
-    const orchestratorResult = await runGatewayOrchestrator(orchestratorArgs);
-    if (orchestratorResult.directResponse) {
-      return buildGatewayResolution({ memory: null, orchestratorResult });
-    }
-
-    const memory = await fetchMemory(args.profileId);
-    return buildGatewayResolution({ memory, orchestratorResult });
+  // Post-orchestrator safety gate (from unified preflight LLM classification)
+  if (orchestratorResult.safety && orchestratorResult.safety !== "safe") {
+    throw new GuardrailError(orchestratorResult.safety);
   }
 
-  const [memory, orchestratorResult] = await Promise.all([
-    fetchMemory(args.profileId),
-    runGatewayOrchestrator(orchestratorArgs),
-  ]);
+  if (orchestratorResult.directResponse) {
+    return buildGatewayResolution({ memory: null, orchestratorResult });
+  }
 
   return buildGatewayResolution({ memory, orchestratorResult });
 }
@@ -785,10 +822,6 @@ async function resolveGatewayState(args: {
 // ── Use case ──────────────────────────────────────────────────────────────────
 
 const AGENTS = {
-  dietPlanner: dietPlannerChatAgent,
-  prescription: prescriptionChatAgent,
-  labReport: labReportChatAgent,
-  patient: patientAgent,
   generalMedicine: generalMedicineAgent,
   neurology: neurologyAgent,
   cardiology: cardiologyAgent,
@@ -807,8 +840,64 @@ const AGENTS = {
   ent: entAgent,
   ophthalmology: ophthalmologyAgent,
   nephrology: nephrologyAgent,
-  triageNurse: triageNurseAgent,
+  triageNurse: generalMedicineAgent,
 } as const;
+
+/**
+ * Load inter-node checkpoints for session resumption.
+ * Returns metadata about the latest checkpoint if one exists and is valid.
+ */
+async function resolveCheckpointMeta(args: {
+  profileId: string;
+  sessionId: string;
+  agentType: AgentType;
+}): Promise<
+  | {
+      threadId: string;
+      canResume: boolean;
+      latestNodeName?: string;
+      reason: string;
+    }
+  | undefined
+> {
+  try {
+    const threadId = args.sessionId;
+    const checkpoint = await workflowStateRepository.loadAgentCheckpoint({
+      profileId: args.profileId,
+      sessionId: args.sessionId,
+      threadId,
+    });
+
+    if (!checkpoint) {
+      return undefined;
+    }
+
+    // Only allow resumption if the checkpoint is from the current agent type
+    const checkpointAgentType =
+      (checkpoint.state?.agentType as string) ??
+      (checkpoint.metadata?.agentType as string);
+
+    if (checkpointAgentType && checkpointAgentType !== args.agentType) {
+      console.log(
+        `[PrepareChatUseCase] Checkpoint from different agent (${checkpointAgentType} vs ${args.agentType}), skipping`,
+      );
+      return undefined;
+    }
+
+    return {
+      threadId,
+      canResume: true,
+      latestNodeName: checkpoint.nodeName,
+      reason: `Latest checkpoint: ${checkpoint.nodeName}`,
+    };
+  } catch (err) {
+    console.error(
+      `[PrepareChatUseCase] Error loading checkpoint:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return undefined;
+  }
+}
 
 export class PrepareChatUseCase extends UseCase<
   PrepareChatInput,
@@ -820,6 +909,10 @@ export class PrepareChatUseCase extends UseCase<
 
   protected async run(input: PrepareChatInput): Promise<PrepareChatResult> {
     const { userId, profileId, body } = input;
+    // Fire credit + memory fetches at T=0 — they only need userId/profileId and
+    // run concurrently with history load, context extraction, and Firestore reads.
+    const creditPromise = consumeCredit(userId);
+    const memoryPromise = fetchMemory(profileId);
     const { incomingMessage, messages, toolOutputMerge } =
       await prepareConversation({ userId, profileId, body });
 
@@ -830,7 +923,7 @@ export class PrepareChatUseCase extends UseCase<
     applyContinuationContextOverride({ incomingMessage, ctx });
 
     console.log(
-      `[PrepareChatUseCase] Context extraction: ${(performance.now() - ctxStart).toFixed(0)}ms`,
+      `[PrepareChatUseCase] Context extraction: ${(performance.now() - ctxStart).toFixed(0)}ms | hasAttachment: ${ctx.hasAttachment} | userQuery: "${ctx.userQuery.slice(0, 80)}"`,
     );
 
     // ── 4. Resolve sessionId ─────────────────────────────────────────────────
@@ -840,15 +933,22 @@ export class PrepareChatUseCase extends UseCase<
     // ── 5. Gateway routing ────────────────────────────────────────────────
     const gatewayStart = performance.now();
     const isContinuationTurn = incomingMessage.role === "assistant";
-    const { lastAgentType, groundingCache } = await loadSessionRoutingState({
-      userId,
-      profileId,
-      sessionId: body.sessionId,
-    });
-    const [gatewayMetadata, profile] = await Promise.all([
-      buildGatewayMetadata(userId, messages, ctx),
-      fetchPreparedProfile(profileId),
-    ]);
+
+    // Parallelize all Firestore reads that are independent of each other
+    const firestoreStart = performance.now();
+    const [{ lastAgentType, groundingCache }, gatewayMetadata, profile] =
+      await Promise.all([
+        loadSessionRoutingState({
+          userId,
+          profileId,
+          sessionId: body.sessionId,
+        }),
+        buildGatewayMetadata(userId, messages, ctx),
+        fetchPreparedProfile(profileId),
+      ]);
+    console.log(
+      `[PrepareChatUseCase] Firestore reads: ${(performance.now() - firestoreStart).toFixed(0)}ms`,
+    );
 
     const {
       agentType,
@@ -871,6 +971,8 @@ export class PrepareChatUseCase extends UseCase<
       gatewayMetadata,
       sessionId,
       responseMode,
+      creditPromise,
+      memoryPromise,
     });
 
     console.log(
@@ -879,7 +981,7 @@ export class PrepareChatUseCase extends UseCase<
     console.log(`[PrepareChatUseCase] Gateway reasoning: ${gatewayReasoning}`);
 
     // ── 8. Resolve agent (needed before sanitization to know valid tools) ─
-    const agent = AGENTS[agentType] ?? triageNurseAgent;
+    const agent = AGENTS[agentType] ?? generalMedicineAgent;
 
     // ── 9. Sanitize messages ──────────────────────────────────────────────
     const sanitizedMessages = sanitizeMessagesForAgent(messages, agent);
@@ -901,6 +1003,12 @@ export class PrepareChatUseCase extends UseCase<
       responseMode,
     });
 
+    // ── 11. Load inter-node checkpoints for resumption ──────────────────
+    // Skip Firestore read for brand-new sessions — there can be no checkpoint yet.
+    const checkpointMeta = body.sessionId
+      ? await resolveCheckpointMeta({ profileId, sessionId, agentType })
+      : undefined;
+
     return {
       agent,
       sanitizedMessages,
@@ -913,6 +1021,7 @@ export class PrepareChatUseCase extends UseCase<
       gatewayReasoning,
       directResponse,
       toolOutputMerge,
+      ...(checkpointMeta ? { checkpointMeta } : {}),
     };
   }
 }

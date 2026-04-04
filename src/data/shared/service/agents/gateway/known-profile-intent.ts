@@ -30,6 +30,41 @@ function normalizeQuery(value: string): string {
     .trim();
 }
 
+// ── Fast regex heuristic (0 ms) ───────────────────────────────────────────────
+
+const PROFILE_INTENT_PATTERNS: Array<[RegExp, KnownProfileIntent]> = [
+  [/\b(?:how old|my age|what(?:'?s| is) my age)\b/, "age"],
+  [
+    /\b(?:my (?:date of birth|dob|birthday)|when was i born)\b/,
+    "date-of-birth",
+  ],
+  [/\b(?:my name|what(?:'?s| is) my name|who am i)\b/, "name"],
+  [
+    /\b(?:my gender|what(?:'?s| is) my gender|am i (?:male|female))\b/,
+    "gender",
+  ],
+  [
+    /\b(?:my (?:location|city|country|address)|where (?:am i|do i live))\b/,
+    "location",
+  ],
+];
+
+/**
+ * Fast regex-based profile intent classifier (0 ms).
+ * Used as fallback when the unified preflight LLM call was skipped
+ * (e.g. keyword/default/cache fast-path routing).
+ */
+export function classifyKnownProfileIntentFast(
+  query: string,
+): KnownProfileIntent | null {
+  const normalized = normalizeQuery(query);
+  if (!normalized) return null;
+  for (const [pattern, intent] of PROFILE_INTENT_PATTERNS) {
+    if (pattern.test(normalized)) return intent;
+  }
+  return null;
+}
+
 export async function classifyKnownProfileIntent(
   query: string,
 ): Promise<KnownProfileIntent | null> {

@@ -3,17 +3,17 @@ import {
     Alert,
     Box,
     Button,
-    Container,
     Group,
-    SegmentedControl,
     Stack,
     Text,
     TextInput,
     ThemeIcon,
     Title,
     Tooltip,
+    SegmentedControl,
 } from "@mantine/core";
-import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
@@ -26,7 +26,7 @@ import {
     IconSortAscending,
     IconSortDescending,
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import {
     useSymptomObservationsQuery,
@@ -300,10 +300,15 @@ export function SymptomsContent({
     conditionId,
 }: Readonly<{ conditionId?: string }>) {
     const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
-    const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebouncedValue(search, 250);
-    const [stateFilter, setStateFilter] = useState<StateFilter>("all");
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const { search, filter: stateFilter, sortAsc, setFilters } = useUrlFilters<StateFilter>();
+    const sortDir = sortAsc ? "asc" : "desc";
+
+    const setSearch = (q: string) => setFilters({ q });
+    const setStateFilter = (f: StateFilter) => setFilters({ f });
+    const setSortDir = (fn: (d: string) => string) => {
+        const newDir = fn(sortDir);
+        setFilters({ s: (newDir === "asc" ? "asc" : "desc") as any });
+    };
 
     const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
         useSymptomObservationsQuery({ conditionId, sortDir });
@@ -312,7 +317,7 @@ export function SymptomsContent({
 
     const allObservations = data?.pages.flatMap((p) => p.observations) ?? [];
     const filtered = allObservations.filter(
-        (o) => matchesSearch(o, debouncedSearch) && matchesStateFilter(o, stateFilter),
+        (o) => matchesSearch(o, search) && matchesStateFilter(o, stateFilter),
     );
     const hasAnyData = allObservations.length > 0;
 
@@ -347,7 +352,7 @@ export function SymptomsContent({
     }
 
     return (
-        <Container pt="md">
+        <Box pt="md" maw={1080} mx="auto" w="100%">
             <Stack gap="lg">
                 <PageHeader conditionId={conditionId} onAdd={openAdd} />
                 <SafetyDisclaimer />
@@ -385,6 +390,6 @@ export function SymptomsContent({
                 conditionId={conditionId}
                 onClose={closeAdd}
             />
-        </Container>
+        </Box>
     );
 }

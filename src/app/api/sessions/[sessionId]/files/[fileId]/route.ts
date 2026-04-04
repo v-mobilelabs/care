@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
-import { GetFileUseCase, DeleteFileUseCase } from "@/data/sessions";
+import { GetFileUseCase, DeleteFileUseCase } from "@/data/files";
 
 // GET /api/sessions/[sessionId]/files/[fileId] — returns metadata + fresh signed URL
 export const GET = WithContext<{ sessionId: string; fileId: string }>(

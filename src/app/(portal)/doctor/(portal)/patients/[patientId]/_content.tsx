@@ -4,6 +4,7 @@ import {
     ActionIcon,
     Badge,
     Box,
+    Card,
     Collapse,
     Group,
     List,
@@ -14,6 +15,7 @@ import {
     Stack,
     Tabs,
     Text,
+    ThemeIcon,
     Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -625,44 +627,40 @@ function LabReportCard({ record }: Readonly<{ record: LabReportRecord }>) {
     const criticalCount = record.biomarkers.filter((b) => b.status === "critical").length;
 
     return (
-        <Box style={{ ...iosCard, padding: 14 }}>
-            <Box style={{ flex: 1, minWidth: 0 }}>
-                <Group gap="xs" align="center">
-                    <Box
-                        style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            background: "light-dark(rgba(99,102,241,0.1), rgba(99,102,241,0.15))",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--mantine-color-primary-5)",
-                        }}
-                    >
-                        <IconFlask size={15} />
+        <Card withBorder radius="md" p="sm" style={iosCard}>
+            <Group wrap="nowrap" align="center" justify="space-between">
+                <Group wrap="nowrap" align="center" gap="sm" style={{ flex: 1, minWidth: 0 }}>
+                    <ThemeIcon size={32} radius="md" variant="light" color="indigo" style={{ flexShrink: 0 }}>
+                        <IconFlask size={16} />
+                    </ThemeIcon>
+
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text fw={600} size="sm" truncate="end" lh={1.3}>
+                            {record.testName}
+                        </Text>
+                        <Group gap={6} mt={2} wrap="nowrap">
+                            <Text size="xs" c="dimmed" truncate="end">
+                                {record.biomarkers.length} param{record.biomarkers.length !== 1 ? "s" : ""}
+                            </Text>
+                            {(abnormalCount > 0 || criticalCount > 0) && <Text size="xs" c="dimmed">&middot;</Text>}
+                            {abnormalCount > 0 && <Text size="xs" c="yellow.7" fw={500}>{abnormalCount} abn</Text>}
+                            {criticalCount > 0 && <Text size="xs" c="red.7" fw={500}>{criticalCount} crit</Text>}
+                            {record.labName && <Text size="xs" c="dimmed" truncate="end">&middot; {record.labName}</Text>}
+                        </Group>
                     </Box>
-                    <Text fw={600} size="sm" lh={1.3} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {record.testName}
-                    </Text>
                 </Group>
-                <Group gap="xs" mt={6} wrap="wrap">
-                    {record.testDate && <Text size="xs" c="dimmed"><DateText date={record.testDate} /></Text>}
-                    {record.labName && <Text size="xs" c="dimmed">&middot; {record.labName}</Text>}
-                    {record.orderedBy && <Text size="xs" c="dimmed">&middot; Dr. {record.orderedBy}</Text>}
-                </Group>
-                <Group gap={6} mt={8} wrap="wrap">
-                    <Badge variant="light" size="xs" color="gray">
-                        {record.biomarkers.length} parameters
-                    </Badge>
-                    {abnormalCount > 0 && (
-                        <Badge variant="light" size="xs" color="yellow">{abnormalCount} abnormal</Badge>
+
+                <Box style={{ flexShrink: 0, textAlign: "right" }}>
+                    {record.testDate ? (
+                        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                            <DateText date={record.testDate} />
+                        </Text>
+                    ) : (
+                        <Text size="xs" c="dimmed">&mdash;</Text>
                     )}
-                    {criticalCount > 0 && (
-                        <Badge variant="filled" size="xs" color="red">{criticalCount} critical</Badge>
-                    )}
-                </Group>
-            </Box>
+                </Box>
+            </Group>
+
             {record.biomarkers.length > 0 && (
                 <>
                     <Box mt="sm" style={{ borderTop: "0.5px solid light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.08))" }} />
@@ -670,7 +668,7 @@ function LabReportCard({ record }: Readonly<{ record: LabReportRecord }>) {
                         size="xs"
                         fw={500}
                         c="primary"
-                        style={{ cursor: "pointer" }}
+                        style={{ cursor: "pointer", display: "inline-block", marginTop: 8 }}
                         onClick={toggle}
                     >
                         {expanded ? "Hide" : "Show"} {record.biomarkers.length} results
@@ -685,7 +683,7 @@ function LabReportCard({ record }: Readonly<{ record: LabReportRecord }>) {
                     </Collapse>
                 </>
             )}
-        </Box>
+        </Card>
     );
 }
 

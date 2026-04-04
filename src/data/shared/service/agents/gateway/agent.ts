@@ -25,6 +25,10 @@ import { z } from "zod";
 import { aiService } from "@/data/shared/service/ai.service";
 import { decideRagRequirement } from "./rag-decision";
 import { buildRoutingPrompt } from "./prompt";
+import {
+  runUnifiedPreflight,
+  type UnifiedPreflightResult,
+} from "./unified-preflight.service";
 
 export type { GatewayInput } from "./prompt";
 
@@ -74,35 +78,6 @@ const LAB_REPORT_KEYWORDS = [
   "interpret my blood",
   "analyse my blood",
   "analyze my blood",
-];
-
-const PATIENT_KEYWORDS = [
-  "my name",
-  "my age",
-  "my profile",
-  "my weight",
-  "my height",
-  "my gender",
-  "my email",
-  "my phone",
-  "my detail",
-  "my info",
-  "my data",
-  "my blood group",
-  "my bmi",
-  "my body",
-  "my medication",
-  "my medicine",
-  "my med",
-  "my drug",
-  "my dose",
-  "my dosage",
-  "what am i taking",
-  "who am i",
-  "about me",
-  "tell me about myself",
-  "my food preference",
-  "my activity level",
 ];
 
 const MENTAL_HEALTH_KEYWORDS = [
@@ -459,26 +434,6 @@ const KEYWORD_ROUTE_RULES = [
     reasoning:
       "Keyword match: nutritional / supplement / dietary intent detected",
     keywords: NUTRITION_KEYWORDS,
-  },
-  {
-    agent: "dietPlanner",
-    reasoning: "Keyword match: diet/meal plan intent detected",
-    keywords: DIET_KEYWORDS,
-  },
-  {
-    agent: "prescription",
-    reasoning: "Keyword match: prescription intent detected",
-    keywords: PRESCRIPTION_KEYWORDS,
-  },
-  {
-    agent: "labReport",
-    reasoning: "Keyword match: blood test / lab results intent detected",
-    keywords: LAB_REPORT_KEYWORDS,
-  },
-  {
-    agent: "patient",
-    reasoning: "Keyword match: personal / health data retrieval detected",
-    keywords: PATIENT_KEYWORDS,
   },
 ] as const satisfies ReadonlyArray<{
   agent: AgentType;
@@ -974,10 +929,6 @@ export const AgentType = z.enum([
   "ent",
   "ophthalmology",
   "nephrology",
-  "dietPlanner", // 7-day meal plan generation
-  "prescription", // Prescription generation and medication management
-  "labReport", // Lab report interpretation and analysis
-  "patient", // Patient data retrieval (profile, health metrics, medications)
 ]);
 export type AgentType = z.infer<typeof AgentType>;
 
@@ -990,6 +941,16 @@ export type ClinicalRouting = {
   needsRag: boolean;
   /** Contextual loading phrases for the client to cycle through while waiting. */
   loadingHints: string[];
+  /** Safety classification from unified preflight. Only set when LLM route is used. */
+  safety?: "safe" | "harmful" | "injection" | "off-topic";
+  /** Known-profile intent from unified preflight. Only set when LLM route is used. */
+  knownProfileIntent?:
+    | "age"
+    | "date-of-birth"
+    | "name"
+    | "gender"
+    | "location"
+    | "none";
 };
 
 type GatewayDecisionInput = {
@@ -1018,6 +979,10 @@ type GatewayDecisionInput = {
   userId: string;
   sessionId?: string;
   lastAgentType?: string;
+  /** Response mode forwarded to unified preflight for hint generation. */
+  responseMode?: "quick" | "full";
+  /** Continuation turn flag forwarded to unified preflight. */
+  isContinuationTurn?: boolean;
 };
 
 type DecisionContext = {
@@ -1303,8 +1268,8 @@ export class GatewayAgent {
       return "generalMedicine"; // or gastroenterology
     }
 
-    // Fall back to labReport agent for generic analysis
-    return "labReport";
+    // Fall back to generalMedicine for generic lab analysis
+    return "generalMedicine";
   }
 
   private resolveKeywordRoute(
@@ -1313,14 +1278,12 @@ export class GatewayAgent {
     const keywordResult = tryKeywordRoute(context.input.userQuery);
     if (!keywordResult) return null;
 
-    const effectiveRag =
-      keywordResult.agent === "patient" ? false : context.needsRag;
     this.cacheResolvedAgent(context.input.sessionId, keywordResult.agent);
     return this.finishDecision(
       context,
       keywordResult.agent,
       keywordResult.reasoning,
-      effectiveRag,
+      context.needsRag,
       "keyword",
     );
   }
@@ -1369,23 +1332,52 @@ export class GatewayAgent {
   private async resolveLlmRoute(
     context: DecisionContext,
   ): Promise<ClinicalRouting> {
-    const agent = await aiService.extractChoice(
-      AgentType.options,
-      [
-        { role: "system", content: buildRoutingPrompt(context.input) },
-        { role: "user", content: context.input.userQuery },
-      ],
-      { userId: context.input.userId, useLite: true, skipCredit: true },
-    );
+    const preflight = await runUnifiedPreflight({
+      routingInput: {
+        userQuery: context.input.userQuery,
+        hasAttachment: context.input.hasAttachment,
+        attachmentMetadata: context.input.attachmentMetadata?.map((a) => ({
+          fileName: a.fileName,
+          label: a.label as string | undefined,
+          extractedSummary: a.extractedSummary,
+        })),
+        recentMessages: context.input.recentMessages,
+        userId: context.input.userId,
+      },
+      userQuery: context.input.userQuery,
+      responseMode: context.input.responseMode ?? "quick",
+      hasAttachment: context.input.hasAttachment ?? false,
+      isContinuationTurn: context.input.isContinuationTurn ?? false,
+    });
 
-    this.cacheResolvedAgent(context.input.sessionId, agent);
-    return this.finishDecision(
-      context,
-      agent,
-      "LLM classification",
-      context.needsRag,
-      "LLM choice",
+    this.cacheResolvedAgent(context.input.sessionId, preflight.agent);
+    return this.finishUnifiedDecision(context, preflight);
+  }
+
+  private finishUnifiedDecision(
+    context: DecisionContext,
+    preflight: UnifiedPreflightResult,
+  ): ClinicalRouting {
+    const duration = performance.now() - context.startTime;
+    logGatewayDecision(
+      "unified-preflight",
+      preflight.agent,
+      preflight.thinkingLevel,
+      preflight.needsRag,
+      duration,
     );
+    return {
+      agent: preflight.agent,
+      reasoning: preflight.reasoning,
+      thinkingLevel: preflight.thinkingLevel,
+      needsRag: preflight.needsRag,
+      loadingHints: preflight.loadingHints,
+      safety: preflight.safety,
+      knownProfileIntent:
+        preflight.knownProfileIntent === "none"
+          ? undefined
+          : preflight.knownProfileIntent,
+    };
   }
 
   private finishDecision(

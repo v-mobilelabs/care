@@ -9,21 +9,17 @@
  * Key principle: "If not required, it should not get the data."
  *
  * RAG policy by agent type:
- *   self-fetching   (dietPlanner, prescription)  → NEVER run RAG
- *   always-rag      (patient, labReport)          → ALWAYS run RAG
- *   routing-only    (triageNurse)                 → NEVER run RAG
  *   continuation turn                             → NEVER run RAG
  *   responseMode=full                             → force RAG for any agent
+ *   hasAttachment                                 → RAG (file context needed)
  *   all others      → heuristic from rag-decision.ts (record-hints / complexity)
  */
 
-import { z } from "zod";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { FileLabel } from "@/data/files";
 import type { SessionGroundingCacheDocument } from "@/data/sessions";
 import type { ProfileDto } from "@/data/profile";
 import { getCachedProfile } from "@/data/cached";
-import { aiService } from "@/data/shared/service/ai.service";
 import {
   gatewayAgent,
   type AgentType,
@@ -39,7 +35,7 @@ import {
 import { tryReuseGrounding } from "@/data/shared/service/agents/gateway/grounding-layer.service";
 import {
   buildKnownProfileDirectResponse,
-  classifyKnownProfileIntent,
+  classifyKnownProfileIntentFast,
   type KnownProfileIntent,
 } from "@/data/shared/service/agents/gateway/known-profile-intent";
 import {
@@ -48,6 +44,7 @@ import {
   groundingOrRunRag,
 } from "@/workflow/conditions/gateway.conditions";
 import { GATEWAY_NODES } from "@/workflow/edges/node-names";
+import { FALLBACK_USER_QUERY } from "@/lib/chat/helpers";
 
 // ── RAG policy constants ──────────────────────────────────────────────────────
 
@@ -56,17 +53,45 @@ import { GATEWAY_NODES } from "@/workflow/edges/node-names";
  * Running RAG for these wastes ~1.5 s and adds noise.
  */
 const SELF_FETCHING_AGENTS: ReadonlySet<AgentType> = new Set([
-  "dietPlanner",
-  "prescription",
+  "nutrition", // Uses agentic RAG: getPatientProfile → decide what to fetch → search only if needed
 ]);
 
 /**
- * Agents where patient records are always required for a meaningful response.
+ * Conversational queries (greetings, small-talk) that never need patient
+ * records regardless of responseMode. Mirrors TRIAGE_FALLBACK_EXACT from
+ * the gateway agent.
  */
-const ALWAYS_RAG_AGENTS: ReadonlySet<AgentType> = new Set([
-  "patient",
-  "labReport",
+const CONVERSATIONAL_EXACT = new Set([
+  "hi",
+  "hello",
+  "hey",
+  "good morning",
+  "good afternoon",
+  "good evening",
+  "help",
+  "can you help me",
+  "i need help",
+  "not sure",
+  "i'm not sure",
+  "i dont know",
+  "i don't know",
+  "idk",
+  "thanks",
+  "thank you",
+  "ok",
+  "okay",
+  "bye",
+  "goodbye",
 ]);
+
+function isConversationalQuery(query: string): boolean {
+  const trimmed = query.trim().toLowerCase();
+  if (trimmed.length === 0) return true;
+  if (CONVERSATIONAL_EXACT.has(trimmed)) return true;
+  // Very short non-clinical queries (1-2 words)
+  const words = trimmed.split(/\s+/);
+  return words.length <= 2 && !CONVERSATIONAL_EXACT.has(trimmed);
+}
 
 async function fetchCachedProfileContext(
   userId: string,
@@ -120,6 +145,23 @@ export interface GatewayOrchestratorInput {
   evaluatorModel: "lite" | "fast" | "pro";
   repairModel: "lite" | "fast" | "pro";
   webFallbackTimeoutMs: number;
+  /**
+   * Live Promise for the LLM RAG intent classifier, started in resolveGatewayState
+   * before the orchestrator runs. gate_rag awaits it with a capped budget of
+   * CLASSIFIER_TOTAL_WINDOW_MS (800ms). Warm models (~300ms) resolve before gate_rag
+   * arrives; cold models time out and fall back to the keyword heuristic.
+   *
+   * Null/undefined when classification is not applicable (continuation / attachment).
+   */
+  ragIntentClassifierPromise?: Promise<{
+    needsRag: boolean;
+    reason: "llm-classified" | "llm-fallback";
+  } | null> | null;
+  /**
+   * Epoch ms when classifyRagNeedLLM() was called (Date.now() at fire time).
+   * Used by gate_rag to compute the true remaining budget within the 800ms window.
+   */
+  ragClassifierStartedAtMs?: number | null;
 }
 
 export interface GatewayOrchestratorOutput {
@@ -135,6 +177,9 @@ export interface GatewayOrchestratorOutput {
     source: "known-profile-context";
     reason: string;
   };
+  /** Safety classification from unified preflight LLM call. Undefined when
+   *  the gateway used a deterministic fast-path (keyword/cache/attachment). */
+  safety?: "safe" | "harmful" | "injection" | "off-topic";
   ragMeta: {
     requested: boolean;
     used: boolean;
@@ -144,55 +189,6 @@ export interface GatewayOrchestratorOutput {
     partialFailure: boolean;
     evaluation?: RagEvaluationMeta;
   };
-}
-
-const LoadingHintsSchema = z.object({
-  loadingHints: z
-    .array(z.string().min(3).max(120))
-    .min(1)
-    .max(4)
-    .describe(
-      "Patient-facing progress phrases to cycle while the assistant prepares a response",
-    ),
-});
-
-async function generateLoadingHintsFromLlm(args: {
-  input: GatewayOrchestratorInput;
-  agentType: AgentType;
-  thinkingLevel: "low" | "medium" | "high";
-  needsRag: boolean;
-  reasoning: string;
-}): Promise<string[]> {
-  const result = await aiService.extractObject(
-    LoadingHintsSchema,
-    [
-      {
-        role: "system",
-        content:
-          "You generate short patient-facing loading phrases for CareAI. " +
-          "Return 2 to 4 concise phrases that sound natural while the assistant prepares a response. " +
-          "Do not mention internal systems, models, caches, tools, frameworks, pipelines, routing, orchestration, prompts, tokens, or databases. " +
-          "Do not use technical jargon. Do not include quotation marks or numbering. " +
-          "Keep each phrase under 60 characters when possible and make them reassuring and relevant to the user's request.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          userQuery: args.input.userQuery,
-          responseMode: args.input.responseMode,
-          hasAttachment: args.input.hasAttachment,
-          isContinuationTurn: args.input.isContinuationTurn,
-          agentType: args.agentType,
-          thinkingLevel: args.thinkingLevel,
-          needsRag: args.needsRag,
-          reasoning: args.reasoning,
-        }),
-      },
-    ],
-    { userId: args.input.userId, useLite: true, skipCredit: true },
-  );
-
-  return result.loadingHints;
 }
 
 // ── Internal graph state ──────────────────────────────────────────────────────
@@ -211,6 +207,8 @@ interface OrchestratorState {
   ragEvaluation: RagEvaluationMeta | null;
   groundingReused: boolean;
   loadingHints: string[];
+  /** Safety from unified preflight (when LLM route used). */
+  safety: GatewayOrchestratorOutput["safety"];
   result: GatewayOrchestratorOutput | null;
 }
 
@@ -228,6 +226,7 @@ const OrchestratorAnnotation = Annotation.Root({
   ragEvaluation: Annotation<RagEvaluationMeta | null>(),
   groundingReused: Annotation<boolean>(),
   loadingHints: Annotation<string[]>(),
+  safety: Annotation<GatewayOrchestratorOutput["safety"]>(),
   result: Annotation<GatewayOrchestratorOutput | null>(),
 });
 
@@ -268,9 +267,16 @@ async function routeQueryNode(
     userId: input.userId,
     sessionId: input.sessionId,
     lastAgentType: input.lastAgentType,
+    responseMode: input.responseMode,
+    isContinuationTurn: input.isContinuationTurn,
   });
 
-  return { routing };
+  return {
+    routing,
+    // Propagate unified preflight fields into state
+    loadingHints: routing.loadingHints,
+    safety: routing.safety,
+  };
 }
 
 async function inspectKnownContextNode(
@@ -282,9 +288,10 @@ async function inspectKnownContextNode(
   }
 
   const intent =
+    state.routing?.knownProfileIntent ??
     input.knownProfileIntentHint ??
-    (await classifyKnownProfileIntent(input.userQuery));
-  if (!intent) {
+    classifyKnownProfileIntentFast(input.userQuery);
+  if (!intent || intent === "none") {
     return { profile: null, directResponse: undefined };
   }
 
@@ -341,16 +348,18 @@ async function inspectKnownContextNode(
  *
  * Rules (evaluated in priority order):
  *  1. Continuation turn              → skip (context already in conversation)
- *  2. responseMode=full              → force RAG (deep assessment mode)
- *  3. Self-fetching agents           → skip (diet/prescription own their data)
- *  4. Patient-record agents          → always RAG (profile/lab queries)
- *  5. triageNurse                    → skip (routing-only, no clinical context)
- *  6. hasAttachment                  → RAG (model needs history for file context)
- *  7. Query heuristic (rag-decision) → record-hints / reasoning-hints / length
+ *  2. Self-fetching agents (agentic RAG) → skip (agent decides what to fetch)
+ *  3. responseMode=full + LLM/keyword check → force RAG only when records needed
+ *  5. Live LLM classifier Promise passed via input.ragIntentClassifierPromise.
+ *     Started in PrepareChatUseCase at T=0, awaited here with a 300ms remaining
+ *     budget. Total classifier window = route_query_time + 300ms ≈ 600ms.
+ *     Falls back to keyword heuristic when null (continuation / attachment / timeout).
  */
-function gateRagNode(state: OrchestratorState): Partial<OrchestratorState> {
+async function gateRagNode(
+  state: OrchestratorState,
+): Promise<Partial<OrchestratorState>> {
   const { input, routing } = state;
-  const agentType = routing?.agent ?? "triageNurse";
+  const agentType = routing?.agent ?? "generalMedicine";
 
   if (state.directResponse) {
     return {
@@ -363,10 +372,8 @@ function gateRagNode(state: OrchestratorState): Partial<OrchestratorState> {
     return { needsRag: false, ragGateReason: "continuation-skip" };
   }
 
-  if (input.responseMode === "full") {
-    return { needsRag: true, ragGateReason: "full-mode-forced" };
-  }
-
+  // Self-fetching agents own their data decisions — skip prefetch RAG
+  // This must come BEFORE responseMode=full check
   if (SELF_FETCHING_AGENTS.has(agentType)) {
     return {
       needsRag: false,
@@ -374,26 +381,71 @@ function gateRagNode(state: OrchestratorState): Partial<OrchestratorState> {
     };
   }
 
-  if (ALWAYS_RAG_AGENTS.has(agentType)) {
-    return {
-      needsRag: true,
-      ragGateReason: `always-rag-agent:${agentType}`,
-    };
-  }
-
-  if (agentType === "triageNurse") {
-    return { needsRag: false, ragGateReason: "triage-no-rag" };
+  // Conversational queries (greetings, small-talk) never need RAG — even in full mode
+  if (isConversationalQuery(input.userQuery)) {
+    return { needsRag: false, ragGateReason: "conversational-skip" };
   }
 
   if (input.hasAttachment) {
+    // Attachment-only messages (no text → fallback query) have nothing
+    // meaningful to search for. The agent has searchPatientRecords tool
+    // and can fetch data on-demand after analyzing the file.
+    if (input.userQuery === FALLBACK_USER_QUERY) {
+      return { needsRag: false, ragGateReason: "attachment-only-no-query" };
+    }
     return { needsRag: true, ragGateReason: "attachment" };
   }
 
-  const decision = decideRagRequirement(input.userQuery, false);
-  return {
-    needsRag: decision.needsRag,
-    ragGateReason: decision.reason,
-  };
+  // Dynamic remaining budget for the LLM classifier.
+  // The classifier fires at T=0 in resolveGatewayState and runs concurrently
+  // with the orchestrator. With the prefetch node removed, gate_rag now runs
+  // immediately after route_query (~5ms on cache hit, ~500ms on LLM routing).
+  // We cap the total window so a cold lite model cannot block gate_rag indefinitely.
+  //
+  // Total window = 800ms from classifier fire:
+  //   - Warm model (~300ms): resolves before gate_rag even arrives (0ms wait)
+  //   - Cold model (~2600ms): times out at 800ms → keyword fallback
+  //   - Worst-case orchestrator time: 800ms (vs previously 2618ms)
+  const CLASSIFIER_TOTAL_WINDOW_MS = 800;
+  const CLASSIFIER_MIN_WAIT_MS = 100; // always give at least 100ms even if budget is 0
+  const classification = await (async () => {
+    if (!input.ragIntentClassifierPromise) return null;
+    const elapsed = input.ragClassifierStartedAtMs
+      ? Date.now() - input.ragClassifierStartedAtMs
+      : 0;
+    const remainingBudget = Math.max(
+      CLASSIFIER_MIN_WAIT_MS,
+      CLASSIFIER_TOTAL_WINDOW_MS - elapsed,
+    );
+    const timeout = new Promise<null>((resolve) =>
+      setTimeout(resolve, remainingBudget, null),
+    );
+    return Promise.race([input.ragIntentClassifierPromise, timeout]);
+  })();
+
+  if (classification !== null && classification !== undefined) {
+    const { needsRag, reason } = classification;
+    // In full responseMode, only force RAG when the LLM says records are needed.
+    if (input.responseMode === "full" && needsRag) {
+      return { needsRag: true, ragGateReason: "full-mode-forced" };
+    }
+    return { needsRag, ragGateReason: reason };
+  }
+
+  // Classifier timed out or unavailable: default to no_rag.
+  // The keyword heuristic has too many false positives (e.g. "should" in
+  // "I want to check my symptoms and understand what I should do next").
+  // Agents have searchPatientRecords and will fetch records on-demand when
+  // actually needed — pre-fetching on an ambiguous query is not worth 30s of RAG.
+  //
+  // Only skip this for responseMode=full where the caller has opted into
+  // deeper context at the cost of latency.
+  if (input.responseMode === "full") {
+    // In full mode, fallback to keyword heuristic to maintain rich context.
+    const decision = decideRagRequirement(input.userQuery, false);
+    return { needsRag: decision.needsRag, ragGateReason: decision.reason };
+  }
+  return { needsRag: false, ragGateReason: "classifier-timeout-skip" };
 }
 
 async function resolveGroundingNode(
@@ -446,6 +498,7 @@ async function runRagNode(
   const { input } = state;
 
   let embedding = state.queryEmbedding;
+
   if (!embedding) {
     try {
       embedding = await ragService.embedQuery(input.userQuery);
@@ -507,42 +560,17 @@ function skipRagNode(): Partial<OrchestratorState> {
   };
 }
 
-async function generateLoadingHintsNode(
+/**
+ * Node: generate_loading_hints (passthrough)
+ *
+ * Loading hints are now produced by the unified preflight LLM call and
+ * stored in state.loadingHints by routeQueryNode. This node is kept as
+ * a graph join point — it simply forwards existing hints.
+ */
+function generateLoadingHintsNode(
   state: OrchestratorState,
-): Promise<Partial<OrchestratorState>> {
-  const { input, routing, needsRag } = state;
-
-  if (!routing) {
-    return { loadingHints: [] };
-  }
-
-  let thinkingLevel = routing.thinkingLevel;
-  let reasoning = routing.reasoning;
-
-  if (input.responseMode === "full") {
-    thinkingLevel = "high";
-    reasoning = `${reasoning}; responseMode=full`;
-  } else if (thinkingLevel === "high" && !input.hasAttachment) {
-    thinkingLevel = "medium";
-    reasoning = `${reasoning}; responseMode=quick`;
-  }
-
-  try {
-    const loadingHints = await generateLoadingHintsFromLlm({
-      input,
-      agentType: routing.agent,
-      thinkingLevel,
-      needsRag,
-      reasoning,
-    });
-    return { loadingHints };
-  } catch (error) {
-    console.warn(
-      "[GatewayOrchestrator] Loading hint generation failed:",
-      error,
-    );
-    return { loadingHints: [] };
-  }
+): Partial<OrchestratorState> {
+  return { loadingHints: state.loadingHints ?? [] };
 }
 
 // ── Node: finalize ────────────────────────────────────────────────────────────
@@ -553,6 +581,10 @@ async function generateLoadingHintsNode(
  * Assembles the final GatewayOrchestratorOutput from routing + RAG state.
  * Also applies responseMode/thinkingLevel adjustments that were previously
  * done inline in PrepareChatUseCase.
+ *
+ * Agents that don't benefit from high thinking (structured generation tasks):
+ * - nutrition: Fast meal plan generation prioritizes speed over deep reasoning
+ * - patient: Q&A about known profile facts
  */
 function finalizeNode(state: OrchestratorState): Partial<OrchestratorState> {
   const { input, routing, needsRag } = state;
@@ -561,16 +593,36 @@ function finalizeNode(state: OrchestratorState): Partial<OrchestratorState> {
     throw new Error("[GatewayOrchestrator] finalize reached with no routing");
   }
 
+  const FAST_GENERATION_AGENTS = new Set(["nutrition", "patient"]);
+
   let { thinkingLevel } = routing;
   let gatewayReasoning = routing.reasoning;
 
   if (input.responseMode === "full") {
-    thinkingLevel = "high";
-    gatewayReasoning = `${gatewayReasoning}; responseMode=full`;
-  } else if (thinkingLevel === "high" && !input.hasAttachment) {
-    // Quick mode: cap at medium to keep latency acceptable
+    // Conversational queries + triage: keep gateway's low thinking — no escalation
+    if (
+      routing.agent === "triageNurse" &&
+      routing.thinkingLevel === "low" &&
+      isConversationalQuery(input.userQuery)
+    ) {
+      gatewayReasoning = `${gatewayReasoning}; responseMode=full (conversational, kept low)`;
+    } else if (!FAST_GENERATION_AGENTS.has(routing.agent)) {
+      // Only escalate to high thinking when the gateway heuristic already
+      // determined the query is complex. Low-complexity queries (short,
+      // no reasoning/emergency words) stay at medium to avoid the slow
+      // pro model for simple questions like "general health inquiry".
+      thinkingLevel = routing.thinkingLevel === "low" ? "medium" : "high";
+      gatewayReasoning = `${gatewayReasoning}; responseMode=full`;
+    } else {
+      // Nutrition/patient: use LOW thinking for maximum speed
+      thinkingLevel = "low";
+      gatewayReasoning = `${gatewayReasoning}; responseMode=full (capped to low for instant streaming)`;
+    }
+  } else if (thinkingLevel === "high") {
+    // Quick mode: always cap at medium for acceptable latency.
+    // Flash model handles attachments well enough — no need for pro.
     thinkingLevel = "medium";
-    gatewayReasoning = `${gatewayReasoning}; responseMode=quick`;
+    gatewayReasoning = `${gatewayReasoning}; responseMode=quick (capped to medium)`;
   }
 
   const result: GatewayOrchestratorOutput = {
@@ -582,6 +634,7 @@ function finalizeNode(state: OrchestratorState): Partial<OrchestratorState> {
     ragContext: state.ragContext ?? null,
     queryEmbedding: state.queryEmbedding ?? undefined,
     directResponse: state.directResponse,
+    safety: state.safety,
     ragMeta: {
       requested: needsRag,
       used: needsRag,
@@ -664,6 +717,7 @@ export async function runGatewayOrchestrator(
     ragEvaluation: null,
     groundingReused: false,
     loadingHints: [],
+    safety: undefined,
     result: null,
   };
 
@@ -675,7 +729,7 @@ export async function runGatewayOrchestrator(
   if (!result) {
     // Fallback — should never reach here in practice
     return {
-      agentType: "triageNurse",
+      agentType: "generalMedicine",
       thinkingLevel: "low",
       needsRag: false,
       reasoning: "orchestrator-state-missing",

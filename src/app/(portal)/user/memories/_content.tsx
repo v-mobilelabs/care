@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -10,7 +11,6 @@ import {
     Container,
     Group,
     Loader,
-    Paper,
     ScrollArea,
     Select,
     Skeleton,
@@ -97,7 +97,7 @@ function MemoryCard({
     };
 
     return (
-        <Paper withBorder radius="lg" p="md" style={{ opacity: isDeleting ? 0.5 : 1, transition: "opacity 150ms ease" }}>
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md" style={{ opacity: isDeleting ? 0.5 : 1, transition: "opacity 150ms ease" }}>
             <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
                 <Group
                     gap="sm"
@@ -145,7 +145,7 @@ function MemoryCard({
                     </ActionIcon>
                 </Tooltip>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -435,7 +435,7 @@ export function MemoriesContent() {
                     </Tooltip>
                 </Group>
 
-                <Paper withBorder radius="lg" p="sm">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="sm">
                     <Group justify="space-between" align="center" wrap="wrap" gap="xs">
                         <Checkbox
                             checked={allSelected}
@@ -460,7 +460,7 @@ export function MemoriesContent() {
                             </Button>
                         </Group>
                     </Group>
-                </Paper>
+                </MotionCard>
 
                 <Box style={{ flex: 1, overflow: "hidden" }}>
                     <ScrollArea style={{ height: "100%" }}>

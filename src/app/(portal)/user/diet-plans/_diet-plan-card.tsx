@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Badge,
@@ -8,7 +9,6 @@ import {
     Group,
     List,
     Loader,
-    Paper,
     ScrollArea,
     SimpleGrid,
     Stack,
@@ -55,7 +55,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
     const selectedDay = days.find((d) => d.day === activeDay) ?? days[0];
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p={0}
@@ -204,7 +204,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                                         {selectedDay.meals.map((meal) => {
                                             const mc = MEAL_COLORS[meal.name] ?? "green";
                                             return (
-                                                <Paper key={meal.name} withBorder radius="md" p={0} style={{ overflow: "hidden" }}>
+                                                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={meal.name} withBorder radius="md" p={0} style={{ overflow: "hidden" }}>
                                                     <Box px="sm" py={6} style={{ background: `light-dark(var(--mantine-color-${mc}-0), rgba(0,0,0,0.15))` }}>
                                                         <Group justify="space-between" wrap="nowrap">
                                                             <Group gap={6}>
@@ -290,7 +290,7 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                                                             </Box>
                                                         ))}
                                                     </Stack>
-                                                </Paper>
+                                                </MotionCard>
                                             );
                                         })}
                                     </Stack>
@@ -361,6 +361,6 @@ export function DietPlanCard({ plan, isPendingDelete, onDelete, isOptimistic = f
                     </Stack>
                 </Box>
             </Collapse>
-        </Paper>
+        </MotionCard>
     );
 }

@@ -44,14 +44,14 @@ const HUMAN_READABLE: Record<ValidatableFileType, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function buildMediaPart(mimeType: string, buffer: Buffer) {
-  const dataUri = `data:${mimeType};base64,${buffer.toString("base64")}`;
-  return mimeType.startsWith("image/")
+function buildMediaPart(mime: string, buffer: Buffer) {
+  const dataUri = `data:${mime};base64,${buffer.toString("base64")}`;
+  return mime.startsWith("image/")
     ? { type: "image" as const, image: dataUri }
     : {
         type: "file" as const,
         data: dataUri,
-        mediaType: mimeType as `${string}/${string}`,
+        mediaType: mime as `${string}/${string}`,
       };
 }
 
@@ -97,14 +97,14 @@ export class ValidateFileContentService {
 
   async assertType(
     userId: string,
-    mimeType: string,
+    mime: string,
     buffer: Buffer,
     expectedType: ValidatableFileType,
   ): Promise<void> {
     const answer = await classify(
       this.ai,
       userId,
-      buildMediaPart(mimeType, buffer),
+      buildMediaPart(mime, buffer),
       expectedType,
     );
     if (answer === "no") rejectFile(expectedType);

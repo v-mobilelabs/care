@@ -39,6 +39,7 @@ import { isToolPart } from "@/ui/ai/types";
 import { motion as motionTokens } from "@/ui/tokens";
 
 import { useMic } from "@/ui/ai/hooks/use-mic";
+import { useLiveSessionCompletion } from "@/ui/ai/hooks/use-live-session-completion";
 import { GeminiLiveStandalone } from "@/ui/ai/components/gemini-live-standalone";
 import { FilePickerDrawer } from "./file-picker-drawer";
 import { ContextUsageIndicator } from "./context-usage-indicator";
@@ -82,6 +83,8 @@ export interface InputBarProps {
     onOpenRecap?: () => void;
     /** Called when the user clicks the continuity assessment indicator. */
     onOpenContinuity?: () => void;
+    /** Current session ID for Gemini Live audio storage. */
+    sessionId?: string;
     /** Optional user profile context used to enrich Gemini Live system instruction. */
     liveProfileContext?: Readonly<{
         name?: string;
@@ -95,6 +98,16 @@ export interface InputBarProps {
         bloodGroup?: string;
         allergies?: readonly string[];
     }>;
+    /** Called when a Gemini Live session completes with audio.
+     *  Parent should add this as an assistant message with kind: "audio". 
+     *  When called from real-time onMessageWithAudio, id will be present.
+     *  When called from onSessionComplete, id may be absent. */
+    onLiveSessionMessage?: (msg: {
+        id?: string;
+        content: string;
+        kind: "text" | "audio" | "mixed";
+        agentType?: string;
+    }) => Promise<void>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -243,41 +256,45 @@ function buildGeminiLiveSeedTurns(
     return turns.slice(-24);
 }
 
-function buildGeminiLiveSystemInstruction(
+/**
+ * Build personalized greeting using formatted context.
+ * Uses new utility from format-live-user-context.
+ */
+function buildGeminiLiveGreeting(
     profile: InputBarProps["liveProfileContext"],
 ): string {
-    const baseLine =
-        "You are CareAI realtime assistant. Be concise, safe, and clinically clear.";
-
-    if (!profile) {
-        return baseLine;
+    if (!profile?.name) {
+        return "Hi there! I'm CareAI. How are you feeling today?";
     }
 
-    const profileParts: string[] = [];
-    if (profile.name) profileParts.push(`name: ${profile.name}`);
-    if (profile.dateOfBirth) profileParts.push(`dateOfBirth: ${profile.dateOfBirth}`);
-    if (profile.gender) profileParts.push(`gender: ${profile.gender}`);
-    if (profile.city || profile.country) {
-        const location = [profile.city, profile.country].filter(Boolean).join(", ");
-        if (location) profileParts.push(`location: ${location}`);
-    }
-    if (profile.heightCm != null) profileParts.push(`heightCm: ${profile.heightCm}`);
-    if (profile.weightKg != null) profileParts.push(`weightKg: ${profile.weightKg}`);
-    if (profile.activityLevel) profileParts.push(`activityLevel: ${profile.activityLevel}`);
-    if (profile.bloodGroup) profileParts.push(`bloodGroup: ${profile.bloodGroup}`);
-    if (profile.allergies && profile.allergies.length > 0) {
-        profileParts.push(`allergies: ${profile.allergies.join(", ")}`);
-    }
+    const firstName = profile.name.split(" ")[0] ?? "there";
+    const age = profile.dateOfBirth
+        ? calculateAge(profile.dateOfBirth)
+        : null;
+    const ageStr = age && age >= 0 ? ` (${age})` : "";
 
-    if (profileParts.length > 0) {
-        return [
-            baseLine,
-            `Patient profile context (may be incomplete, do not invent missing fields): ${profileParts.join("; ")}.`,
-            "Use this context for personalization and safety checks. If the user gives newer/conflicting info, prefer the latest user statement.",
-        ].join(" ");
-    }
+    return `Hi ${firstName}${ageStr}! I'm CareAI. How are you feeling today?`;
+}
 
-    return baseLine;
+/**
+ * Calculate age from ISO date string (YYYY-MM-DD).
+ */
+function calculateAge(dateOfBirth: string): number | null {
+    try {
+        const dob = new Date(dateOfBirth);
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const monthDiff = today.getMonth() - dob.getMonth();
+        if (
+            monthDiff < 0 ||
+            (monthDiff === 0 && today.getDate() < dob.getDate())
+        ) {
+            age--;
+        }
+        return age >= 0 && age < 150 ? age : null;
+    } catch {
+        return null;
+    }
 }
 
 function pillFileIcon(mime: string, size = 16) {
@@ -360,6 +377,8 @@ export function InputBar({
     onOpenRecap,
     onOpenContinuity,
     liveProfileContext,
+    sessionId,
+    onLiveSessionMessage,
 }: Readonly<InputBarProps>) {
     const isMobile = useMediaQuery("(max-width: 48em)");
     const toolbarIconSize = isMobile ? 28 : TOOLBAR_ICON_SIZE;
@@ -389,7 +408,7 @@ export function InputBar({
     const recapCount = calculateRecapFindings(messages);
     const continuityCount = calculateContinuitySaved(messages);
     const liveSeedTurns = buildGeminiLiveSeedTurns(messages);
-    const liveSystemInstruction = buildGeminiLiveSystemInstruction(liveProfileContext);
+    const liveGreeting = buildGeminiLiveGreeting(liveProfileContext);
 
     // Re-focus the input after the AI finishes responding.
     useEffect(() => {
@@ -427,6 +446,34 @@ export function InputBar({
 
     // ── Hooks ─────────────────────────────────────────────────────────────────
     const { isListening, toggleMic } = useMic({ input, setInput: onInputChange });
+    const { completeSession } = useLiveSessionCompletion({
+        onSessionComplete: async (mergedMessage) => {
+            // When live session ends, the merged message (with audio) should be added to chat
+            console.log(
+                "[InputBar] Live session completed:",
+                {
+                    kind: mergedMessage.kind,
+                    contentPreview: mergedMessage.content.slice(0, 100),
+                    agentType: mergedMessage.agentType,
+                }
+            );
+            
+            // Call parent callback to add the live message to the chat
+            if (onLiveSessionMessage) {
+                try {
+                    await onLiveSessionMessage(mergedMessage);
+                } catch (error) {
+                    console.error("[InputBar] Failed to add live session message:", error);
+                }
+            }
+            
+            setGeminiLiveOpen(false);
+            setGeminiLiveConnected(false);
+        },
+        onError: (error) => {
+            console.error("[InputBar] Live session completion error:", error);
+        },
+    });
 
     // ── Attachment helpers ────────────────────────────────────────────────────
     function addFiles(files: FileList | null) {
@@ -706,7 +753,7 @@ export function InputBar({
                                         input: {
                                             paddingTop: "var(--mantine-spacing-sm)",
                                             paddingBottom: "var(--mantine-spacing-xs)",
-                                            fontSize: "var(--mantine-font-size-sm)",
+                                            fontSize: isMobile ? "16px" : "var(--mantine-font-size-sm)",
                                             lineHeight: 1.6,
                                             resize: "none",
                                             backgroundColor: "transparent",
@@ -847,16 +894,31 @@ export function InputBar({
 
             <GeminiLiveStandalone
                 title="Gemini Live"
+                sessionId={sessionId}
                 autoConnect={geminiLiveOpen}
                 autoStartMic={geminiLiveOpen}
                 renderUi={false}
                 seedTurns={liveSeedTurns}
-                connectGreeting="Greet briefly and ask how you can help."
-                systemInstruction={liveSystemInstruction}
+                connectGreeting={liveGreeting}
                 onConnectionChange={setGeminiLiveConnected}
                 onInputTranscription={(text) => {
                     if (!text.trim()) return;
                     onInputChange(text);
+                }}
+                onMessageWithAudio={async (message) => {
+                    // When live generates an audio message, immediately add it to chat
+                    if (onLiveSessionMessage) {
+                        try {
+                            await onLiveSessionMessage({
+                                id: message.id,
+                                content: JSON.stringify(message.parts),
+                                kind: "audio",
+                                agentType: "live",
+                            });
+                        } catch (error) {
+                            console.error("[InputBar] Failed to add audio message:", error);
+                        }
+                    }
                 }}
                 onMicStatsChange={(stats) => {
                     setLiveMicStats((prev) => {
@@ -876,6 +938,9 @@ export function InputBar({
                             totalBytes: stats.totalBytes,
                         };
                     });
+                }}
+                onSessionComplete={async (liveData) => {
+                    await completeSession(liveData);
                 }}
             />
 

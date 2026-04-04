@@ -11,9 +11,14 @@ export const askQuestionTool = tool({
     "only use free_text when the answer cannot be covered by a finite option list. " +
     "Rules: asking about age → single_choice with options ['Under 18', '18–29', '30–44', '45–59', '60–74', '75 or older']; " +
     "asking about health goals → single_choice with goal options; " +
-    "asking about symptoms → multi_choice with options; " +
+    "asking about symptoms (initial/opening question) → ALWAYS multi_choice with the STANDARD GENERAL SYMPTOM LIST below; " +
     "asking about pain level or severity → scale; " +
     "asking about location/country → free_text. " +
+    "STANDARD GENERAL SYMPTOM LIST — use this exact set for any opening question about current symptoms or complaints: " +
+    "['Headache', 'Fever', 'Cough', 'Sore throat', 'Runny / blocked nose', 'Shortness of breath', " +
+    "'Chest pain / tightness', 'Nausea / vomiting', 'Stomach pain / cramps', 'Diarrhoea', 'Constipation', " +
+    "'Fatigue / tiredness', 'Dizziness / lightheadedness', 'Back pain', 'Joint / muscle pain', " +
+    "'Skin rash / itching', 'Swelling', 'Changes in urination', 'Other (please describe)'] " +
     "STANDARDISED OPTION SETS — always use these exact labels when asking about these topics: " +
     "temperature → ['Normal (below 37.5°C)', 'Low-grade fever (37.5–38.5°C)', 'High fever (38.5–40°C)', 'Very high (above 40°C)', 'Haven't measured']; " +
     "pain character → ['Sharp / stabbing', 'Dull / aching', 'Burning', 'Throbbing / pulsating', 'Cramping', 'Pressure / tightness']; " +

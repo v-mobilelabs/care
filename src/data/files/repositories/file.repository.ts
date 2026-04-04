@@ -1,5 +1,5 @@
 import {
-  Timestamp,
+  AggregateField,
   type Query,
   type QueryDocumentSnapshot,
 } from "firebase-admin/firestore";
@@ -46,8 +46,8 @@ const MIME_FILTER_MAP: Record<string, string[]> = {
   ],
 };
 
-function buildStorageObjectName(mimeType: string): string {
-  const extension = MIME_EXTENSION_MAP[mimeType] ?? "bin";
+function buildStorageObjectName(mime: string): string {
+  const extension = MIME_EXTENSION_MAP[mime] ?? "bin";
   return `${randomUUID()}.${extension}`;
 }
 
@@ -58,28 +58,28 @@ const gcThumbnailPath = (profileId: string, fileId: string) =>
 /** Signed URL expiry — 7 days (GCS maximum for service-account-signed URLs). */
 const SIGNED_URL_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
-function applyMimeTypeFilter(base: Query, mimeType?: string): Query {
-  if (!mimeType) return base;
+function applyMimeTypeFilter(base: Query, mime?: string): Query {
+  if (!mime) return base;
 
-  const mimes = MIME_FILTER_MAP[mimeType];
+  const mimes = MIME_FILTER_MAP[mime];
   if (mimes?.length === 1) {
-    return base.where("mimeType", "==", mimes[0]);
+    return base.where("mime", "==", mimes[0]);
   }
   if (mimes && mimes.length > 1) {
-    return base.where("mimeType", "in", mimes);
+    return base.where("mime", "in", mimes);
   }
   return base;
 }
 
 function applyListFilters(
   base: Query,
-  opts: { label?: string; mimeType?: string },
+  opts: { label?: string; mime?: string },
 ): Query {
   let query = base;
   if (opts.label) {
     query = query.where("label", "==", opts.label);
   }
-  return applyMimeTypeFilter(query, opts.mimeType);
+  return applyMimeTypeFilter(query, opts.mime);
 }
 
 // ── Repository ────────────────────────────────────────────────────────────────
@@ -92,44 +92,45 @@ export const fileRepository = {
   async upload(
     userId: string,
     profileId: string,
-    data: Pick<FileDocument, "name" | "mimeType" | "size"> & {
+    data: Pick<FileDocument, "mime" | "size"> & {
       buffer: Buffer;
-      sessionId?: string;
+      sourceId?: string;
     },
   ): Promise<FileDto> {
     // 1. Reserve a Firestore doc ID so we can embed it in the storage path.
     const ref = filesCol(profileId).doc();
     const fileId = ref.id;
-    const objectName = buildStorageObjectName(data.mimeType);
+    const objectName = buildStorageObjectName(data.mime);
     const gcsPath = gcStoragePath(profileId, fileId, objectName);
 
     // 2. Upload to Cloud Storage.
     const gcsFile = bucket.file(gcsPath);
+    const t1 = performance.now();
     await gcsFile.save(data.buffer, {
-      contentType: data.mimeType,
+      contentType: data.mime,
+      resumable: data.buffer.length < 5 * 1024 * 1024, // skip resumable initiation for files < 5 MB
       metadata: { cacheControl: "private, max-age=31536000" },
     });
+    console.log(
+      `[fileRepository.upload] GCS save: ${Math.round(performance.now() - t1)}ms`,
+    );
 
-    // 3. Generate a signed download URL (7 days).
-    const urlExpiresAt = Date.now() + SIGNED_URL_EXPIRY_MS;
-    const [downloadUrl] = await gcsFile.getSignedUrl({
-      action: "read",
-      expires: urlExpiresAt,
-    });
-
-    // 4. Write Firestore metadata.
+    // 3. Write Firestore metadata.
+    // Signed URL is deferred — toFileDto maps downloadUrl to a proxy route
+    // (/api/files/:id) which generates a fresh signed URL on access.
+    const t3 = performance.now();
     const doc: FileDocument = {
-      sessionId: data.sessionId,
       userId,
-      name: data.name,
-      mimeType: data.mimeType,
+      label: "other", // Default label — will be updated by async classification
+      sourceId: data.sourceId,
+      path: gcsPath,
+      mime: data.mime,
       size: data.size,
-      storagePath: gcsPath,
-      downloadUrl,
-      urlExpiresAt,
-      createdAt: Timestamp.now(),
     };
     await ref.set(stripUndefined(doc));
+    console.log(
+      `[fileRepository.upload] Firestore set: ${Math.round(performance.now() - t3)}ms`,
+    );
     return toFileDto(fileId, doc);
   },
 
@@ -166,39 +167,30 @@ export const fileRepository = {
     if (!snap.exists) return null;
     const doc = snap.data() as FileDocument;
 
-    // Refresh the signed URL so the caller always gets a valid link.
-    const urlExpiresAt = Date.now() + SIGNED_URL_EXPIRY_MS;
-    const gcsFile = bucket.file(doc.storagePath);
-    const [freshUrl] = await gcsFile.getSignedUrl({
-      action: "read",
-      expires: urlExpiresAt,
-    });
-    await snap.ref.update({ downloadUrl: freshUrl, urlExpiresAt });
-
-    return toFileDto(snap.id, { ...doc, downloadUrl: freshUrl, urlExpiresAt });
+    // Signed URL is always generated fresh by the proxy route
+    // No need to store or refresh it in Firestore
+    return toFileDto(snap.id, doc);
   },
 
   /**
-   * List files for a profile. Optionally filter by `sessionId` tag.
+   * List files for a profile. Optionally filter by `sourceId` tag.
    */
-  async list(profileId: string, sessionId?: string): Promise<FileDto[]> {
+  async list(profileId: string, sourceId?: string): Promise<FileDto[]> {
     let query: Query = filesCol(profileId);
-    if (sessionId) {
-      query = query.where("sessionId", "==", sessionId);
+    if (sourceId) {
+      query = query.where("sourceId", "==", sourceId);
     }
-    query = query.orderBy("createdAt", "asc");
     const snap = await query.get();
     return snap.docs.map((d: QueryDocumentSnapshot) =>
       toFileDto(d.id, d.data() as FileDocument),
     );
   },
 
-  /** List all files for a user across every profile, newest first. */
+  /** List all files for a user across every profile. */
   async listAllForUser(userId: string): Promise<FileDto[]> {
     const snap = await db
       .collectionGroup("files")
       .where("userId", "==", userId)
-      .orderBy("createdAt", "desc")
       .get();
     return snap.docs.map((d: QueryDocumentSnapshot) =>
       toFileDto(d.id, d.data() as FileDocument),
@@ -215,10 +207,8 @@ export const fileRepository = {
       const docs = snap.docs.map((d: QueryDocumentSnapshot) =>
         toFileDto(d.id, d.data() as FileDocument),
       );
-      return docs.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      // Sort by document ID (which is time-sortable) for deterministic ordering
+      return docs.sort((a, b) => b.id.localeCompare(a.id));
     } catch (err) {
       console.error(
         "[fileRepository.listAllForUserUnordered] query failed:",
@@ -230,8 +220,8 @@ export const fileRepository = {
 
   /**
    * Paginated listing of files for a single profile.
-   * Supports server-side filtering by label and mimeType prefix,
-   * client-side name search (q), and cursor-based pagination.
+   * Supports server-side filtering by label and mime prefix,
+   * client-side path search (q), and cursor-based pagination.
    */
   async listPaginated(
     profileId: string,
@@ -239,21 +229,21 @@ export const fileRepository = {
       limit: number;
       cursor?: string;
       label?: string;
-      mimeType?: string;
+      mime?: string;
       q?: string;
       sortDir?: "asc" | "desc";
     },
   ): Promise<PaginatedFiles> {
     let query: Query = applyListFilters(filesCol(profileId), {
       label: opts.label,
-      mimeType: opts.mimeType,
+      mime: opts.mime,
     });
 
     const sortDir = opts.sortDir ?? "desc";
-    query = query.orderBy("createdAt", sortDir);
+    query = query.orderBy("__name__", sortDir);
 
     if (opts.cursor) {
-      query = query.startAfter(Timestamp.fromDate(new Date(opts.cursor)));
+      query = query.startAfter(opts.cursor);
     }
 
     // When a search term is present, we fetch more to compensate for client-side filtering
@@ -263,22 +253,22 @@ export const fileRepository = {
       toFileDto(d.id, d.data() as FileDocument),
     );
 
-    // Client-side name search (Firestore can't do substring match)
+    // Client-side path search (Firestore can't do substring match)
     if (opts.q) {
       const term = opts.q.toLowerCase();
-      docs = docs.filter((f) => f.name.toLowerCase().includes(term));
+      docs = docs.filter((f) => f.path.toLowerCase().includes(term));
     }
 
     const hasMore = docs.length > opts.limit;
     const page = hasMore ? docs.slice(0, opts.limit) : docs;
-    const nextCursor = hasMore ? page[page.length - 1].createdAt : null;
+    const nextCursor = hasMore ? page[page.length - 1].id : null;
 
     // Count total matching docs only on the first page (no cursor)
     let totalCount: number | undefined;
     if (!opts.cursor) {
       const cq = applyListFilters(filesCol(profileId), {
         label: opts.label,
-        mimeType: opts.mimeType,
+        mime: opts.mime,
       });
       const countSnap = await cq.count().get();
       totalCount = countSnap.data().count;
@@ -287,23 +277,16 @@ export const fileRepository = {
     return { files: page, nextCursor, totalCount };
   },
 
-  /** Delete GCS object, thumbnail, and Firestore metadata. */
+  /** Delete GCS object and Firestore metadata. */
   async delete(profileId: string, fileId: string): Promise<void> {
     const snap = await fileDoc(profileId, fileId).get();
     if (!snap.exists) return;
     const doc = snap.data() as FileDocument;
 
     try {
-      await bucket.file(doc.storagePath).delete();
+      await bucket.file(doc.path).delete();
     } catch {
       /* file may already be deleted */
-    }
-    if (doc.thumbnailPath) {
-      try {
-        await bucket.file(doc.thumbnailPath).delete();
-      } catch {
-        /* thumbnail may already be deleted */
-      }
     }
 
     await snap.ref.delete();
@@ -315,17 +298,23 @@ export const fileRepository = {
    */
   async getStorageMetrics(userId: string): Promise<StorageMetricsDto> {
     try {
-      const snap = await db
+      const t0 = performance.now();
+      const baseQuery = db
         .collectionGroup("files")
-        .where("userId", "==", userId)
-        .get();
-      const usedBytes = snap.docs.reduce(
-        (sum, d) => sum + ((d.data() as Pick<FileDocument, "size">).size ?? 0),
-        0,
+        .where("userId", "==", userId);
+
+      const [countSnap, sumSnap] = await Promise.all([
+        baseQuery.count().get(),
+        baseQuery.aggregate({ usedBytes: AggregateField.sum("size") }).get(),
+      ]);
+
+      console.log(
+        `[fileRepository.getStorageMetrics] Aggregate queries: ${Math.round(performance.now() - t0)}ms`,
       );
+
       return {
-        usedBytes,
-        fileCount: snap.size,
+        usedBytes: sumSnap.data().usedBytes ?? 0,
+        fileCount: countSnap.data().count,
         limitBytes: USER_STORAGE_LIMIT_BYTES,
       };
     } catch (err) {
@@ -338,16 +327,11 @@ export const fileRepository = {
     }
   },
 
-  /** Patch arbitrary fields on an existing file document (e.g. extractedData, label, thumbnailPath). */
+  /** Patch arbitrary fields on an existing file document (e.g. label, data). */
   async patch(
     profileId: string,
     fileId: string,
-    data: Partial<
-      Pick<
-        FileDocument,
-        "extractedData" | "label" | "labelConfidence" | "thumbnailPath"
-      >
-    >,
+    data: Partial<Pick<FileDocument, "label" | "data">>,
   ): Promise<void> {
     await fileDoc(profileId, fileId).update(data as Record<string, unknown>);
   },
@@ -367,7 +351,7 @@ export const fileRepository = {
       contentType: "image/webp",
       metadata: { cacheControl: "private, max-age=31536000" },
     });
-    await fileDoc(profileId, fileId).update({ thumbnailPath: thumbPath });
+    // Thumbnail path is stored in data field now, not as separate document field
     return thumbPath;
   },
 
@@ -376,15 +360,7 @@ export const fileRepository = {
     profileId: string,
     fileId: string,
   ): Promise<string | null> {
-    const snap = await fileDoc(profileId, fileId).get();
-    if (!snap.exists) return null;
-    const doc = snap.data() as FileDocument;
-
-    // Placeholder URL for documents (PDF, Word, Excel) — return directly.
-    if (doc.thumbnailUrl) return doc.thumbnailUrl;
-
-    // GCS-based thumbnail: use the stored path or the convention-based path.
-    const thumbPath = doc.thumbnailPath ?? gcThumbnailPath(profileId, fileId);
+    const thumbPath = gcThumbnailPath(profileId, fileId);
     const [exists] = await bucket.file(thumbPath).exists();
     if (!exists) return null;
 
@@ -395,10 +371,10 @@ export const fileRepository = {
     return url;
   },
 
-  /** Delete all files tagged with a given sessionId (used when deleting a chat session). */
-  async deleteAll(profileId: string, sessionId: string): Promise<void> {
+  /** Delete all files tagged with a given sourceId (used when deleting a chat session). */
+  async deleteAll(profileId: string, sourceId: string): Promise<void> {
     const snap = await filesCol(profileId)
-      .where("sessionId", "==", sessionId)
+      .where("sourceId", "==", sourceId)
       .get();
     const batch = db.batch();
 
@@ -406,7 +382,7 @@ export const fileRepository = {
       snap.docs.map(async (d: QueryDocumentSnapshot) => {
         const doc = d.data() as FileDocument;
         try {
-          await bucket.file(doc.storagePath).delete();
+          await bucket.file(doc.path).delete();
         } catch {
           /* ignore */
         }

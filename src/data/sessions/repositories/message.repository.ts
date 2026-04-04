@@ -30,19 +30,33 @@ export const messageRepository = {
     userId: string,
     profileId: string,
     sessionId: string,
-    data: Pick<MessageDocument, "role" | "content" | "usage" | "agentType">,
+    data: Pick<
+      MessageDocument,
+      "role" | "kind" | "content" | "usage" | "agentType"
+    >,
+    messageId?: string,
   ): Promise<MessageDto> {
     const doc: MessageDocument = {
       sessionId,
       userId,
       role: data.role,
+      kind: data.kind,
       content: data.content,
       createdAt: Timestamp.now(),
       ...(data.usage && { usage: data.usage }),
       ...(data.agentType && { agentType: data.agentType }),
     };
-    const ref = await messagesCol(userId, profileId, sessionId).add(doc);
-    return toMessageDto(ref.id, doc);
+
+    // If messageId is provided, use it as the document ID (for audio messages linked to audio files)
+    // Otherwise, let Firestore auto-generate the ID
+    if (messageId) {
+      const docRef = messagesCol(userId, profileId, sessionId).doc(messageId);
+      await docRef.set(doc);
+      return toMessageDto(messageId, doc);
+    } else {
+      const ref = await messagesCol(userId, profileId, sessionId).add(doc);
+      return toMessageDto(ref.id, doc);
+    }
   },
 
   async list(
@@ -96,7 +110,7 @@ export const messageRepository = {
   },
 
   /** Update the content (and optionally accumulate usage) of an existing message. */
-   
+
   async updateContent(
     userId: string,
     profileId: string,

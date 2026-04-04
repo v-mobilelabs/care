@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Badge,
@@ -8,7 +9,6 @@ import {
     Group,
     LoadingOverlay,
     Modal,
-    Paper,
     ScrollArea,
     Stack,
     Text,
@@ -419,7 +419,7 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
                                     <Text size="xs" c="dimmed">{matchError}</Text>
                                 ) : null}
                                 {matchOptions.map((match) => (
-                                    <Paper key={match.id} withBorder radius="md" p="xs">
+                                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={match.id} withBorder radius="md" p="xs">
                                         <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
                                             <Box>
                                                 <Text size="sm" fw={600}>{match.brandName ?? match.name}</Text>
@@ -455,7 +455,7 @@ export function MedicationModal({ opened, onClose, initial }: Readonly<Medicatio
                                                 </Button>
                                             </Box>
                                         </Group>
-                                    </Paper>
+                                    </MotionCard>
                                 ))}
                             </Stack>
                         )}

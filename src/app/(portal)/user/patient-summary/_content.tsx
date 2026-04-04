@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import {
     ActionIcon,
@@ -6,7 +7,6 @@ import {
     Box,
     Button,
     Group,
-    Paper,
     ScrollArea,
     SimpleGrid,
     Stack,
@@ -94,7 +94,7 @@ function getSummaryNextStep(summary: PatientSummaryRecord): string {
 
 function SummaryLegend() {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="sm">
                 <Stack gap={4}>
                     <Text fw={600} size="sm">
@@ -108,33 +108,33 @@ function SummaryLegend() {
                 </Stack>
 
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             What it includes
                         </Text>
                         <Text size="sm">
                             Narrative, complaints, diagnoses, medications, vitals, and recommendations when available.
                         </Text>
-                    </Paper>
-                    <Paper withBorder radius="md" p="sm">
+                    </MotionCard>
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Why it helps
                         </Text>
                         <Text size="sm">
                             You can review your care context quickly before another chat, referral, or appointment.
                         </Text>
-                    </Paper>
-                    <Paper withBorder radius="md" p="sm">
+                    </MotionCard>
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             What it is not
                         </Text>
                         <Text size="sm">
                             A summary is a care aid, not a substitute for emergency care or an in-person clinician when needed.
                         </Text>
-                    </Paper>
+                    </MotionCard>
                 </SimpleGrid>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -185,7 +185,7 @@ function SummaryCard({
     ];
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="md">
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
                     <Group gap="sm" wrap="nowrap" style={{ overflow: "hidden" }}>
@@ -221,7 +221,7 @@ function SummaryCard({
                     {summary.narrative}
                 </Text>
 
-                <Paper
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                     withBorder
                     radius="md"
                     p="sm"
@@ -242,7 +242,7 @@ function SummaryCard({
                             <Text size="sm">{getSummaryNextStep(summary)}</Text>
                         </Box>
                     </Stack>
-                </Paper>
+                </MotionCard>
 
                 <SummarySection title="Chief complaints" items={summary.chiefComplaints} color="primary" />
                 <SummarySection
@@ -288,7 +288,7 @@ function SummaryCard({
                     </Group>
                 ) : null}
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 

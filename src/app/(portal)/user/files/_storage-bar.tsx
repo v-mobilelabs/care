@@ -1,8 +1,8 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     Badge,
     Group,
-    Paper,
     Progress,
     Skeleton,
     Text,
@@ -28,7 +28,7 @@ export function StorageBar() {
     })();
 
     return (
-        <Paper withBorder radius="md" p="sm">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
             <Group gap="xs" mb={6}>
                 <ThemeIcon size={20} radius="sm" color={barColor} variant="light">
                     <IconDatabase size={12} />
@@ -42,6 +42,6 @@ export function StorageBar() {
                 </Badge>
             </Group>
             <Progress value={pct} color={barColor} size="sm" radius="xl" />
-        </Paper>
+        </MotionCard>
     );
 }

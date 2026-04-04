@@ -11,7 +11,6 @@ import {
     Group,
     Loader,
     Pagination,
-    Paper,
     ScrollArea,
     Skeleton,
     Stack,
@@ -19,6 +18,7 @@ import {
     ThemeIcon,
     Title,
 } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     IconPhone,
     IconPhoneOff,
@@ -118,7 +118,7 @@ function CallCard({ call }: Readonly<{ call: CallRequestDto }>) {
     const color = statusColor(call.status);
 
     return (
-        <Paper withBorder radius="lg" style={{ overflow: "hidden" }}>
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" style={{ overflow: "hidden" }}>
             <Box p="md">
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
                     {/* Left: avatar + info */}
@@ -240,7 +240,7 @@ function CallCard({ call }: Readonly<{ call: CallRequestDto }>) {
                     </Box>
                 </Collapse>
             )}
-        </Paper>
+        </MotionCard>
     );
 }
 // ── Main component ────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ export function CallsContent() {
 
                         if (error) {
                             return (
-                                <Paper withBorder radius="md" p="xl">
+                                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="xl">
                                     <Stack align="center" gap="md" py="md">
                                         <ThemeIcon size={52} radius="xl" color="red" variant="light">
                                             <IconPhoneX size={26} />
@@ -304,13 +304,13 @@ export function CallsContent() {
                                             Try again
                                         </Button>
                                     </Stack>
-                                </Paper>
+                                </MotionCard>
                             );
                         }
 
                         if (allCalls.length === 0) {
                             return (
-                                <Paper
+                                <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                                     withBorder
                                     radius="md"
                                     p="xl"
@@ -339,7 +339,7 @@ export function CallsContent() {
                                             See a Doctor
                                         </Button>
                                     </Stack>
-                                </Paper>
+                                </MotionCard>
                             );
                         }
 

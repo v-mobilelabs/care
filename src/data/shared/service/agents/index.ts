@@ -3,9 +3,7 @@
  *
  * - Gateway Agent: Fast routing to the right specialist
  * - Clinical Agent: General medical chat with Pro model + thinking
- * - Diet Planner Chat Agent: 7-day meal plan generation in chat
- * - Prescription Chat Agent: Prescription generation in chat
- * - Lab Report Chat Agent: Lab report interpretation and analysis in chat
+ * - Nutrition Agent: Clinical nutrition + 7-day meal plans
  *
  * All clinical agents use createAgent() (factory pattern with composable middleware).
  * The gateway decides which agent handles each user message.
@@ -19,23 +17,6 @@ export {
 } from "./base/agent";
 
 // ── Specialist agents (singleton instances + UI message types) ────────────────
-export {
-  dietPlannerChatAgent,
-  type DietPlannerAgentUIMessage,
-} from "./diet-planner/agent";
-export {
-  prescriptionChatAgent,
-  type PrescriptionAgentUIMessage,
-} from "./prescription/agent";
-export {
-  labReportChatAgent,
-  type LabReportAgentUIMessage,
-} from "./lab-report/agent";
-export { patientAgent, type PatientAgentUIMessage } from "./patient/agent";
-export {
-  triageNurseAgent,
-  type TriageNurseAgentUIMessage,
-} from "./triage-nurse/agent";
 export {
   generalMedicineAgent,
   type GeneralMedicineAgentUIMessage,
@@ -105,11 +86,6 @@ export {
 
 // ── Union of all agent UI message types ───────────────────────────────
 // Pass this to useChat<ChatUIMessage>() for typed tool parts on the client.
-import type { DietPlannerAgentUIMessage as _Diet } from "./diet-planner/agent";
-import type { PrescriptionAgentUIMessage as _Rx } from "./prescription/agent";
-import type { LabReportAgentUIMessage as _Lr } from "./lab-report/agent";
-import type { PatientAgentUIMessage as _Pt } from "./patient/agent";
-import type { TriageNurseAgentUIMessage as _Triage } from "./triage-nurse/agent";
 import type { GeneralMedicineAgentUIMessage as _General } from "./general-medicine/agent";
 import type { NeurologyAgentUIMessage as _Neuro } from "./neurology/agent";
 import type { CardiologyAgentUIMessage as _Cardio } from "./cardiology/agent";
@@ -129,11 +105,6 @@ import type { EntAgentUIMessage as _Ent } from "./ent/agent";
 import type { OphthalmologyAgentUIMessage as _Eye } from "./ophthalmology/agent";
 import type { NephrologyAgentUIMessage as _Nephro } from "./nephrology/agent";
 export type ChatUIMessage =
-  | _Diet
-  | _Rx
-  | _Lr
-  | _Pt
-  | _Triage
   | _General
   | _Neuro
   | _Cardio

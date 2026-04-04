@@ -1,5 +1,5 @@
 "use client";
-import { ActionIcon, Badge, Box, Button, Container, Group, Pagination, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Box, Button, Group, Pagination, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip } from "@mantine/core";
 import { useRef, useState } from "react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -124,7 +124,7 @@ export function PrescriptionsContent() {
     }
 
     return (
-        <Container pt="md">
+        <Box pt="md" maw={1080} mx="auto" w="100%">
             {/* Hidden inputs */}
             <input
                 ref={cameraInputRef}
@@ -271,6 +271,6 @@ export function PrescriptionsContent() {
                     )}
                 </Box>
             </Stack>
-        </Container>
+        </Box>
     );
 }

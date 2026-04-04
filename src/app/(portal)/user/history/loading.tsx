@@ -1,4 +1,5 @@
-import { Box, Container, Divider, Group, Paper, ScrollArea, Skeleton, Stack } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
+import { Box, Container, Divider, Group, ScrollArea, Skeleton, Stack } from "@mantine/core";
 
 export default function HistoryLoading() {
     return (
@@ -16,7 +17,7 @@ export default function HistoryLoading() {
                 </Group>
 
                 {/* Legend card */}
-                <Paper withBorder radius="lg" p="md">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
                     <Stack gap="sm">
                         <Stack gap={4}>
                             <Skeleton height={14} width={140} />
@@ -30,7 +31,7 @@ export default function HistoryLoading() {
                         </Group>
                         <Skeleton height={10} width="85%" />
                     </Stack>
-                </Paper>
+                </MotionCard>
 
                 {/* Search + filter controls */}
                 <Stack gap="sm">

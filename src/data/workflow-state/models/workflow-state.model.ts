@@ -1,6 +1,18 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
 
+/** Safely convert a Firestore Timestamp (or undefined/null) to ISO string. */
+function safeTimestampToISO(
+  ts: Timestamp | undefined | null,
+  fallback?: Timestamp | null,
+): string {
+  if (ts && typeof (ts as Timestamp).toDate === "function")
+    return (ts as Timestamp).toDate().toISOString();
+  if (fallback && typeof (fallback as Timestamp).toDate === "function")
+    return (fallback as Timestamp).toDate().toISOString();
+  return new Date().toISOString();
+}
+
 export interface WorkflowThreadDocument {
   userId: string;
   profileId: string;
@@ -66,9 +78,9 @@ export function toWorkflowThreadDto(
     workflowName: doc.workflowName,
     state: doc.state,
     ...(doc.metadata ? { metadata: doc.metadata } : {}),
-    createdAt: doc.createdAt.toDate().toISOString(),
-    updatedAt: doc.updatedAt.toDate().toISOString(),
-    expiresAt: doc.expiresAt.toDate().toISOString(),
+    createdAt: safeTimestampToISO(doc.createdAt),
+    updatedAt: safeTimestampToISO(doc.updatedAt, doc.createdAt),
+    expiresAt: safeTimestampToISO(doc.expiresAt),
   };
 }
 
@@ -86,8 +98,8 @@ export function toWorkflowCheckpointDto(
     state: doc.state,
     ...(doc.nodeName ? { nodeName: doc.nodeName } : {}),
     ...(doc.metadata ? { metadata: doc.metadata } : {}),
-    createdAt: doc.createdAt.toDate().toISOString(),
-    expiresAt: doc.expiresAt.toDate().toISOString(),
+    createdAt: safeTimestampToISO(doc.createdAt),
+    expiresAt: safeTimestampToISO(doc.expiresAt),
   };
 }
 

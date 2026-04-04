@@ -1,13 +1,12 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import {
     Badge,
     Box,
     Button,
-    Container,
     Divider,
     Group,
-    Paper,
     SimpleGrid,
     Stack,
     Textarea,
@@ -288,7 +287,7 @@ function getRecentSymptoms(
 
 function SummaryLegend() {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="sm">
                 <Stack gap={4}>
                     <Title order={5} lh={1.2}>
@@ -302,33 +301,33 @@ function SummaryLegend() {
                 </Stack>
 
                 <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             What it includes
                         </Text>
                         <Text size="xs" lh={1.5}>
                             Narrative, complaints, diagnoses, medications, vitals, and recommendations when available.
                         </Text>
-                    </Paper>
-                    <Paper withBorder radius="md" p="sm">
+                    </MotionCard>
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             Why it helps
                         </Text>
                         <Text size="xs" lh={1.5}>
                             You can review your care context quickly before another chat, referral, or appointment.
                         </Text>
-                    </Paper>
-                    <Paper withBorder radius="md" p="sm">
+                    </MotionCard>
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                             What it is not
                         </Text>
                         <Text size="xs" lh={1.5}>
                             A summary is a care aid, not a substitute for emergency care or an in-person clinician when needed.
                         </Text>
-                    </Paper>
+                    </MotionCard>
                 </SimpleGrid>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -493,7 +492,7 @@ function DoctorHandoffCard({
         : "Narrative not available yet. Encourage the patient to capture their symptom timeline, active treatment, and current concerns before handoff.";
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="md">
                 <Group justify="space-between" align="center" wrap="nowrap">
                     <Box>
@@ -508,7 +507,7 @@ function DoctorHandoffCard({
                 </Group>
 
                 <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Stack gap={6}>
                             <Text size="xs" fw={700} tt="uppercase" c="dimmed">
                                 Patient context
@@ -521,9 +520,9 @@ function DoctorHandoffCard({
                                 <Text size="sm" c="dimmed">Patient profile details are not available yet.</Text>
                             )}
                         </Stack>
-                    </Paper>
+                    </MotionCard>
 
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Stack gap={6}>
                             <Text size="xs" fw={700} tt="uppercase" c="dimmed">
                                 Clinical signals
@@ -532,11 +531,11 @@ function DoctorHandoffCard({
                                 <Text key={`signal-${signal}`} size="sm">• {signal}</Text>
                             ))}
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 </SimpleGrid>
 
                 {redFlags.length > 0 ? (
-                    <Paper
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                         withBorder
                         radius="md"
                         p="sm"
@@ -554,11 +553,11 @@ function DoctorHandoffCard({
                                 ))}
                             </Group>
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 ) : null}
 
                 {pendingFollowUps.length > 0 ? (
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Stack gap={6}>
                             <Group justify="space-between" align="center" wrap="nowrap">
                                 <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -574,10 +573,10 @@ function DoctorHandoffCard({
                                 ))}
                             </Stack>
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 ) : null}
 
-                <Paper
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                     withBorder
                     radius="md"
                     p="sm"
@@ -589,7 +588,7 @@ function DoctorHandoffCard({
                         </Text>
                         <Text size="sm" lh={1.6}>{handoffNote}</Text>
                     </Stack>
-                </Paper>
+                </MotionCard>
 
                 <Box>
                     <Group gap="xs" wrap="nowrap" align="center">
@@ -606,7 +605,7 @@ function DoctorHandoffCard({
                     </Group>
                 </Box>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -644,7 +643,7 @@ function SummaryCard({
     ];
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="md">
                 <Group justify="space-between" wrap="nowrap" align="flex-start">
                     <Group gap="sm" wrap="nowrap" style={{ overflow: "hidden" }}>
@@ -704,7 +703,7 @@ function SummaryCard({
 
                 <Divider />
 
-                <Paper
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                     withBorder
                     radius="md"
                     p="sm"
@@ -725,7 +724,7 @@ function SummaryCard({
                             <Text size="xs" lh={1.5}>{getSummaryNextStep(summary)}</Text>
                         </Box>
                     </Stack>
-                </Paper>
+                </MotionCard>
 
                 <SummarySection title="Chief complaints" items={chiefComplaints} color="primary" />
                 <SummarySection
@@ -746,7 +745,7 @@ function SummaryCard({
                 <SummarySection title="Recommendations" items={recommendations} color={colors.success} />
 
                 {actionItems.length > 0 ? (
-                    <Paper withBorder radius="md" p="sm">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm">
                         <Stack gap="sm">
                             <Group justify="space-between" align="center" wrap="nowrap">
                                 <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -759,7 +758,7 @@ function SummaryCard({
 
                             <Stack gap={8}>
                                 {actionItems.map((item) => (
-                                    <Paper key={item.id} withBorder radius="md" p="xs">
+                                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={item.id} withBorder radius="md" p="xs">
                                         <Stack gap={6}>
                                             <Group justify="space-between" align="flex-start" wrap="nowrap">
                                                 <Text size="sm" style={{ flex: 1 }}>{item.text}</Text>
@@ -798,11 +797,11 @@ function SummaryCard({
                                                 </Button>
                                             </Group>
                                         </Stack>
-                                    </Paper>
+                                    </MotionCard>
                                 ))}
                             </Stack>
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 ) : null}
 
                 {summary.sessionId ? (
@@ -839,7 +838,7 @@ function SummaryCard({
                     </Group>
                 ) : null}
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -1043,7 +1042,7 @@ export function PatientSummaryContent() {
 
     if (!summary) {
         return (
-            <Container pt="md">
+            <Box pt="md" maw={1080} mx="auto" w="100%">
                 <Stack>
                     <Group gap="sm" wrap="nowrap">
                         <ThemeIcon size={36} radius="md" color="primary" variant="light">
@@ -1055,7 +1054,7 @@ export function PatientSummaryContent() {
                         </Box>
                     </Group>
 
-                    <Paper withBorder radius="lg" p="xl" ta="center">
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="xl" ta="center">
                         <Stack align="center" gap="sm">
                             <ThemeIcon size={48} radius="xl" color="primary" variant="light">
                                 <IconClipboardHeart size={24} />
@@ -1070,14 +1069,14 @@ export function PatientSummaryContent() {
                                 Start a consultation
                             </Button>
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 </Stack>
-            </Container>
+            </Box>
         );
     }
 
     return (
-        <Container pt="md">
+        <Box pt="md" maw={1080} mx="auto" w="100%">
             <Stack>
                 <Group justify="space-between" align="center" wrap="nowrap">
                     <Group gap="sm" wrap="nowrap">
@@ -1106,7 +1105,7 @@ export function PatientSummaryContent() {
                             activeMedicationItems={activeMedicationItems}
                         />
 
-                        <Paper
+                        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                             withBorder
                             radius="lg"
                             p="sm"
@@ -1144,11 +1143,11 @@ export function PatientSummaryContent() {
                                     </Group>
                                 )}
                             </Stack>
-                        </Paper>
+                        </MotionCard>
 
                         <SummaryLegend />
 
-                        <Paper withBorder radius="lg" p="md">
+                        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
                             <Stack gap="md">
                                 <Group justify="space-between" align="center" wrap="nowrap">
                                     <Title order={5} lh={1.2}>Clinical overview</Title>
@@ -1206,7 +1205,7 @@ export function PatientSummaryContent() {
                                     emptyStateCtaHref="/user/health/medications"
                                 />
                             </Stack>
-                        </Paper>
+                        </MotionCard>
 
                         <SummaryCard
                             summary={summary}
@@ -1220,6 +1219,6 @@ export function PatientSummaryContent() {
                     </Stack>
                 </Box>
             </Stack>
-        </Container>
+        </Box>
     );
 }

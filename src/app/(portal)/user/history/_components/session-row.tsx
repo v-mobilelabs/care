@@ -1,4 +1,4 @@
-import { Paper } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
 import Link from "@/ui/link";
 import { SessionRowContent } from "./session-row-content";
 import type { SessionSummary } from "@/app/(portal)/user/_query";
@@ -29,21 +29,21 @@ export function SessionRow({ session, isPendingDelete, onDelete }: Readonly<{
                 color: "inherit",
             }}
         >
-            <Paper
-                withBorder={false}
-                shadow="0"
-                bg="light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-9))"
+            <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
+                withBorder
+                shadow="xs"
                 radius="md"
-                px="md"
-                py="sm"
+                px="sm"
+                py="xs"
                 style={{
                     cursor: "pointer",
                     opacity: isPendingDelete ? 0.4 : 1,
-                    transition: "opacity 150ms ease",
+                    transition: "opacity 150ms ease, background 150ms ease",
+                    borderColor: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-gray-8))",
                 }}
             >
                 <SessionRowContent session={session} isPendingDelete={isPendingDelete} onDelete={onDelete} />
-            </Paper>
+            </MotionCard>
         </Link>
     );
 }

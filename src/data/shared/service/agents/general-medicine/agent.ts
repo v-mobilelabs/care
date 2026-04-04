@@ -8,7 +8,6 @@
 import type { InferAgentUIMessage } from "ai";
 import { createAgent } from "../base/agent";
 import { buildGeneralMedicinePrompt } from "./prompt";
-import { buildAttachmentContext } from "../clinical/prompt";
 import { askQuestionTool } from "../global-tools/ask-question.tool";
 import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 
@@ -16,8 +15,6 @@ import { startAssessmentTool } from "../global-tools/start-assessment.tool";
 export const generalMedicineAgent = createAgent({
   id: "generalMedicine",
   buildSystemPrompt: () => buildGeneralMedicinePrompt(),
-  buildDynamicContext: (options) =>
-    buildAttachmentContext(options.hasAttachment ?? false),
   assessmentConfig: {
     adaptiveMode: true,
   },

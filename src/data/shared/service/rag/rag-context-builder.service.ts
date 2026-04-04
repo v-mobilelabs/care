@@ -19,6 +19,11 @@
 
 import { ragService } from "./rag.service";
 import type { SearchResult } from "./rag.types";
+import {
+  triStoreRagService,
+  type TriStoreSearchOptions,
+} from "./tri-store-rag.service";
+export type { TriStoreContextResult } from "./tri-store.types";
 
 const RECENCY_WINDOW_DAYS = 30;
 const MAX_RECENCY_BOOST = 0.15;
@@ -164,6 +169,11 @@ export interface BuildContextParams {
   rerankMinScoreRatio?: number;
   /** Pre-computed query embedding vector (768-dim). Skips internal embed call when provided. */
   queryEmbedding?: number[];
+  /**
+   * Restrict search to specific document types (server-side Firestore filter — no extra cost).
+   * Omit to search all types.
+   */
+  types?: import("./rag.types").DocumentChunk["type"][];
 }
 
 export interface RAGContextResult {
@@ -199,6 +209,7 @@ export class RAGContextBuilderService {
       rerankMinScore = 0.01,
       rerankMinScoreRatio,
       queryEmbedding,
+      types,
     } = params;
 
     // Reranking (and its wider candidate retrieval) is handled inside ragService.search()
@@ -216,8 +227,9 @@ export class RAGContextBuilderService {
       rerankMinScore,
       rerankMinScoreRatio,
       queryEmbedding,
-      // Search all types — the model will naturally prioritize relevant ones
-      types: [
+      // When caller restricts types, Firestore filters server-side (no extra cost).
+      // Default to all clinical types when unspecified.
+      types: types ?? [
         "profile",
         "patient",
         "condition",
@@ -319,6 +331,19 @@ export class RAGContextBuilderService {
     }
 
     return ragResult;
+  }
+  /**
+   * Tri-Store semantic search: parallel weighted search across condition, symptom, and KB stores.
+   *
+   * Returns a `TriStoreContextResult` with per-store provenance tags suitable for 2026
+   * regulatory traceability: `<source store="condition_store" weight="1.0" label="...">`.
+   *
+   * Replaces the single-store `buildContext()` in agentic RAG and tool calls.
+   */
+  async buildTriStoreContext(
+    params: TriStoreSearchOptions,
+  ): ReturnType<typeof triStoreRagService.buildTriStoreContext> {
+    return triStoreRagService.buildTriStoreContext(params);
   }
 }
 

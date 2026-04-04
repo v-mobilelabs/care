@@ -119,7 +119,7 @@ function extractSymptomFromQuestion(question: string): string | null {
     const match = pattern.exec(cleaned);
     const value = match?.[1]?.trim();
     if (value) {
-      return value.replaceAll(/^(a|an|any|the)\s+/i, "").trim();
+      return value.replace(/^(a|an|any|the)\s+/i, "").trim();
     }
   }
 

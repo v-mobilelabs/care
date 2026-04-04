@@ -6,7 +6,6 @@ import type {
   FileRefInput,
   ListFilesInput,
   ListAllFilesInput,
-  ExtractedPrescriptionData,
   StorageMetricsDto,
 } from "../models/file.model";
 import { USER_STORAGE_LIMIT_BYTES } from "../models/file.model";
@@ -15,9 +14,24 @@ import { USER_STORAGE_LIMIT_BYTES } from "../models/file.model";
 
 export class FileService {
   async upload(input: UploadFileInput): Promise<FileDto> {
-    // Enforce per-user storage quota before writing to GCS/Firestore.
-    const metrics = await fileRepository.getStorageMetrics(input.userId);
+    // Start GCS upload and quota check in parallel — if over quota, clean up.
+    const [uploaded, metrics] = await Promise.all([
+      fileRepository.upload(input.userId, input.profileId, {
+        mime: input.mime,
+        size: input.size,
+        buffer: input.buffer,
+        sourceId: input.sourceId,
+      }),
+      fileRepository.getStorageMetrics(input.userId),
+    ]);
+
     if (metrics.usedBytes + input.size > USER_STORAGE_LIMIT_BYTES) {
+      // Over quota — delete the just-uploaded file in the background
+      fileRepository
+        .delete(input.profileId, uploaded.id)
+        .catch((err: unknown) =>
+          console.error("[FileService] Quota cleanup failed:", err),
+        );
       const remainingMB = (
         (USER_STORAGE_LIMIT_BYTES - metrics.usedBytes) /
         1024 /
@@ -27,13 +41,7 @@ export class FileService {
         `Storage quota exceeded. You have ${remainingMB} MB remaining of your ${USER_STORAGE_LIMIT_BYTES / 1024 / 1024} MB limit.`,
       );
     }
-    return fileRepository.upload(input.userId, input.profileId, {
-      name: input.name,
-      mimeType: input.mimeType,
-      size: input.size,
-      buffer: input.buffer,
-      sessionId: input.sessionId,
-    });
+    return uploaded;
   }
 
   async getById(input: FileRefInput): Promise<FileDto | null> {
@@ -50,7 +58,7 @@ export class FileService {
   }
 
   async list(input: ListFilesInput): Promise<FileDto[]> {
-    return fileRepository.list(input.profileId, input.sessionId);
+    return fileRepository.list(input.profileId, input.sourceId);
   }
 
   async listAllForUser(userId: string): Promise<FileDto[]> {
@@ -62,7 +70,7 @@ export class FileService {
       limit: input.limit,
       cursor: input.cursor,
       label: input.label,
-      mimeType: input.mimeType,
+      mime: input.mime,
       q: input.q,
       sortDir: input.sortDir,
     });
@@ -76,13 +84,8 @@ export class FileService {
     await fileRepository.delete(input.profileId, input.fileId);
   }
 
-  async patchExtractedData(
-    input: FileRefInput,
-    extractedData: ExtractedPrescriptionData,
-  ): Promise<void> {
-    await fileRepository.patch(input.profileId, input.fileId, {
-      extractedData,
-    });
+  async patchData(input: FileRefInput, data: unknown): Promise<void> {
+    await fileRepository.patch(input.profileId, input.fileId, { data });
   }
 }
 

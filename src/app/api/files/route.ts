@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
-import {
-  ListAllFilesUseCase,
-  type FileLabel,
-  FILE_LABELS,
-} from "@/data/files";
+import { ListAllFilesUseCase, type FileLabel, FILE_LABELS } from "@/data/files";
 import {
   runFilesUploadGraph,
   scheduleFileUploadPostProcessing,
@@ -45,6 +41,8 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
 
 // POST /api/files — multipart/form-data upload (sessionId in form data)
 export const POST = WithContext(async ({ user, profileId, req }) => {
+  const start = performance.now();
+
   const uploadResult = await runFilesUploadGraph({
     userId: user.uid,
     profileId,
@@ -52,6 +50,9 @@ export const POST = WithContext(async ({ user, profileId, req }) => {
   });
 
   const { uploaded } = uploadResult;
+  console.log(
+    `[POST /api/files] Upload graph completed in ${Math.round(performance.now() - start)}ms`,
+  );
 
   revalidateTag(CacheTags.files(user.uid), "minutes");
   scheduleFileUploadPostProcessing({

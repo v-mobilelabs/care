@@ -51,6 +51,14 @@ export function BreadcrumbsBar({
 
         const crumbs: { label: string; href?: string }[] = [];
 
+        // Special case: if we are exactly on the root page
+        if (segments.length === 0) {
+            crumbs.push({ label: "Home" });
+            return crumbs;
+        }
+
+        crumbs.push({ label: "Home", href: "/" });
+
         if (application) {
             crumbs.push({ label: application.name, href: application.url });
         }
@@ -68,6 +76,9 @@ export function BreadcrumbsBar({
             href += `/${segments[i]}`;
             if (i < startIndex) continue;
             const label = lookup.get(href) ?? formatSegment(segments[i]);
+            // Skip duplicating the label if it matches application.name or Home
+            if (crumbs.some(c => c.label === label)) continue;
+
             const isLast = i === segments.length - 1;
             crumbs.push({ label, href: isLast ? undefined : href });
         }
@@ -75,7 +86,7 @@ export function BreadcrumbsBar({
         return crumbs;
     }, [application, menus, pathname]);
 
-    if (items.length <= 1) return null;
+    if (items.length === 0) return null;
 
     return (
         <Breadcrumbs>

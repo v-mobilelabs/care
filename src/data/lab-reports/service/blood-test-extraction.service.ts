@@ -4,7 +4,7 @@ import { bucket } from "@/lib/firebase/admin";
 import {
   fileService,
   type FileService,
-} from "@/data/sessions/service/file.service";
+} from "@/data/files/service/file.service";
 import { bloodTestRepository } from "../repositories/blood-test.repository";
 import {
   BloodTestExtractionSchema,
@@ -46,17 +46,17 @@ export class BloodTestExtractionService {
     }
 
     // 2. Download file bytes from Cloud Storage
-    const [bytes] = await bucket.file(file.storagePath).download();
+    const [bytes] = await bucket.file(file.path).download();
     const base64 = bytes.toString("base64");
-    const dataUri = `data:${file.mimeType};base64,${base64}`;
+    const dataUri = `data:${file.mime};base64,${base64}`;
 
     // 3. Build AI SDK content part (image vs PDF / Office document)
-    const mediaPart = file.mimeType.startsWith("image/")
+    const mediaPart = file.mime.startsWith("image/")
       ? { type: "image" as const, image: dataUri }
       : {
           type: "file" as const,
           data: dataUri,
-          mediaType: file.mimeType as `${string}/${string}`,
+          mediaType: file.mime as `${string}/${string}`,
         };
 
     // 4. Extract structured data via Gemini (consumes 1 credit)

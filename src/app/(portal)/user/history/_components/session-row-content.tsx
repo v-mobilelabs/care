@@ -1,5 +1,5 @@
-import { Group, Badge, Box, ThemeIcon, Text, Loader, ActionIcon, Tooltip } from "@mantine/core";
-import { IconCoins, IconMessage, IconClock, IconTrash } from "@tabler/icons-react";
+import { Group, Badge, ThemeIcon, Text, Loader, ActionIcon, Tooltip, Stack } from "@mantine/core";
+import { IconCoins, IconMessage, IconTrash } from "@tabler/icons-react";
 import { useLinkStatus } from "@/ui/link";
 import type { SessionSummary } from "@/app/(portal)/user/_query";
 import { agentLabel } from "../_content";
@@ -86,7 +86,11 @@ function getSessionHint(session: SessionSummary): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SessionRowContent({ session, isPendingDelete, onDelete }: Readonly<{
+export function SessionRowContent({
+    session,
+    isPendingDelete,
+    onDelete,
+}: Readonly<{
     session: SessionSummary;
     isPendingDelete: boolean;
     onDelete: () => void;
@@ -94,15 +98,22 @@ export function SessionRowContent({ session, isPendingDelete, onDelete }: Readon
     const { pending } = useLinkStatus();
 
     return (
-        <Group justify="space-between" wrap="nowrap" gap="sm">
-            <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                <ThemeIcon size={32} radius="md" color={agentColor(session.lastAgentType)} variant="light" style={{ flexShrink: 0 }}>
-                    {pending ? <Loader size={14} /> : <IconMessage size={16} />}
-                </ThemeIcon>
-                <Box style={{ minWidth: 0 }}>
+        <Group align="flex-start" wrap="nowrap" gap="sm">
+            <ThemeIcon
+                size={48}
+                radius="xl"
+                color={agentColor(session.lastAgentType)}
+                variant="light"
+                style={{ flexShrink: 0, marginTop: 2 }}
+            >
+                {pending ? <Loader size={20} /> : <IconMessage size={24} />}
+            </ThemeIcon>
+
+            <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Group justify="space-between" wrap="nowrap" gap="sm">
                     <Text
                         size="sm"
-                        fw={500}
+                        fw={600}
                         style={{
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -111,46 +122,69 @@ export function SessionRowContent({ session, isPendingDelete, onDelete }: Readon
                     >
                         {session.title}
                     </Text>
-                    <Group gap={6} mt={2}>
-                        <IconClock size={11} style={{ color: "var(--mantine-color-dimmed)", flexShrink: 0 }} />
-                        <Text size="xs" c="dimmed" suppressHydrationWarning>{timeAgo(session.updatedAt)}</Text>
-                    </Group>
-                    <Text size="xs" c="dimmed" lineClamp={1} mt={2}>
-                        {getSessionHint(session)}
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                        suppressHydrationWarning
+                    >
+                        {timeAgo(session.updatedAt)}
                     </Text>
-                </Box>
-            </Group>
-            <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
-                <Badge size="xs" variant="light" color={agentColor(session.lastAgentType)} radius="sm">
-                    {agentLabel(session.lastAgentType)}
-                </Badge>
-                {session.totalUsage && session.totalUsage.totalTokens > 0 && (
-                    <Tooltip label={`In: ${formatTokenCount(session.totalUsage.promptTokens)} · Out: ${formatTokenCount(session.totalUsage.completionTokens)}`} withArrow>
-                        <Badge size="xs" variant="light" color="gray" radius="sm" leftSection={<IconCoins size={9} />}>
-                            {formatTokenCount(session.totalUsage.totalTokens)}
+                </Group>
+
+                <Text size="xs" c="dimmed" lineClamp={2} style={{ lineHeight: 1.4 }}>
+                    {getSessionHint(session)}
+                </Text>
+
+                <Group justify="space-between" wrap="nowrap" mt={6}>
+                    <Group gap={6} wrap="wrap">
+                        <Badge
+                            size="xs"
+                            variant="outline"
+                            color={agentColor(session.lastAgentType)}
+                            radius="sm"
+                        >
+                            {agentLabel(session.lastAgentType)}
                         </Badge>
-                    </Tooltip>
-                )}
-                <Badge size="xs" variant="light" color="secondary" radius="sm">
-                    {session.messageCount} msg{session.messageCount === 1 ? "" : "s"}
-                </Badge>
-                <ActionIcon
-                    size={28}
-                    variant="subtle"
-                    color="danger"
-                    aria-label="Delete session"
-                    onClick={(e: React.MouseEvent) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDelete();
-                    }}
-                    title="Delete session"
-                    disabled={isPendingDelete}
-                    loading={isPendingDelete}
-                >
-                    <IconTrash size={13} />
-                </ActionIcon>
-            </Group>
+                        <Badge size="xs" variant="light" color="secondary" radius="sm">
+                            {session.messageCount} msg{session.messageCount === 1 ? "" : "s"}
+                        </Badge>
+                        {session.totalUsage && session.totalUsage.totalTokens > 0 && (
+                            <Tooltip
+                                label={`In: ${formatTokenCount(session.totalUsage.promptTokens)} · Out: ${formatTokenCount(session.totalUsage.completionTokens)}`}
+                                withArrow
+                            >
+                                <Badge
+                                    size="xs"
+                                    variant="light"
+                                    color="gray"
+                                    radius="sm"
+                                    leftSection={<IconCoins size={10} />}
+                                >
+                                    {formatTokenCount(session.totalUsage.totalTokens)}
+                                </Badge>
+                            </Tooltip>
+                        )}
+                    </Group>
+                    <ActionIcon
+                        size="md"
+                        variant="subtle"
+                        color="gray"
+                        aria-label="Delete session"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDelete();
+                        }}
+                        title="Delete session"
+                        disabled={isPendingDelete}
+                        loading={isPendingDelete}
+                        style={{ opacity: 0.5 }}
+                    >
+                        <IconTrash size={16} stroke={1.5} />
+                    </ActionIcon>
+                </Group>
+            </Stack>
         </Group>
     );
 }

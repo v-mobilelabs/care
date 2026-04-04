@@ -1,7 +1,7 @@
 "use client";
 import { Accordion, Badge, Box, Card, Divider, Group, List, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconAlertTriangle, IconCheck, IconDroplet, IconMinus } from "@tabler/icons-react";
-import type { SubmitLabReportAnalysisInput } from "@/data/shared/service/agents/lab-report/tools/submit-lab-report-analysis.tool";
+import type { SubmitLabReportAnalysisInput } from "@/data/shared/service/agents/global-tools/submit-lab-report-analysis.tool";
 
 // ── Status → visual config ────────────────────────────────────────────────────
 

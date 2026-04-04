@@ -17,7 +17,7 @@ import { ReportCard } from "./report-card";
 import { ReferralCard } from "./referral-card";
 import type { ActionCardInput } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import type { EnhancedDietDay } from "@/data/diet-plans/models/nutrition.model";
-import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/prescription/tools/submit-prescription.tool";
+import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/global-tools/submit-prescription.tool";
 import type { SubmitReportInput } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import type { SubmitReferralRequestInput } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
 import { confirmReferral, dismissReferral } from "@/data/referrals/actions";

@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Alert,
@@ -9,7 +10,6 @@ import {
     Group,
     Loader,
     Menu,
-    Paper,
     RingProgress,
     Stack,
     Text,
@@ -397,7 +397,7 @@ export function ObservationCard({
     );
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -423,6 +423,6 @@ export function ObservationCard({
                     </Collapse>
                 )}
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import { useState, type ReactNode } from "react";
 import {
     ActionIcon,
@@ -8,7 +9,6 @@ import {
     Container,
     Divider,
     Group,
-    Paper,
     Skeleton,
     Stack,
     Text,
@@ -101,7 +101,7 @@ function getPrescriptionUrgencyNote(record: PrescriptionRecord): string {
 
 function DetailSkeletonCard() {
     return (
-        <Paper withBorder radius="md" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="md">
             <Stack gap="sm">
                 <Group gap={6}>
                     <Skeleton h={22} w={120} radius="xl" />
@@ -113,7 +113,7 @@ function DetailSkeletonCard() {
                 <Divider />
                 <DetailSkeletonRows />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -147,13 +147,13 @@ function DetailCardMain({ record, meds, isExtracting, handleExtract, allAdded, i
 
 function DetailContentCard({ record, meds, isExtracting, handleExtract, handleDelete, allAdded, isAddingAll, handleAddAll }: Readonly<{ record: PrescriptionRecord; meds: PrescriptionRecord["medications"]; isExtracting: boolean; handleExtract: () => void; handleDelete: () => void; allAdded: boolean; isAddingAll: boolean; handleAddAll: () => Promise<void>; }>) {
     return (
-        <Paper withBorder radius="md" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="md">
             <Stack gap="md">
                 <DetailCardMain record={record} meds={meds} isExtracting={isExtracting}
                     handleExtract={handleExtract} allAdded={allAdded} isAddingAll={isAddingAll} handleAddAll={handleAddAll} />
                 <ActionBar record={record} isExtracting={isExtracting} onExtract={handleExtract} onDelete={handleDelete} />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -191,7 +191,7 @@ function DetailHeader({ record, onBack }: Readonly<{ record: PrescriptionRecord;
 
 function PrescriptionExplainer({ record }: Readonly<{ record: PrescriptionRecord }>) {
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="md"
             p="sm"
@@ -245,7 +245,7 @@ function PrescriptionExplainer({ record }: Readonly<{ record: PrescriptionRecord
                     </Group>
                 ) : null}
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 

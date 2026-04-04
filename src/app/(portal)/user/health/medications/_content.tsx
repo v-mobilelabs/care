@@ -6,24 +6,24 @@ import {
     Container,
     Group,
     Loader,
-    SegmentedControl,
     Stack,
     Text,
-    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
 } from "@mantine/core";
-import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconCheck,
     IconPillFilled,
     IconPlus,
-    IconSearch,
 } from "@tabler/icons-react";
 import { useState } from "react";
+
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { ListToolbar } from "@/ui/components/list-toolbar";
 
 import {
     useMedicationsInfiniteQuery,
@@ -53,10 +53,20 @@ export function MedicationsContent({
     const updateMutation = useUpdateMedicationMutation();
     const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
     const [editTarget, setEditTarget] = useState<MedicationRecord | null>(null);
-    const [search, setSearch] = useState(initialFilters?.q ?? "");
-    const [debouncedSearch] = useDebouncedValue(search, 250);
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters?.status ?? "all");
-    const [sortDir, setSortDir] = useState<"asc" | "desc">(initialFilters?.sortDir ?? "desc");
+
+    const {
+        search,
+        setSearch,
+        filter: statusFilter,
+        setFilter: setStatusFilter,
+        sort: sortDir,
+        sortAsc,
+        setSortAsc,
+    } = useUrlFilters<StatusFilter>({
+        defaultFilter: initialFilters?.status ?? "all",
+        defaultSearch: initialFilters?.q ?? "",
+        defaultSort: initialFilters?.sortDir ?? "desc",
+    });
 
     const {
         data,
@@ -66,7 +76,7 @@ export function MedicationsContent({
         fetchNextPage,
     } = useMedicationsInfiniteQuery({
         status: statusFilter === "all" ? undefined : statusFilter,
-        q: debouncedSearch.trim() || undefined,
+        q: search.trim() || undefined,
         sortDir,
     });
 
@@ -182,41 +192,25 @@ export function MedicationsContent({
 
                 {/* Search + Filter */}
                 {!isLoading && medications.length > 0 && (
-                    <Stack gap="sm">
-                        <TextInput
-                            placeholder="Search medications…"
-                            leftSection={<IconSearch size={15} />}
-                            size="sm"
-                            value={search}
-                            onChange={(e) => setSearch(e.currentTarget.value)}
-                        />
-                        <Group grow>
-                            <SegmentedControl
-                                size="xs"
-                                value={statusFilter}
-                                onChange={(v) => setStatusFilter(v as StatusFilter)}
-                                data={[
-                                    { value: "all", label: "All" },
-                                    { value: "active", label: "Active" },
-                                    { value: "paused", label: "Paused" },
-                                    { value: "completed", label: "Completed" },
-                                    { value: "discontinued", label: "Stopped" },
-                                ]}
-                            />
-                            <SegmentedControl
-                                size="xs"
-                                value={sortDir}
-                                onChange={(value) => setSortDir(value as "asc" | "desc")}
-                                data={[
-                                    { value: "desc", label: "Newest" },
-                                    { value: "asc", label: "Oldest" },
-                                ]}
-                            />
-                        </Group>
-                    </Stack>
+                    <ListToolbar
+                        search={search}
+                        onSearchChange={setSearch}
+                        searchPlaceholder="Search medications..."
+                        filter={statusFilter}
+                        onFilterChange={setStatusFilter}
+                        filterData={[
+                            { value: "all", label: "All" },
+                            { value: "active", label: "Active" },
+                            { value: "paused", label: "Paused" },
+                            { value: "completed", label: "Completed" },
+                            { value: "discontinued", label: "Stopped" },
+                        ]}
+                        sortAsc={sortAsc}
+                        onSortAscChange={setSortAsc}
+                    />
                 )}
 
-                <Box>
+                <Box maw={1080} mx="auto" w="100%">
                     {isLoading && <MedicationSkeletons />}
 
                     {!isLoading && medications.length === 0 && (

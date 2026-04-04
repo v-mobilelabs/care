@@ -39,6 +39,12 @@ export interface RerankOptions {
 
 // ── Reranking Service ─────────────────────────────────────────────────────────
 
+const RERANK_TIMEOUT_MS = (() => {
+  const raw = process.env.AI_RERANK_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3000;
+})();
+
 export class RerankingService {
   // AWS Bedrock Cohere Rerank v3.5 model
   private readonly model = bedrock.rerankingModel("cohere.rerank-v3-5:0");
@@ -83,14 +89,32 @@ export class RerankingService {
       // Prepare documents for reranking (just the content text)
       const documents = results.map((result) => result.chunk.content);
 
-      // Call AWS Bedrock Cohere Rerank
+      // Call AWS Bedrock Cohere Rerank with a timeout for graceful degradation
       const rerankStart = performance.now();
-      const { ranking } = await rerank({
-        model: this.model,
-        query,
-        documents,
-        topN: topK,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RERANK_TIMEOUT_MS);
+
+      let ranking: { originalIndex: number; score: number }[];
+      try {
+        const rerankResult = await rerank({
+          model: this.model,
+          query,
+          documents,
+          topN: topK,
+          abortSignal: controller.signal,
+        });
+        ranking = rerankResult.ranking;
+      } catch (rerankError) {
+        if (rerankError instanceof Error && rerankError.name === "AbortError") {
+          console.warn(
+            `[Reranking] Timed out after ${RERANK_TIMEOUT_MS}ms — returning unsorted KNN candidates`,
+          );
+          return results.slice(0, topK);
+        }
+        throw rerankError;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       console.log(
         `[Reranking] Bedrock rerank: ${(performance.now() - rerankStart).toFixed(0)}ms, returned: ${ranking.length}`,

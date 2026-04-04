@@ -8,7 +8,7 @@ import {
     Button,
     Container,
     Group,
-    Paper,
+
     ScrollArea,
     SimpleGrid,
     Skeleton,
@@ -17,6 +17,7 @@ import {
     ThemeIcon,
     Title,
 } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     IconAlertCircle,
     IconArrowRight,
@@ -198,7 +199,7 @@ function MetricCard(props: MetricCardProps) {
     const { title, value, subtitle, icon: Icon, color } = props;
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor={color.includes("var") ? color : `var(--mantine-color-${color}-6)`}>
             <Group justify="space-between" align="flex-start" wrap="nowrap">
                 <Stack gap={6}>
                     <Text
@@ -221,7 +222,7 @@ function MetricCard(props: MetricCardProps) {
                     <Icon size={22} />
                 </ThemeIcon>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -230,36 +231,35 @@ function SurfaceLinkCard(props: SurfaceLinkCardProps) {
     const { href, title, description, icon: Icon, color } = action;
 
     return (
-        <Paper
+        <Box
             component={Link}
             href={href}
             onClick={() => onOpen(action)}
-            withBorder
-            radius="lg"
-            p="md"
             style={{
                 display: "block",
                 textDecoration: "none",
                 color: "inherit",
-                transition: "transform 150ms ease, box-shadow 150ms ease",
+                height: "100%",
             }}
         >
-            <Group justify="space-between" align="flex-start" wrap="nowrap" mb="sm">
-                <ThemeIcon size={42} radius="md" color={color} variant="light">
-                    <Icon size={22} />
-                </ThemeIcon>
-                <IconArrowRight size={18} color="var(--mantine-color-dimmed)" />
-            </Group>
+            <MotionCard interactive style={{ height: "100%" }} blobColor={color.includes("var") ? color : `var(--mantine-color-${color}-6)`}>
+                <Group justify="space-between" align="flex-start" wrap="nowrap" mb="sm">
+                    <ThemeIcon size={42} radius="md" color={color} variant="light">
+                        <Icon size={22} />
+                    </ThemeIcon>
+                    <IconArrowRight size={18} color="var(--mantine-color-dimmed)" />
+                </Group>
 
-            <Stack gap={4}>
-                <Text fw={700} size="sm">
-                    {title}
-                </Text>
-                <Text size="xs" c="dimmed" lh={1.5}>
-                    {description}
-                </Text>
-            </Stack>
-        </Paper>
+                <Stack gap={4}>
+                    <Text fw={700} size="sm">
+                        {title}
+                    </Text>
+                    <Text size="xs" c="dimmed" lh={1.5}>
+                        {description}
+                    </Text>
+                </Stack>
+            </MotionCard>
+        </Box>
     );
 }
 
@@ -267,7 +267,7 @@ function ActivityCard(props: ActivityCardProps) {
     const { title, description, href, badge, icon: Icon, color, onOpen } = props;
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive style={{ display: 'flex', flexDirection: 'column', height: '100%' }} blobColor={color.includes("var") ? color : `var(--mantine-color-${color}-6)`}>
             <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
                 <Group gap="sm" wrap="nowrap">
                     <ThemeIcon size={38} radius="md" color={color} variant="light">
@@ -291,7 +291,7 @@ function ActivityCard(props: ActivityCardProps) {
             <Button component={Link} href={href} onClick={onOpen} variant="light" color={color} rightSection={<IconArrowRight size={16} />}>
                 Open
             </Button>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -319,9 +319,9 @@ function ReferralsSection({ referrals, isLoading, count }: ReferralsSectionProps
                 </Box>
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                     {["referral-skeleton-a", "referral-skeleton-b"].map((key) => (
-                        <Paper key={key} withBorder radius="lg" p="md">
+                        <MotionCard interactive blobColor="var(--mantine-color-blue-6)" key={key} withBorder radius="lg" p="md">
                             <Skeleton height={120} />
-                        </Paper>
+                        </MotionCard>
                     ))}
                 </SimpleGrid>
             </Stack>
@@ -337,7 +337,7 @@ function ReferralsSection({ referrals, isLoading, count }: ReferralsSectionProps
                         Track specialist recommendations from CareAI.
                     </Text>
                 </Box>
-                <Paper withBorder radius="lg" p="xl" ta="center">
+                <MotionCard interactive blobColor="var(--mantine-color-blue-6)" withBorder radius="lg" p="xl" ta="center">
                     <Stack gap="sm" align="center">
                         <ThemeIcon size={48} radius="md" color="blue" variant="light">
                             <IconStethoscope size={24} />
@@ -351,7 +351,7 @@ function ReferralsSection({ referrals, isLoading, count }: ReferralsSectionProps
                             </Text>
                         </Box>
                     </Stack>
-                </Paper>
+                </MotionCard>
             </Stack>
         );
     }
@@ -424,7 +424,7 @@ function ValueSignalCard(props: ValueSignalCardProps) {
     const { title, value, description, icon: Icon, color } = props;
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive style={{ display: "flex", flexDirection: "column", height: "100%" }} blobColor="var(--mantine-color-blue-6)">
             <Group justify="space-between" align="flex-start" wrap="nowrap" mb="sm">
                 <Stack gap={2}>
                     <Text size="xs" c="dimmed" fw={600} style={{ textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -441,7 +441,7 @@ function ValueSignalCard(props: ValueSignalCardProps) {
             <Text size="xs" c="dimmed" lh={1.6}>
                 {description}
             </Text>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -520,7 +520,7 @@ function HomeHero({ firstName }: HomeHeroProps) {
             </Group>
 
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-                <Paper withBorder radius="md" p="md">
+                <MotionCard interactive blobColor="var(--mantine-color-blue-6)" withBorder radius="md" p="md">
                     <Group gap="sm" align="flex-start" wrap="nowrap">
                         <ThemeIcon size={36} radius="md" color="primary" variant="light">
                             <IconBrain size={18} />
@@ -534,9 +534,9 @@ function HomeHero({ firstName }: HomeHeroProps) {
                             </Text>
                         </Box>
                     </Group>
-                </Paper>
+                </MotionCard>
 
-                <Paper withBorder radius="md" p="md">
+                <MotionCard interactive blobColor="var(--mantine-color-blue-6)" withBorder radius="md" p="md">
                     <Group gap="sm" align="flex-start" wrap="nowrap">
                         <ThemeIcon size={36} radius="md" color="teal" variant="light">
                             <IconReportMedical size={18} />
@@ -550,9 +550,9 @@ function HomeHero({ firstName }: HomeHeroProps) {
                             </Text>
                         </Box>
                     </Group>
-                </Paper>
+                </MotionCard>
 
-                <Paper withBorder radius="md" p="md">
+                <MotionCard interactive blobColor="var(--mantine-color-blue-6)" withBorder radius="md" p="md">
                     <Group gap="sm" align="flex-start" wrap="nowrap">
                         <ThemeIcon size={36} radius="md" color="orange" variant="light">
                             <IconArrowRight size={18} />
@@ -566,7 +566,7 @@ function HomeHero({ firstName }: HomeHeroProps) {
                             </Text>
                         </Box>
                     </Group>
-                </Paper>
+                </MotionCard>
             </SimpleGrid>
         </Stack>
     );

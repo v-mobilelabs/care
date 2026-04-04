@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Button, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Box, Button, SimpleGrid, Stack, Text } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 
 type StarterKind = "prefill" | "send";
@@ -74,7 +75,9 @@ function StarterCard({ starter, onSelect, onSend }: Readonly<{
     }
 
     return (
-        <Paper
+        <MotionCard
+            interactive
+            blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -90,7 +93,6 @@ function StarterCard({ starter, onSelect, onSend }: Readonly<{
             style={{
                 cursor: "pointer",
                 minHeight: 82,
-                transition: "box-shadow 140ms ease, transform 140ms ease",
             }}
         >
             <Stack gap={4}>
@@ -101,7 +103,7 @@ function StarterCard({ starter, onSelect, onSend }: Readonly<{
                     {starter.description}
                 </Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 

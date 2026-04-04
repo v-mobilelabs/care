@@ -10,18 +10,14 @@ import {
     Group,
     Pagination,
     RingProgress,
-    SegmentedControl,
     SimpleGrid,
     Skeleton,
     Stack,
     Text,
-    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
-    UnstyledButton,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
@@ -30,14 +26,13 @@ import {
     IconCheck,
     IconDroplet,
     IconFlask,
-    IconSearch,
-    IconSortAscending,
-    IconSortDescending,
     IconTrash,
     IconUpload,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef } from "react";
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { ListToolbar } from "@/ui/components/list-toolbar";
 import {
     useLabReportsQuery,
     useUploadLabReportMutation,
@@ -69,68 +64,56 @@ function LabReportCard({
     return (
         <Card
             radius="md"
+            p="xs"
+            withBorder
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
+                cursor: "pointer",
+            }}
+            onClick={() => {
+                trackEvent({ name: "lab_report_viewed", params: { record_id: record.id } });
+                router.push(`/user/health/lab-reports/${record.id}`);
             }}
         >
-            <Card.Section>
-                <UnstyledButton
-                    onClick={() => {
-                        trackEvent({ name: "lab_report_viewed", params: { record_id: record.id } });
-                        router.push(`/user/health/lab-reports/${record.id}`);
-                    }}
-                    style={{ display: "block", width: "100%" }}
-                    p="md"
-                >
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <ThemeIcon size={28} radius="md" variant="light" color="primary" style={{ flexShrink: 0 }}>
-                            <IconDroplet size={15} />
-                        </ThemeIcon>
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={600} size="sm" truncate="end" lh={1.3}>
-                                {record.testName}
-                            </Text>
-                        </Box>
+            <Group wrap="nowrap" align="center" gap="sm">
+                <ThemeIcon size={32} radius="md" variant="light" color="primary" style={{ flexShrink: 0 }}>
+                    <IconDroplet size={18} />
+                </ThemeIcon>
+
+                <Box style={{ flex: 1, minWidth: 100 }}>
+                    <Text fw={600} size="sm" truncate="end" lh={1.3}>
+                        {record.testName}
+                    </Text>
+                    <Group gap={6} mt={2} wrap="nowrap">
+                        <Text size="xs" c="dimmed" truncate="end">
+                            {record.biomarkers.length} param{record.biomarkers.length !== 1 ? "s" : ""}
+                        </Text>
+                        {(abnormalCount > 0 || criticalCount > 0) && <Text size="xs" c="dimmed">&middot;</Text>}
+                        {abnormalCount > 0 && <Text size="xs" c="yellow.7" fw={500}>{abnormalCount} abn</Text>}
+                        {criticalCount > 0 && <Text size="xs" c="red.7" fw={500}>{criticalCount} crit</Text>}
                     </Group>
-                    <Group gap={6} mt="xs" wrap="wrap">
-                        <Badge variant="light" size="xs" color="gray">
-                            {record.biomarkers.length} parameters
-                        </Badge>
-                        {abnormalCount > 0 && (
-                            <Badge variant="light" size="xs" color="yellow">
-                                {abnormalCount} abnormal
-                            </Badge>
-                        )}
-                        {criticalCount > 0 && (
-                            <Badge variant="filled" size="xs" color="red">
-                                {criticalCount} critical
-                            </Badge>
-                        )}
-                    </Group>
-                </UnstyledButton>
-            </Card.Section>
-            <Card.Section bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))" withBorder px="sm">
-                <Group justify="space-between">
-                    <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>
+                </Box>
+
+                <Group gap="xs" wrap="nowrap" align="center" style={{ flexShrink: 0 }}>
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                         <DateText date={record.testDate ?? record.createdAt} />
                     </Text>
-                    <Group gap={2} py={6} justify="flex-end">
-                        <Tooltip label="Delete" withArrow>
-                            <ActionIcon
-                                size={24}
-                                variant="subtle"
-                                color="red"
-                                loading={isPendingDelete}
-                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                aria-label="Delete lab report"
-                            >
-                                <IconTrash size={13} />
-                            </ActionIcon>
-                        </Tooltip>
-                    </Group>
+
+                    <Tooltip label="Delete" withArrow>
+                        <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="red"
+                            loading={isPendingDelete}
+                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                            aria-label="Delete lab report"
+                        >
+                            <IconTrash size={14} />
+                        </ActionIcon>
+                    </Tooltip>
                 </Group>
-            </Card.Section>
+            </Group>
         </Card>
     );
 }
@@ -142,19 +125,32 @@ export function LabReportsContent() {
     const upload = useUploadLabReportMutation();
     const deleteRecord = useDeleteLabReportMutation();
     const resetRef = useRef<() => void>(null);
-    const [page, setPage] = useState(1);
-    const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebouncedValue(search, 300);
-    const [filterStatus, setFilterStatus] = useState<"all" | "normal" | "abnormal" | "critical">("all");
-    const [sortField, setSortField] = useState<"date" | "name">("date");
-    const [sortAsc, setSortAsc] = useState(false);
+
+    const {
+        search,
+        setSearch,
+        filter: filterStatus,
+        setFilter: setFilterStatus,
+        sortField,
+        setSortField,
+        sortAsc,
+        setSortAsc,
+        page,
+        setPage,
+    } = useUrlFilters<"all" | "normal" | "abnormal" | "critical", "desc" | "asc", "date" | "name">({
+        defaultFilter: "all",
+        defaultSearch: "",
+        defaultSortField: "date",
+        defaultSort: "desc",
+        defaultPage: 1,
+    });
 
     const filtered = records.filter((r) => {
         if (filterStatus === "critical" && !r.biomarkers.some((b) => b.status === "critical")) return false;
         if (filterStatus === "abnormal" && !r.biomarkers.some((b) => b.status !== "normal")) return false;
         if (filterStatus === "normal" && r.biomarkers.some((b) => b.status !== "normal")) return false;
-        if (debouncedSearch) {
-            const q = debouncedSearch.toLowerCase();
+        if (search) {
+            const q = search.toLowerCase();
             const searchable = [r.testName, r.labName ?? "", r.orderedBy ?? ""].join(" ").toLowerCase();
             if (!searchable.includes(q)) return false;
         }
@@ -361,60 +357,31 @@ export function LabReportsContent() {
 
                 {/* ── Filter bar ───────────────────────────────────── */}
                 {!isLoading && records.length > 0 && (
-                    <Stack gap="sm">
-                        <Group gap="sm">
-                            <TextInput
-                                placeholder="Search reports…"
-                                leftSection={<IconSearch size={15} />}
-                                size="sm"
-                                value={search}
-                                onChange={(e) => { setSearch(e.currentTarget.value); setPage(1); }}
-                                style={{ flex: 1 }}
-                            />
-                            <Box
-                                component="button"
-                                onClick={() => setSortAsc((p) => !p)}
-                                style={{
-                                    all: "unset",
-                                    cursor: "pointer",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                    fontSize: "var(--mantine-font-size-xs)",
-                                    color: "var(--mantine-color-dimmed)",
-                                }}
-                            >
-                                {sortAsc ? <IconSortAscending size={14} /> : <IconSortDescending size={14} />}
-                                {sortAsc ? "Oldest" : "Newest"}
-                            </Box>
-                        </Group>
-                        <Group gap="sm" wrap="nowrap">
-                            <SegmentedControl
-                                size="xs"
-                                value={filterStatus}
-                                onChange={(v) => { setFilterStatus(v as typeof filterStatus); setPage(1); }}
-                                data={[
-                                    { value: "all", label: "All" },
-                                    { value: "normal", label: "Normal" },
-                                    { value: "abnormal", label: "Abnormal" },
-                                    { value: "critical", label: "Critical" },
-                                ]}
-                            />
-                            <SegmentedControl
-                                size="xs"
-                                value={sortField}
-                                onChange={(v) => { setSortField(v as typeof sortField); setPage(1); }}
-                                data={[
-                                    { value: "date", label: "Date" },
-                                    { value: "name", label: "Name" },
-                                ]}
-                            />
-                        </Group>
-                    </Stack>
+                    <ListToolbar
+                        search={search}
+                        onSearchChange={setSearch}
+                        searchPlaceholder="Search reports..."
+                        filter={filterStatus}
+                        onFilterChange={setFilterStatus}
+                        filterData={[
+                            { value: "all", label: "All" },
+                            { value: "normal", label: "Normal" },
+                            { value: "abnormal", label: "Abnormal" },
+                            { value: "critical", label: "Critical" },
+                        ]}
+                        sortField={sortField}
+                        onSortFieldChange={setSortField}
+                        sortFieldData={[
+                            { value: "date", label: "Date" },
+                            { value: "name", label: "Name" },
+                        ]}
+                        sortAsc={sortAsc}
+                        onSortAscChange={setSortAsc}
+                    />
                 )}
 
                 {/* ── Scrollable content ─────────────────────────── */}
-                <Box>
+                <Box maw={1080} mx="auto" w="100%">
                     {isLoading && (
                         <Stack gap="md">
                             {[1, 2, 3].map((k) => (

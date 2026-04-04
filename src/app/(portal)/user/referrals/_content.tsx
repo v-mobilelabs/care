@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import {
     Badge,
@@ -8,8 +9,7 @@ import {
     Container,
     Group,
     Loader,
-    Paper,
-    SegmentedControl,
+    Select,
     Skeleton,
     Stack,
     Text,
@@ -242,7 +242,7 @@ function StatusBadge({ status }: Readonly<{ status: ReferralStatus }>) {
 
 function ReferralStatusLegend() {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="sm">
                 <Stack gap={4}>
                     <Text fw={600} size="sm">
@@ -274,7 +274,7 @@ function ReferralStatusLegend() {
                     assessment results, and how you feel right now to decide how quickly to act.
                 </Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -300,6 +300,8 @@ function ReferralRowHeader({
                     onChange={() => onToggleSelect(referral.id)}
                     aria-label={`Select referral for ${referral.specialist}`}
                     mt={2}
+                    size="sm"
+                    style={{ flexShrink: 0 }}
                 />
                 <ThemeIcon
                     size={36}
@@ -331,12 +333,7 @@ function ReferralRowHeader({
 
 function ReferralRowDetails({ referral }: Readonly<ReferralRowDetailsProps>) {
     return (
-        <Paper
-            withBorder
-            radius="md"
-            p="sm"
-            style={{ background: "light-dark(var(--mantine-color-gray-0), rgba(255, 255, 255, 0.02))" }}
-        >
+        <Box p="sm" style={{ borderRadius: 8, border: "1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4))", background: "light-dark(var(--mantine-color-gray-0), rgba(255, 255, 255, 0.02))" }}>
             <Stack gap="xs">
                 <Box>
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
@@ -362,7 +359,7 @@ function ReferralRowDetails({ referral }: Readonly<ReferralRowDetailsProps>) {
                     <Text size="sm">{getReferralNextStep(referral)}</Text>
                 </Box>
             </Stack>
-        </Paper>
+        </Box>
     );
 }
 
@@ -376,7 +373,7 @@ function ReferralRowActions({
     onStartDiscussion,
 }: Readonly<ReferralRowActionsProps>) {
     return (
-        <Group gap="xs">
+        <Group gap="xs" justify="flex-end" mt="xs">
             {canStart ? (
                 <Button
                     size="xs"
@@ -440,7 +437,7 @@ function ReferralRow({
     const startDiscussionLabel = isAccepted ? "Continue discussion" : "Start discussion";
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="sm" p="sm">
             <Stack gap="xs">
                 <ReferralRowHeader
                     referral={referral}
@@ -466,7 +463,7 @@ function ReferralRow({
                     onStartDiscussion={onStartDiscussion}
                 />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -509,29 +506,33 @@ function ReferralsFiltersBar({
 }: Readonly<ReferralsFiltersBarProps>) {
     return (
         <>
-            <SegmentedControl
-                data={FILTER_OPTIONS}
-                value={statusFilter}
-                onChange={onStatusFilterChange}
-                size="xs"
-                radius="lg"
-                fullWidth
-            />
-
-            <Group grow>
-                <TextInput
-                    placeholder="Search specialist (e.g. cardiology)"
-                    value={search}
-                    onChange={(event) => onSearchChange(event.currentTarget.value)}
-                    leftSection={<IconSearch size={14} />}
-                />
-                <SegmentedControl
-                    data={SORT_OPTIONS}
-                    value={sortDir}
-                    onChange={(value) => onSortDirChange(value as ReferralSortDir)}
-                    size="xs"
-                    radius="lg"
-                />
+            <Group justify="space-between" align="center" mt="md" mb="md" gap="md">
+                <Group gap="sm" flex={1} wrap="nowrap">
+                    <TextInput
+                        placeholder="Search specialist..."
+                        value={search}
+                        onChange={(event) => onSearchChange(event.currentTarget.value)}
+                        leftSection={<IconSearch size={16} />}
+                        size="sm"
+                        style={{ flex: 1, minWidth: 200, maxWidth: 350 }}
+                    />
+                    <Select
+                        size="sm"
+                        value={statusFilter}
+                        onChange={(v) => onStatusFilterChange(v as string)}
+                        data={FILTER_OPTIONS}
+                        allowDeselect={false}
+                        style={{ flexShrink: 0, width: 140 }}
+                    />
+                    <Select
+                        size="sm"
+                        value={sortDir}
+                        onChange={(v) => onSortDirChange(v as ReferralSortDir)}
+                        data={SORT_OPTIONS}
+                        allowDeselect={false}
+                        style={{ flexShrink: 0, width: 140 }}
+                    />
+                </Group>
             </Group>
         </>
     );
@@ -546,7 +547,7 @@ function ReferralsBulkActions({
     onToggleSelectAll,
 }: Readonly<ReferralsBulkActionsProps>) {
     return (
-        <Paper withBorder radius="lg" p="sm">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="sm">
             <Group justify="space-between" align="center" wrap="wrap" gap="xs">
                 <Checkbox
                     checked={allSelected}
@@ -571,7 +572,7 @@ function ReferralsBulkActions({
                     </Button>
                 </Group>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -939,14 +940,6 @@ export function ReferralsContent({
         referralsSummary = `${totalCount} ${referralLabel} tracked across your sessions`;
     }
 
-    function handleLoadMore() {
-        fetchNextPage().catch(() => undefined);
-    }
-
-    function handleDeleteSelectedReferrals() {
-        handleDeleteSelected(selectedReferrals, clearSelectedIds);
-    }
-
     return (
         <Container pt="md" pb="xl">
             <Stack gap="md">
@@ -972,7 +965,7 @@ export function ReferralsContent({
                         isBulkDeleting={isBulkDeleting}
                         selectIndeterminate={selectIndeterminate}
                         selectedCount={selectedCount}
-                        onDeleteSelected={handleDeleteSelectedReferrals}
+                        onDeleteSelected={() => handleDeleteSelected(selectedReferrals, clearSelectedIds)}
                         onToggleSelectAll={handleToggleSelectAll}
                     />
                 ) : null}
@@ -988,7 +981,7 @@ export function ReferralsContent({
                     statusFilter={statusFilter}
                     startingId={startingId}
                     onDeleteReferral={handleDeleteReferral}
-                    onLoadMore={handleLoadMore}
+                    onLoadMore={() => fetchNextPage().catch(() => undefined)}
                     onStartDiscussion={handleStartDiscussion}
                     onToggleSelect={handleToggleSelect}
                 />

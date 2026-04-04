@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import {
     Box,
@@ -6,7 +7,6 @@ import {
     Group,
     LoadingOverlay,
     Modal,
-    Paper,
     Stack,
     Text,
     Textarea,
@@ -127,7 +127,7 @@ function toPreview(body: {
 
 function GuidanceCard() {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Group gap="sm" align="flex-start" wrap="nowrap">
                 <ThemeIcon size={32} radius="xl" color={colors.brand} variant="light">
                     <IconStethoscope size={18} />
@@ -140,7 +140,7 @@ function GuidanceCard() {
                     </Text>
                 </Stack>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -148,7 +148,7 @@ function PreviewCard({
     preview,
 }: Readonly<{ preview: StructuredSymptomPreview }>) {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="xs">
                 <Group gap="xs" align="center">
                     <ThemeIcon size={28} radius="xl" color={colors.brand} variant="light">
@@ -177,7 +177,7 @@ function PreviewCard({
                     ) : null}
                 </Stack>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -185,7 +185,7 @@ function MissingDetailsCard({
     questions,
 }: Readonly<{ questions: string[] }>) {
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -204,13 +204,13 @@ function MissingDetailsCard({
                     ))}
                 </Stack>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
 function ErrorCard({ message }: Readonly<{ message: string }>) {
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -223,7 +223,7 @@ function ErrorCard({ message }: Readonly<{ message: string }>) {
                 <Text fw={600} size="sm">We couldn’t parse this clearly</Text>
                 <Text size="sm">{message}</Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 

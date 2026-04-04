@@ -105,6 +105,18 @@ export interface GuardrailMiddlewareOptions {
   userQuery: string;
 }
 
+/**
+ * Regex-only guardrail check (0 ms). Catches obvious harmful content and
+ * prompt injection via keyword patterns. Does NOT call the LLM —
+ * the unified preflight handles LLM-based safety classification.
+ */
+export function runRegexGuardrailCheck(query: string) {
+  const q = query.trim();
+  if (!q) return;
+  assertNotHarmful(q);
+  assertNotInjection(q);
+}
+
 export async function runGuardrailCheck(opts: GuardrailMiddlewareOptions) {
   const query = opts.userQuery.trim();
   if (!query) return;

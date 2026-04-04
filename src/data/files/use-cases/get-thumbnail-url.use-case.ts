@@ -31,7 +31,7 @@ export class GetThumbnailUrlUseCase extends UseCase<
     // Cross-profile: find the file, then get thumbnail from its actual profile.
     const file = await fileRepository.findByIdForUser(userId, fileId);
     if (!file) return null;
-    const ownerProfileId = file.storagePath.split("/")[1];
+    const ownerProfileId = file.path.split("/")[1];
     if (!ownerProfileId) return null;
     return fileRepository.getThumbnailSignedUrl(ownerProfileId, fileId);
   }

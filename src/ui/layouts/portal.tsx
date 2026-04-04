@@ -12,17 +12,15 @@ import {
   Menu,
   NavLink,
   Paper,
-  Popover,
   ScrollArea,
   Stack,
   Text,
-  TextInput,
   ThemeIcon,
   Tooltip,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
-import { Logo } from "../brand/logo";
+import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { cloneElement, isValidElement, type ReactNode, useCallback, useEffect, useState } from "react";
 import { BreadcrumbsBar } from "../breadcrumbs";
@@ -30,7 +28,7 @@ import { UserCard } from "../user-card";
 import { useAuth } from "@/ui/providers/auth-provider";
 import { useProfileQuery } from "@/ui/ai/query";
 import { SignOutButton } from "../sign-out-button";
-import { IconChevronLeft, IconChevronRight, IconLogout, IconMoon, IconSearch, IconSun, IconX } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconHeartbeat, IconLogout, IconMoon, IconSun, IconX } from "@tabler/icons-react";
 import { Credits } from "../credits";
 import { MessagingSidebar } from "../messaging/messaging-drawer";
 import { MessagesButton } from "../messaging/messages-button";
@@ -83,22 +81,6 @@ function isRouteActive(menu: MenuItem, pathName: string): boolean {
   }
 
   return menu.children.some((child) => isRouteActive(child, pathName));
-}
-
-function filterMenuItems(items: MenuItem[], query: string): MenuItem[] {
-  if (!query.trim()) return items;
-  const q = query.toLowerCase();
-  return items.reduce<MenuItem[]>((acc, item) => {
-    if (item.label.toLowerCase().includes(q)) {
-      acc.push(item);
-    } else if (item.children && item.children.length > 0) {
-      const matchedChildren = filterMenuItems(item.children, query);
-      if (matchedChildren.length > 0) {
-        acc.push({ ...item, children: matchedChildren });
-      }
-    }
-    return acc;
-  }, []);
 }
 
 /* ── NavLink label with pending indicator ────────────────────────────────── */
@@ -206,44 +188,58 @@ function renderPortalMenuItem(menu: MenuItem, depth: number, options: RenderMenu
 
   if (hasChildren) {
     return (
-      <NavLink
+      <motion.div
         key={menu.label}
+        whileHover={{ x: 2 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        style={{ originX: 0, display: "block", width: "100%" }}
+      >
+        <NavLink
+          component={Link}
+          variant={active ? "light" : "subtle"}
+          color="primary.7"
+          label={<NavLinkLabel label={menu.label} beta={menu.beta} />}
+          href={menu.href}
+          leftSection={leftSection}
+          active={active}
+          onClick={close}
+          defaultOpened={active}
+          childrenOffset={depth > 0 ? 14 : 20}
+          style={{ borderRadius: "2rem", width: "100%", minHeight: MENU_ITEM_SIZE, marginBottom: "4px" }}
+        >
+          {menu.children?.map((child) =>
+            renderPortalMenuItem(child, depth + 1, {
+              pathName,
+              close,
+              isCompactDesktop,
+            }),
+          )}
+        </NavLink>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      key={menu.label}
+      whileHover={{ x: 2 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      style={{ originX: 0, display: "block", width: "100%" }}
+    >
+      <NavLink
         component={Link}
         variant={active ? "light" : "subtle"}
         color="primary.7"
         label={<NavLinkLabel label={menu.label} beta={menu.beta} />}
         href={menu.href}
+        onClick={close}
         leftSection={leftSection}
         active={active}
-        onClick={close}
-        defaultOpened={active}
-        childrenOffset={depth > 0 ? 14 : 20}
-        style={{ borderRadius: "2rem", minHeight: MENU_ITEM_SIZE }}
-      >
-        {menu.children?.map((child) =>
-          renderPortalMenuItem(child, depth + 1, {
-            pathName,
-            close,
-            isCompactDesktop,
-          }),
-        )}
-      </NavLink>
-    );
-  }
-
-  return (
-    <NavLink
-      key={menu.label}
-      component={Link}
-      variant={active ? "light" : "subtle"}
-      color="primary.7"
-      label={<NavLinkLabel label={menu.label} beta={menu.beta} />}
-      href={menu.href}
-      onClick={close}
-      leftSection={leftSection}
-      active={active}
-      style={{ borderRadius: "2rem", minHeight: MENU_ITEM_SIZE }}
-    />
+        style={{ borderRadius: "2rem", width: "100%", minHeight: MENU_ITEM_SIZE, marginBottom: "4px" }}
+      />
+    </motion.div>
   );
 }
 
@@ -266,8 +262,6 @@ export function PortalLayout({
   const [opened, setOpened] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [expandedMd, setExpandedMd] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const toggle = useCallback(() => setOpened((v) => !v), []);
   const close = useCallback(() => setOpened(false), []);
   const toggleExpandedMd = useCallback(() => setExpandedMd((v) => !v), []);
@@ -280,8 +274,6 @@ export function PortalLayout({
 
   useEffect(() => {
     close();
-    setSearchOpen(false);
-    setSearchQuery("");
   }, [pathName, close]);
 
   const { data: profile } = useProfileQuery();
@@ -308,7 +300,7 @@ export function PortalLayout({
   })();
 
   const navbarConfig = {
-    width: { base: 260, md: expandedMd ? 260 : 86 },
+    width: { base: 260, md: expandedMd ? 260 : 70 }, //86px
     breakpoint: "md" as const,
     collapsed: { mobile: !opened, desktop: false },
   };
@@ -316,7 +308,7 @@ export function PortalLayout({
 
   const Header = (
     <AppShell.Header
-      px={{ base: "sm", md: "md" }}
+      px={{ base: "md", md: "md" }}
       style={{
         background: "light-dark(rgba(255,255,255,0.7), rgba(30,32,40,0.7))",
         backdropFilter: "blur(12px)",
@@ -332,8 +324,8 @@ export function PortalLayout({
             onClick={toggle}
             hiddenFrom="md"
             size="sm"
+            color="dark.3"
           />
-          <Logo />
         </Group>
         <Group gap="sm">
           {menus.header.map((menu) => renderHeaderItem(menu))}
@@ -379,8 +371,6 @@ export function PortalLayout({
     </AppShell.Header >
   );
 
-  const filteredNavigation = filterMenuItems(menus.navigation, searchQuery);
-
   const navSections = (
     <>
       <AppShell.Section
@@ -391,116 +381,79 @@ export function PortalLayout({
       >
         <Stack
           gap={NAV_STACK_GAP}
-          align="center"
+          align={isCompactDesktop ? "center" : "stretch"}
           justify="center"
           style={{ transition: `gap ${MINI_TRANSITION}` }}
         >
-          {(() => {
-            if (isCompactDesktop) {
-              return (
-                <Popover
-                  opened={searchOpen}
-                  onClose={() => { setSearchOpen(false); setSearchQuery(""); }}
-                  position="right"
-                  offset={12}
-                  withArrow
+          <Box
+            component={Link}
+            href="/"
+            aria-label="Care AI home"
+            style={{
+              display: "block",
+              textDecoration: "none",
+              width: "100%",
+            }}
+          >
+            {isCompactDesktop ? (
+              <Tooltip label="Care AI (Beta)" position="right" offset={8}>
+                <Box
+                  style={{
+                    width: MENU_ITEM_SIZE,
+                    height: MENU_ITEM_SIZE,
+                    minWidth: MENU_ITEM_SIZE,
+                    minHeight: MENU_ITEM_SIZE,
+                    marginInline: "auto",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
                 >
-                  <Popover.Target>
-                    <Box
-                      style={{
-                        borderRadius: "50%",
-                        cursor: "pointer",
-                        width: MENU_ITEM_SIZE,
-                        height: MENU_ITEM_SIZE,
-                        minWidth: MENU_ITEM_SIZE,
-                        minHeight: MENU_ITEM_SIZE,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: searchOpen ? "var(--mantine-color-primary-1)" : "transparent",
-                        transition: `background 150ms ease`,
-                      }}
-                    >
-                      <ActionIcon
-                        variant="light"
-                        color="primary"
-                        size={CONTROL_CONTAINER_SIZE}
-                        radius="xl"
-                        onClick={() => setSearchOpen((v) => !v)}
-                        aria-label="Search navigation"
-                      >
-                        {searchOpen ? <IconX size={CONTROL_ICON_SIZE} /> : <IconSearch size={CONTROL_ICON_SIZE} />}
-                      </ActionIcon>
-                    </Box>
-                  </Popover.Target>
-                  <Popover.Dropdown p="xs">
-                    <TextInput
-                      placeholder="Search..."
-                      size="sm"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                      leftSection={<IconSearch size={14} />}
-                      autoFocus
-                      style={{ width: 200 }}
-                      radius={"xl"}
-                    />
-                  </Popover.Dropdown>
-                </Popover>
-              );
-            }
-            if (searchOpen) {
-              return (
-                <Box w="100%" px="xs" style={{ minHeight: MENU_ITEM_SIZE, display: "flex", alignItems: "center" }}>
-                  <TextInput
-                    radius={"xl"}
-                    placeholder="Search menus..."
-                    size="sm"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                    leftSection={<IconSearch size={14} />}
-                    rightSection={
-                      <ActionIcon
-                        variant="subtle"
-                        size="sm"
-                        radius="xl"
-                        onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-                        aria-label="Close search"
-                      >
-                        <IconX size={12} />
-                      </ActionIcon>
-                    }
-                    autoFocus
-                    style={{ width: "100%" }}
-                  />
-                </Box>
-              );
-            }
-            return (
-              <NavLink
-                label="Search"
-                leftSection={
-                  <ThemeIcon radius="xl" size={CONTROL_CONTAINER_SIZE} p="xs" variant="light" color="primary">
-                    <IconSearch size={CONTROL_ICON_SIZE} />
+                  <ThemeIcon size={36} radius="xl" color="primary" variant="light">
+                    <IconHeartbeat size={22} />
                   </ThemeIcon>
-                }
-                variant="subtle"
-                color="primary.7"
-                onClick={() => setSearchOpen(true)}
-                style={{ borderRadius: "2rem", minHeight: MENU_ITEM_SIZE, width: "100%" }}
-              />
-            );
-          })()}
-          {!isCompactDesktop && filteredNavigation.length === 0 && searchQuery.trim() !== "" && (
-            <Text size="xs" c="dimmed" ta="center" py="sm">No results</Text>
-          )}
-          {filteredNavigation.map((menu) => renderPortalMenuItem(menu, 0, { pathName, close, isCompactDesktop }))}
+                </Box>
+              </Tooltip>
+            ) : (
+              <Group
+                gap={0}
+                align="center"
+                wrap="nowrap"
+                style={{
+                  minHeight: MENU_ITEM_SIZE,
+                  borderRadius: "2rem",
+                  paddingInline: "var(--mantine-spacing-sm)",
+                }}
+              >
+                <ThemeIcon size={36} radius="md" color="primary" variant="transparent">
+                  <IconHeartbeat size={26} />
+                </ThemeIcon>
+                <Text c="primary" size="xl" fw={900}>
+                  Care AI
+                </Text>
+                <Badge
+                  size="xs"
+                  variant="light"
+                  color="violet"
+                  radius="sm"
+                  px={5}
+                  ml={4}
+                  style={{ alignSelf: "flex-start", marginTop: 2 }}
+                >
+                  Beta
+                </Badge>
+              </Group>
+            )}
+          </Box>
+          {menus.navigation.map((menu) => renderPortalMenuItem(menu, 0, { pathName, close, isCompactDesktop }))}
         </Stack>
       </AppShell.Section>
       <Divider />
       <AppShell.Section>
         <Stack
           gap={NAV_STACK_GAP}
-          align="center"
+          align={isCompactDesktop ? "center" : "stretch"}
           justify="center"
           px={FOOTER_STACK_PX}
           py="xs"
@@ -519,14 +472,21 @@ export function PortalLayout({
               </ActionIcon>
             </Tooltip>
           ) : (
-            <NavLink
-              label="Theme"
-              leftSection={themeToggleIcon}
-              variant="subtle"
-              color="primary.7"
-              onClick={toggleColorScheme}
-              style={{ borderRadius: "2rem", width: "100%" }}
-            />
+            <motion.div
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              style={{ originX: 0, display: "block", width: "100%" }}
+            >
+              <NavLink
+                label="Theme"
+                leftSection={themeToggleIcon}
+                variant="subtle"
+                color="primary.7"
+                onClick={toggleColorScheme}
+                style={{ borderRadius: "2rem", width: "100%", marginBottom: "4px" }}
+              />
+            </motion.div>
           )}
           {opened ? null : (
             <>
@@ -543,14 +503,21 @@ export function PortalLayout({
                   </ActionIcon>
                 </Tooltip>
               ) : (
-                <NavLink
-                  label={expandedMd ? "Collapse sidebar" : "Expand sidebar"}
-                  leftSection={expandedMd ? <IconChevronLeft size={CONTROL_ICON_SIZE} /> : <IconChevronRight size={CONTROL_ICON_SIZE} />}
-                  variant="subtle"
-                  color="primary.7"
-                  onClick={toggleExpandedMd}
-                  style={{ borderRadius: "2rem", width: "100%" }}
-                />
+                <motion.div
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  style={{ originX: 0, display: "block", width: "100%" }}
+                >
+                  <NavLink
+                    label={expandedMd ? "Collapse sidebar" : "Expand sidebar"}
+                    leftSection={expandedMd ? <IconChevronLeft size={CONTROL_ICON_SIZE} /> : <IconChevronRight size={CONTROL_ICON_SIZE} />}
+                    variant="subtle"
+                    color="primary.7"
+                    onClick={toggleExpandedMd}
+                    style={{ borderRadius: "2rem", width: "100%", marginBottom: "4px" }}
+                  />
+                </motion.div>
               )}
             </>
           )}
@@ -572,30 +539,41 @@ export function PortalLayout({
       }}
     >
       {Header}
-      <Paper
-        radius={0}
-        pos="fixed"
+      <motion.div
+        initial={{ y: -50, opacity: 0, x: "-50%" }}
+        animate={{ y: 0, opacity: 1, x: "-50%" }}
+        transition={{ type: "spring", stiffness: 300, damping: 25, delay: 0.1 }}
         style={{
-          top: "var(--app-shell-header-offset, 0px)",
-          left: "var(--app-shell-navbar-offset, 0px)",
-          width: "calc(100% - var(--app-shell-navbar-offset, 0px))",
+          position: "fixed",
+          top: "calc(var(--app-shell-header-offset, 0px) + 16px)",
+          left: "calc(var(--app-shell-navbar-offset, 0px) + 50%)",
           zIndex: 99,
-          background: "light-dark(rgba(255,255,255,0.55), rgba(30,32,40,0.55))",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
+          width: "max-content",
+          minWidth: "300px",
+          maxWidth: "calc(100% - var(--app-shell-navbar-offset, 0px) - 32px)",
         }}
-        px={{ base: "sm" }}
-        py="sm"
-        withBorder={false}
       >
-        <Group justify="space-between">
-          <BreadcrumbsBar application={undefined} menus={menus.navigation} />
-          <Credits />
-        </Group>
-      </Paper>
+        <Paper
+          radius="xl"
+          style={{
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            transition: `width ${MINI_TRANSITION}`,
+          }}
+          bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))"
+          px={{ base: "md", md: "md" }}
+          py={8}
+          withBorder={false}
+        >
+          <Group justify="space-between" wrap="nowrap" gap="md">
+            <BreadcrumbsBar application={undefined} menus={menus.navigation} />
+            <Credits />
+          </Group>
+        </Paper>
+      </motion.div>
       <AppShell.Navbar
         style={{
-          background: "light-dark(rgba(248,249,250,0.9), rgba(26,27,30,0.6))",
+          background: "light-dark(var(--mantine-color-primary-0), var(--mantine-color-dark-7))",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           transition: `width ${MINI_TRANSITION}, padding ${MINI_TRANSITION}, gap ${MINI_TRANSITION}`,
@@ -603,12 +581,25 @@ export function PortalLayout({
           overflow: "hidden",
         }}
       >
+        {opened && (
+          <Box hiddenFrom="md" p="sm" style={{ display: "flex", justifyContent: "flex-end" }}>
+            <ActionIcon
+              onClick={close}
+              variant="subtle"
+              size="xl"
+              radius="lg"
+              aria-label="Close sidebar"
+            >
+              <IconX size={CONTROL_ICON_SIZE} />
+            </ActionIcon>
+          </Box>
+        )}
         {navSections}
       </AppShell.Navbar>
       <MessagingSidebar />
       <AppShell.Main
         style={{
-          background: "light-dark(var(--mantine-color-gray-4), darken(var(--mantine-color-dark-9), 1%))",
+          background: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-9))",
         }}
         pt="6.5rem"
       >

@@ -1,5 +1,6 @@
+import { MotionCard } from "@/ui/components/motion-card";
 import { useState } from "react";
-import { ActionIcon, Badge, Box, Group, Paper, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Box, Group, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconPlus } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -31,7 +32,7 @@ export function MedRow({ med }: Readonly<{ med: PrescriptionMedicationRecord }>)
     }
 
     return (
-        <Paper withBorder radius="md" p="sm" shadow="xs">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm" shadow="xs">
             <Group justify="space-between" wrap="nowrap" align="flex-start">
                 <Box style={{ flex: 1, minWidth: 0 }}>
                     <Text fw={600} size="sm">{med.name}</Text>
@@ -86,6 +87,6 @@ export function MedRow({ med }: Readonly<{ med: PrescriptionMedicationRecord }>)
                     </ActionIcon>
                 </Tooltip>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }

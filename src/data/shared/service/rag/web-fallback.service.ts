@@ -23,6 +23,7 @@ const ALLOWED_WEB_HOSTS = new Set([
 ]);
 
 const WEB_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_WEB_CACHE_SIZE = 200;
 
 type CacheItem = {
   timestamp: number;
@@ -113,6 +114,11 @@ export class WebFallbackService {
 
       const xml = await response.text();
       const entries = parseMedlinePlusXml(xml);
+      // FIFO eviction: drop oldest entry before inserting if at capacity
+      if (this.cache.size >= MAX_WEB_CACHE_SIZE) {
+        const oldestKey = this.cache.keys().next().value;
+        if (oldestKey !== undefined) this.cache.delete(oldestKey);
+      }
       this.cache.set(cacheKey, {
         timestamp: Date.now(),
         entries,

@@ -3,7 +3,10 @@ export type RagDecisionReason =
   | "record-hint"
   | "reasoning-hint"
   | "short-query-skip"
-  | "long-query-default";
+  | "long-query-default"
+  | "llm-classified"
+  | "llm-fallback"
+  | "classifier-timeout-skip";
 
 export type RagDecision = {
   needsRag: boolean;

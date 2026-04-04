@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
@@ -9,18 +10,15 @@ import {
     Container,
     Group,
     Loader,
-    Paper,
     ScrollArea,
     SegmentedControl,
     Skeleton,
     Stack,
     Text,
-    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
@@ -29,11 +27,7 @@ import {
     IconHeartHandshake,
     IconMessage,
     IconMessageQuestion,
-    IconSearch,
-    IconSortAscending,
-    IconSortDescending,
     IconTrash,
-    IconX,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 
@@ -45,6 +39,9 @@ import {
 } from "@/app/(portal)/user/_query";
 import { colors } from "@/ui/tokens";
 import { formatDate } from "@/lib/format";
+
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { ListToolbar } from "@/ui/components/list-toolbar";
 
 type SortField = "date" | "title" | "qa";
 
@@ -167,7 +164,7 @@ function AssessmentCard({
     };
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -232,7 +229,7 @@ function AssessmentCard({
                     </Tooltip>
                 </Group>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -316,12 +313,23 @@ function LazyLoadSentinel({
 }
 
 export function AssessmentsContent() {
-    const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebouncedValue(search, 300);
-    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "abandoned">("all");
+    const {
+        search,
+        setSearch,
+        filter: statusFilter,
+        setFilter: setStatusFilter,
+        sortField,
+        setSortField,
+        sortAsc,
+        setSortAsc,
+    } = useUrlFilters<"all" | "active" | "completed" | "abandoned", "desc" | "asc", SortField>({
+        defaultFilter: "all",
+        defaultSearch: "",
+        defaultSortField: "date",
+        defaultSort: "desc",
+    });
+
     const [riskFilter, setRiskFilter] = useState<"all" | "low" | "moderate" | "high" | "emergency">("all");
-    const [sortField, setSortField] = useState<SortField>("date");
-    const [sortAsc, setSortAsc] = useState(false);
 
     const status = statusFilter === "all" ? undefined : statusFilter;
     const riskLevel = riskFilter === "all" ? undefined : riskFilter;
@@ -333,7 +341,7 @@ export function AssessmentsContent() {
         hasNextPage,
         isFetchingNextPage,
     } = useAssessmentsInfiniteQuery({
-        q: debouncedSearch || undefined,
+        q: search || undefined,
         status,
         riskLevel,
     });
@@ -348,7 +356,7 @@ export function AssessmentsContent() {
 
     const deleteAssessment = useDeleteAssessmentMutation();
 
-    const hasFilters = !!debouncedSearch || !!status || !!riskLevel;
+    const hasFilters = !!search || !!status || !!riskLevel;
 
     function handleDelete(id: string, title: string) {
         modals.openConfirmModal({
@@ -414,87 +422,48 @@ export function AssessmentsContent() {
                     </Group>
                 </Group>
 
-                <Group gap="sm" wrap="wrap">
-                    <TextInput
-                        placeholder="Search assessments…"
-                        leftSection={<IconSearch size={16} />}
-                        rightSection={
-                            search ? (
-                                <IconX
-                                    size={14}
-                                    style={{ cursor: "pointer" }}
-                                    onClick={() => setSearch("")}
-                                />
-                            ) : undefined
-                        }
-                        size="sm"
-                        value={search}
-                        onChange={(event) => setSearch(event.currentTarget.value)}
-                        style={{ flex: 1, minWidth: 180 }}
-                    />
-
-                    <SegmentedControl
-                        size="xs"
-                        value={statusFilter}
-                        onChange={(v) =>
-                            setStatusFilter(v as "all" | "active" | "completed" | "abandoned")
-                        }
-                        data={[
-                            { label: "All", value: "all" },
-                            { label: "Active", value: "active" },
-                            { label: "Completed", value: "completed" },
-                            { label: "Abandoned", value: "abandoned" },
-                        ]}
-                    />
-
-                    <SegmentedControl
-                        size="xs"
-                        value={riskFilter}
-                        onChange={(v) =>
-                            setRiskFilter(v as "all" | "low" | "moderate" | "high" | "emergency")
-                        }
-                        data={[
-                            { label: "All risk", value: "all" },
-                            { label: "Low", value: "low" },
-                            { label: "Moderate", value: "moderate" },
-                            { label: "High", value: "high" },
-                            { label: "Emergency", value: "emergency" },
-                        ]}
-                    />
-                </Group>
-
-                <Group gap="xs">
-                    <SegmentedControl
-                        size="xs"
-                        value={sortField}
-                        onChange={(v) => setSortField(v as SortField)}
-                        data={[
-                            { label: "Date", value: "date" },
-                            { label: "Title", value: "title" },
-                            { label: "Q&A", value: "qa" },
-                        ]}
-                    />
-                    <Box
-                        component="button"
-                        onClick={() => setSortAsc((prev) => !prev)}
-                        style={{
-                            all: "unset",
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            fontSize: "var(--mantine-font-size-xs)",
-                            color: "var(--mantine-color-dimmed)",
-                        }}
-                    >
-                        {sortAsc ? <IconSortAscending size={14} /> : <IconSortDescending size={14} />}
-                        {sortAsc ? "Asc" : "Desc"}
-                    </Box>
-                </Group>
+                <ListToolbar
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder="Search assessments..."
+                    filter={statusFilter}
+                    onFilterChange={setStatusFilter}
+                    filterData={[
+                        { label: "All", value: "all" },
+                        { label: "Active", value: "active" },
+                        { label: "Completed", value: "completed" },
+                        { label: "Abandoned", value: "abandoned" },
+                    ]}
+                    sortField={sortField}
+                    onSortFieldChange={setSortField}
+                    sortFieldData={[
+                        { label: "Date", value: "date" },
+                        { label: "Title", value: "title" },
+                        { label: "Q&A", value: "qa" },
+                    ]}
+                    sortAsc={sortAsc}
+                    onSortAscChange={setSortAsc}
+                    actions={
+                        <SegmentedControl
+                            size="sm"
+                            value={riskFilter}
+                            onChange={(v) =>
+                                setRiskFilter(v as "all" | "low" | "moderate" | "high" | "emergency")
+                            }
+                            data={[
+                                { label: "All risk", value: "all" },
+                                { label: "Low", value: "low" },
+                                { label: "Moderate", value: "moderate" },
+                                { label: "High", value: "high" },
+                                { label: "Emergency", value: "emergency" },
+                            ]}
+                        />
+                    }
+                />
 
                 <Box style={{ flex: 1, overflow: "hidden" }}>
                     <ScrollArea style={{ height: "100%" }}>
-                        <Box maw={1080} mx="auto">
+                        <Box maw={1080} mx="auto" w="100%">
                             {isLoading ? <AssessmentSkeletons /> : null}
 
                             {!isLoading && assessments.length === 0 ? <EmptyState hasFilters={hasFilters} /> : null}

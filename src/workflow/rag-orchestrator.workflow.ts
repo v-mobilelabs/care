@@ -1,6 +1,4 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
-import { ragContextBuilder } from "@/data/shared/service";
-import { knowledgeBaseService } from "@/data/knowledge-base";
 import { queryRepairService } from "@/data/shared/service/rag/query-repair.service";
 import {
   retrievalEvaluatorService,
@@ -9,6 +7,8 @@ import {
 } from "@/data/shared/service/rag/retrieval-evaluator.service";
 import { webFallbackService } from "@/data/shared/service/rag/web-fallback.service";
 import { ragService } from "@/data/shared/service/rag/rag.service";
+import { triStoreRagService } from "@/data/shared/service/rag/tri-store-rag.service";
+import type { TriStoreProvenance } from "@/data/shared/service/rag/tri-store.types";
 import {
   initialEvalRoute,
   makeRepairEvalRoute,
@@ -48,16 +48,24 @@ export interface AgenticRagGraphOutput {
   context: string | null;
   partialFailure: boolean;
   evaluation: RagEvaluationMeta;
+  provenance: TriStoreProvenance[];
 }
 
 type InternalRetrievalResult = {
-  ragResults: Awaited<
-    ReturnType<typeof ragContextBuilder.buildContext>
-  >["results"];
-  ragContext: string;
-  kbEntries: Awaited<ReturnType<typeof knowledgeBaseService.search>>;
-  kbText: string;
+  context: string;
+  provenance: TriStoreProvenance[];
+  conditionCount: number;
+  symptomCount: number;
+  kbCount: number;
   partialFailure: boolean;
+  /** Combined patient results (condition + symptom stores) for evaluator heuristics */
+  ragResults: Awaited<
+    ReturnType<typeof triStoreRagService.buildTriStoreContext>
+  >["allPatientResults"];
+  /** Raw KB entries for evaluator heuristics */
+  kbEntries: Awaited<
+    ReturnType<typeof triStoreRagService.buildTriStoreContext>
+  >["allKbResults"];
 };
 
 type QueryRepairResult = Awaited<ReturnType<typeof queryRepairService.repair>>;
@@ -69,6 +77,7 @@ type GraphState = {
   evaluation: RetrievalEvaluation | null;
   repairedQuery: QueryRepairResult | null;
   partialFailure: boolean;
+  provenance: TriStoreProvenance[];
   final: AgenticRagGraphOutput | null;
 };
 
@@ -79,15 +88,9 @@ const RagGraphAnnotation = Annotation.Root({
   evaluation: Annotation<RetrievalEvaluation | null>(),
   repairedQuery: Annotation<QueryRepairResult | null>(),
   partialFailure: Annotation<boolean>(),
+  provenance: Annotation<TriStoreProvenance[]>(),
   final: Annotation<AgenticRagGraphOutput | null>(),
 });
-
-function wrapProvenance(
-  type: "patient_record" | "kb" | "web",
-  body: string,
-): string {
-  return `<source type="${type}">\n${body}\n</source>`;
-}
 
 function joinContextParts(parts: string[]): string | null {
   const nonEmpty = parts.filter((part) => part.trim().length > 0);
@@ -128,171 +131,163 @@ async function retrieveInternalContext(opts: {
   queryEmbedding: number[];
   broaden?: boolean;
 }): Promise<InternalRetrievalResult> {
-  const limit = opts.broaden ? 30 : 15;
-  const rerankTopK = opts.broaden ? 8 : 5;
-  const rerankMinScoreRatio = opts.broaden ? 0.75 : 0.85;
-
-  const [ragResult, kbResult] = await Promise.allSettled([
-    ragContextBuilder.buildContext({
-      userId: opts.userId,
-      profileId: opts.profileId,
-      query: opts.query,
-      queryEmbedding: opts.queryEmbedding,
-      rerank: true,
-      limit,
-      rerankTopK,
-      rerankMinScore: 0.01,
-      rerankMinScoreRatio,
-    }),
-    knowledgeBaseService
-      .search(opts.query, {
-        topK: opts.broaden ? 8 : 5,
-        queryEmbedding: opts.queryEmbedding,
-      })
-      .catch((err: unknown) => {
-        console.error("[LangGraphRAG] Knowledge base fetch failed:", err);
-        return [];
-      }),
-  ]);
-
-  const ragResults =
-    ragResult.status === "fulfilled" && ragResult.value
-      ? ragResult.value.results
-      : [];
-  const ragContext =
-    ragResult.status === "fulfilled" && ragResult.value
-      ? ragResult.value.context
-      : "";
-  const kbEntries =
-    kbResult.status === "fulfilled" && kbResult.value ? kbResult.value : [];
-  const kbText =
-    kbEntries.length > 0 ? knowledgeBaseService.formatForPrompt(kbEntries) : "";
+  const result = await triStoreRagService.buildTriStoreContext({
+    userId: opts.userId,
+    profileId: opts.profileId,
+    query: opts.query,
+    queryEmbedding: opts.queryEmbedding,
+    broaden: opts.broaden,
+    rerank: true,
+  });
 
   return {
-    ragResults,
-    ragContext,
-    kbEntries,
-    kbText,
-    partialFailure:
-      ragResult.status === "rejected" || kbResult.status === "rejected",
+    context: result.context,
+    provenance: result.provenance,
+    conditionCount: result.conditionCount,
+    symptomCount: result.symptomCount,
+    kbCount: result.kbCount,
+    partialFailure: result.partialFailure,
+    ragResults: result.allPatientResults,
+    kbEntries: result.allKbResults,
   };
+}
+
+async function initialRetrieveEvaluateNode(state: GraphState) {
+  const t0 = performance.now();
+  const retrieval = await retrieveInternalContext({
+    userId: state.input.userId,
+    profileId: state.input.profileId,
+    query: state.input.userQuery,
+    queryEmbedding: state.input.queryEmbedding,
+  });
+  const retrieveMs = performance.now() - t0;
+
+  // Tri-store context already includes <source> provenance tags — use directly.
+  const context =
+    retrieval.context.trim().length > 0 ? retrieval.context : null;
+
+  const t1 = performance.now();
+  const evaluation = await retrievalEvaluatorService.evaluate({
+    userId: state.input.userId,
+    query: state.input.userQuery,
+    ragResults: retrieval.ragResults,
+    kbResults: retrieval.kbEntries,
+    context,
+    modelTier: state.input.evaluatorModel,
+  });
+  console.log(
+    `[AgenticRAG] initial: retrieve=${retrieveMs.toFixed(0)}ms eval=${(performance.now() - t1).toFixed(0)}ms pass=${evaluation.pass}`,
+  );
+
+  return {
+    retrieval,
+    context,
+    evaluation,
+    provenance: retrieval.provenance,
+    partialFailure: retrieval.partialFailure,
+  };
+}
+
+async function repairAndRetrieveEvaluateNode(state: GraphState) {
+  const baseEvaluation =
+    state.evaluation ?? defaultEvaluation("missing-evaluation");
+  const t0 = performance.now();
+  const repairedQuery = await queryRepairService.repair({
+    userId: state.input.userId,
+    query: state.input.userQuery,
+    evaluatorReason: baseEvaluation.reason,
+    modelTier: state.input.repairModel,
+  });
+  const repairMs = performance.now() - t0;
+
+  const repairedEmbedding =
+    repairedQuery.rewrittenQuery === state.input.userQuery
+      ? state.input.queryEmbedding
+      : await ragService.embedQuery(repairedQuery.rewrittenQuery);
+
+  const t1 = performance.now();
+  const retrieval = await retrieveInternalContext({
+    userId: state.input.userId,
+    profileId: state.input.profileId,
+    query: repairedQuery.rewrittenQuery,
+    queryEmbedding: repairedEmbedding,
+    broaden: repairedQuery.broadenSearch,
+  });
+  const retrieveMs = performance.now() - t1;
+
+  const context =
+    retrieval.context.trim().length > 0 ? retrieval.context : null;
+
+  const t2 = performance.now();
+  const evaluation = await retrievalEvaluatorService.evaluate({
+    userId: state.input.userId,
+    query: state.input.userQuery,
+    ragResults: retrieval.ragResults,
+    kbResults: retrieval.kbEntries,
+    context,
+    modelTier: state.input.evaluatorModel,
+  });
+  console.log(
+    `[AgenticRAG] repair: repairLLM=${repairMs.toFixed(0)}ms retrieve=${retrieveMs.toFixed(0)}ms eval=${(performance.now() - t2).toFixed(0)}ms pass=${evaluation.pass}`,
+  );
+
+  return {
+    retrieval,
+    context,
+    evaluation,
+    repairedQuery,
+    provenance: retrieval.provenance,
+    partialFailure: state.partialFailure || retrieval.partialFailure,
+  };
+}
+
+async function webFallbackEvaluateNode(state: GraphState) {
+  const t0 = performance.now();
+  const webEntries = await webFallbackService.searchMedicalReferences(
+    state.input.userQuery,
+    { timeoutMs: state.input.webFallbackTimeoutMs },
+  );
+  const searchMs = performance.now() - t0;
+  const webText = webFallbackService.formatForPrompt(webEntries);
+
+  const context = joinContextParts([
+    state.context ?? "",
+    webText
+      ? `<source store="web_fallback" weight="0.2" label="Web: Medical reference search">\n${webText}\n</source>`
+      : "",
+  ]);
+
+  const retrieval = state.retrieval;
+  const t1 = performance.now();
+  const evaluation = await retrievalEvaluatorService.evaluate({
+    userId: state.input.userId,
+    query: state.input.userQuery,
+    ragResults: retrieval?.ragResults ?? [],
+    kbResults: retrieval?.kbEntries ?? [],
+    context,
+    modelTier: state.input.evaluatorModel,
+  });
+  console.log(
+    `[AgenticRAG] webFallback: search=${searchMs.toFixed(0)}ms eval=${(performance.now() - t1).toFixed(0)}ms pass=${evaluation.pass}`,
+  );
+
+  return { context, evaluation };
 }
 
 function buildGraph() {
   return new StateGraph(RagGraphAnnotation)
-    .addNode(RAG_NODES.INITIAL_RETRIEVE_EVALUATE, async (state: GraphState) => {
-      const retrieval = await retrieveInternalContext({
-        userId: state.input.userId,
-        profileId: state.input.profileId,
-        query: state.input.userQuery,
-        queryEmbedding: state.input.queryEmbedding,
-      });
-
-      const context = joinContextParts([
-        retrieval.kbText ? wrapProvenance("kb", retrieval.kbText) : "",
-        retrieval.ragContext
-          ? wrapProvenance("patient_record", retrieval.ragContext)
-          : "",
-      ]);
-
-      const evaluation = await retrievalEvaluatorService.evaluate({
-        userId: state.input.userId,
-        query: state.input.userQuery,
-        ragResults: retrieval.ragResults,
-        kbResults: retrieval.kbEntries,
-        context,
-        modelTier: state.input.evaluatorModel,
-      });
-
-      return {
-        retrieval,
-        context,
-        evaluation,
-        partialFailure: retrieval.partialFailure,
-      };
-    })
+    .addNode(RAG_NODES.INITIAL_RETRIEVE_EVALUATE, initialRetrieveEvaluateNode)
     .addNode(
       RAG_NODES.REPAIR_AND_RETRIEVE_EVALUATE,
-      async (state: GraphState) => {
-        const baseEvaluation =
-          state.evaluation ?? defaultEvaluation("missing-evaluation");
-        const repairedQuery = await queryRepairService.repair({
-          userId: state.input.userId,
-          query: state.input.userQuery,
-          evaluatorReason: baseEvaluation.reason,
-          modelTier: state.input.repairModel,
-        });
-
-        const repairedEmbedding =
-          repairedQuery.rewrittenQuery === state.input.userQuery
-            ? state.input.queryEmbedding
-            : await ragService.embedQuery(repairedQuery.rewrittenQuery);
-
-        const retrieval = await retrieveInternalContext({
-          userId: state.input.userId,
-          profileId: state.input.profileId,
-          query: repairedQuery.rewrittenQuery,
-          queryEmbedding: repairedEmbedding,
-          broaden: repairedQuery.broadenSearch,
-        });
-
-        const context = joinContextParts([
-          retrieval.kbText ? wrapProvenance("kb", retrieval.kbText) : "",
-          retrieval.ragContext
-            ? wrapProvenance("patient_record", retrieval.ragContext)
-            : "",
-        ]);
-
-        const evaluation = await retrievalEvaluatorService.evaluate({
-          userId: state.input.userId,
-          query: state.input.userQuery,
-          ragResults: retrieval.ragResults,
-          kbResults: retrieval.kbEntries,
-          context,
-          modelTier: state.input.evaluatorModel,
-        });
-
-        return {
-          retrieval,
-          context,
-          evaluation,
-          repairedQuery,
-          partialFailure: state.partialFailure || retrieval.partialFailure,
-        };
-      },
+      repairAndRetrieveEvaluateNode,
     )
-    .addNode(RAG_NODES.WEB_FALLBACK_EVALUATE, async (state: GraphState) => {
-      const webEntries = await webFallbackService.searchMedicalReferences(
-        state.input.userQuery,
-        { timeoutMs: state.input.webFallbackTimeoutMs },
-      );
-      const webText = webFallbackService.formatForPrompt(webEntries);
-
-      const context = joinContextParts([
-        state.context ?? "",
-        webText ? wrapProvenance("web", webText) : "",
-      ]);
-
-      const retrieval = state.retrieval;
-      const evaluation = await retrievalEvaluatorService.evaluate({
-        userId: state.input.userId,
-        query: state.input.userQuery,
-        ragResults: retrieval?.ragResults ?? [],
-        kbResults: retrieval?.kbEntries ?? [],
-        context,
-        modelTier: state.input.evaluatorModel,
-      });
-
-      return {
-        context,
-        evaluation,
-      };
-    })
+    .addNode(RAG_NODES.WEB_FALLBACK_EVALUATE, webFallbackEvaluateNode)
     .addNode(RAG_NODES.FINAL_INITIAL, (state: GraphState) => ({
       final: {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("initial", state.evaluation),
+        provenance: state.retrieval?.provenance ?? [],
       },
     }))
     .addNode(RAG_NODES.FINAL_REPAIRED, (state: GraphState) => ({
@@ -300,6 +295,7 @@ function buildGraph() {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("internal-repair", state.evaluation),
+        provenance: state.retrieval?.provenance ?? [],
       },
     }))
     .addNode(RAG_NODES.FINAL_WEB, (state: GraphState) => ({
@@ -307,6 +303,7 @@ function buildGraph() {
         context: state.context,
         partialFailure: state.partialFailure,
         evaluation: toEvaluationMeta("web-fallback", state.evaluation),
+        provenance: state.retrieval?.provenance ?? [],
       },
     }))
     .addNode(RAG_NODES.FINAL_FAILED, (state: GraphState) => ({
@@ -314,6 +311,7 @@ function buildGraph() {
         context: null,
         partialFailure: true,
         evaluation: toEvaluationMeta("failed", state.evaluation),
+        provenance: [],
       },
     }))
     .addEdge(START, RAG_NODES.INITIAL_RETRIEVE_EVALUATE)
@@ -361,6 +359,7 @@ export async function runAgenticRagLangGraph(
     evaluation: null,
     repairedQuery: null,
     partialFailure: false,
+    provenance: [],
     final: null,
   });
 
@@ -369,6 +368,7 @@ export async function runAgenticRagLangGraph(
     return {
       context: null,
       partialFailure: true,
+      provenance: [],
       evaluation: {
         stage: "failed",
         reason: "graph-final-state-missing",

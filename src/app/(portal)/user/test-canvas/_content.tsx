@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Badge,
@@ -9,7 +10,6 @@ import {
     Container,
     Divider,
     Group,
-    Paper,
     SimpleGrid,
     Stack,
     Text,
@@ -220,7 +220,7 @@ function StatCard({ icon, label, value, color }: Readonly<{
     const [hovered, setHovered] = useState(false);
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p={0}
@@ -253,7 +253,7 @@ function StatCard({ icon, label, value, color }: Readonly<{
                     {label}
                 </Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -338,9 +338,8 @@ function SessionCard({ session, onDelete }: Readonly<{
 }>) {
     const [hovered, setHovered] = useState(false);
     return (
-        <Paper
-            component={Link}
-            href={`/user/assistant?id=${session.id}`}
+        <Box component={Link} href={`/user/assistant?id=${session.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             px="md"
@@ -349,7 +348,6 @@ function SessionCard({ session, onDelete }: Readonly<{
             onMouseLeave={() => setHovered(false)}
             style={{
                 cursor: "pointer",
-                textDecoration: "none",
                 display: "block",
                 color: "inherit",
                 transition: `box-shadow ${motion.duration.fast} ${motion.easing.standard}, transform ${motion.duration.fast} ${motion.easing.standard}`,
@@ -358,7 +356,8 @@ function SessionCard({ session, onDelete }: Readonly<{
             }}
         >
             <SessionCardContent session={session} onDelete={onDelete} />
-        </Paper>
+        </MotionCard>
+        </Box>
     );
 }
 

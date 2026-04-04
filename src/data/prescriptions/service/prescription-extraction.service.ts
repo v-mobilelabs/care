@@ -61,25 +61,25 @@ export class PrescriptionExtractionService {
     }
 
     // 2. Download bytes from Cloud Storage
-    const [bytes] = await bucket.file(file.storagePath).download();
+    const [bytes] = await bucket.file(file.path).download();
     const base64 = bytes.toString("base64");
-    const dataUri = `data:${file.mimeType};base64,${base64}`;
+    const dataUri = `data:${file.mime};base64,${base64}`;
 
     // 2b. Guardrail — verify the file is actually a prescription before extraction
     await this.validator.assertType(
       input.userId,
-      file.mimeType,
+      file.mime,
       bytes as Buffer,
       "prescription",
     );
 
     // 3. Build AI SDK content part (image vs PDF/file)
-    const mediaPart = file.mimeType.startsWith("image/")
+    const mediaPart = file.mime.startsWith("image/")
       ? { type: "image" as const, image: dataUri }
       : {
           type: "file" as const,
           data: dataUri,
-          mediaType: file.mimeType as `${string}/${string}`,
+          mediaType: file.mime as `${string}/${string}`,
         };
 
     // 4. Extract structured data via Gemini (consumes 1 credit for the user)
@@ -99,7 +99,7 @@ export class PrescriptionExtractionService {
 
     // 5. Persist the extraction result back to the file document so it survives
     //    page refreshes and is returned by GET /api/prescriptions on subsequent loads.
-    await this.files.patchExtractedData(
+    await this.files.patchData(
       {
         userId: input.userId,
         profileId: input.profileId,
@@ -118,7 +118,7 @@ export class PrescriptionExtractionService {
     return prescriptionRepository.create(input.userId, {
       fileId: input.fileId,
       fileUrl: file.downloadUrl ?? undefined,
-      fileMimeType: file.mimeType,
+      fileMimeType: file.mime,
       source: "extracted",
       medications: result.medications.map(
         (m): PrescriptionMedication => ({

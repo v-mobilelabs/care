@@ -104,6 +104,7 @@ export function QuestionCard({ data, toolCallId, isAnswered, answeredValue, isLo
                             <Button size="md" color="primary" onClick={() => onAnswer(toolCallId, String(scaleValue))}>Submit: {scaleValue}</Button>
                         </Stack>
                     )}
+                    {/* Free text uses the chat input bar — no inline textarea */}
                 </Stack>
             </Card.Section>
         </Card>

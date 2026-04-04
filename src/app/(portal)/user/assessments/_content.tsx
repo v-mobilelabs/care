@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
@@ -9,7 +10,6 @@ import {
     Container,
     Group,
     Loader,
-    Paper,
     ScrollArea,
     SegmentedControl,
     Skeleton,
@@ -167,7 +167,7 @@ function AssessmentCard({
     };
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             withBorder
             radius="lg"
             p="md"
@@ -232,7 +232,7 @@ function AssessmentCard({
                     </Tooltip>
                 </Group>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 

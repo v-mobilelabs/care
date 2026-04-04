@@ -24,6 +24,15 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { colors } from "@/ui/tokens";
+import type { LiveSessionData } from "@/ui/ai/hooks/use-live-session-completion";
+import { LocalVAD } from "@/ui/ai/utils/local-vad";
+import { AudioPlayer } from "@/ui/ai/components/audio-player";
+import {
+  GoogleGenAI,
+  Modality,
+  type Session,
+  type LiveServerMessage,
+} from "@google/genai";
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -35,12 +44,21 @@ type GeminiLiveToolHandler = (
   args: Record<string, unknown>,
 ) => JsonValue | Promise<JsonValue>;
 
-const GEMINI_LIVE_CONSTRAINED_WS_URL =
-  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained";
 const LIVE_INPUT_SAMPLE_RATE = 16_000;
 const LIVE_INPUT_CHUNK_MS = 20;
 const LIVE_INPUT_CHUNK_SAMPLES =
   (LIVE_INPUT_SAMPLE_RATE * LIVE_INPUT_CHUNK_MS) / 1_000;
+
+// ── Type guards ────────────────────────────────────────────────────────────
+
+function isAudioPart(part: unknown): part is AudioPart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    (part as Record<string, unknown>).type === "audio"
+  );
+}
+
 const DEFAULT_MIC_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
   noiseSuppression: true,
@@ -92,15 +110,6 @@ const VOICE_OPTIONS = [
   { value: "Fenrir", label: "Fenrir (Calm, Measured)" },
   { value: "Kore", label: "Kore (Bright, Energetic)" },
 ];
-
-function getWsUrlFromToken(payload: TokenResponse): string {
-  if (payload.wsUrl) return payload.wsUrl;
-  if (!payload.accessToken) {
-    throw new Error("Token API did not return wsUrl or accessToken.");
-  }
-
-  return `${GEMINI_LIVE_CONSTRAINED_WS_URL}?access_token=${encodeURIComponent(payload.accessToken)}`;
-}
 
 function decodeBase64ToUint8(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -181,34 +190,25 @@ async function createPcmWorkletNode(
   return new AudioWorkletNode(audioContext, PCM_WORKLET_PROCESSOR_NAME);
 }
 
-async function decodeWebSocketMessageData(rawData: unknown): Promise<string> {
-  if (typeof rawData === "string") return rawData;
-
-  if (rawData instanceof Blob) {
-    return rawData.text();
-  }
-
-  if (rawData instanceof ArrayBuffer) {
-    return new TextDecoder().decode(rawData);
-  }
-
-  if (ArrayBuffer.isView(rawData)) {
-    return new TextDecoder().decode(rawData);
-  }
-
-  return String(rawData);
+export interface AudioPart {
+  readonly type: "audio";
+  readonly url: string;
+  readonly mimeType: string;
+  readonly duration: number;
+  readonly sampleRate: number;
 }
 
 export interface GeminiLiveMessage {
   readonly id: string;
   readonly role: "user" | "assistant" | "system";
   readonly text: string;
+  readonly parts?: readonly (AudioPart | { type: "text"; text: string })[];
 }
 
 export interface GeminiLiveStandaloneProps {
   readonly title?: string;
+  readonly sessionId?: string;
   readonly model?: string;
-  readonly systemInstruction?: string;
   readonly connectGreeting?: string;
   readonly seedTurns?: readonly Readonly<{
     role: "user" | "assistant";
@@ -232,20 +232,26 @@ export interface GeminiLiveStandaloneProps {
     bytesPerSecond: number;
     totalBytes: number;
   }>) => void;
+  /** Called immediately when a message with audio parts is ready (before session ends).
+   *  Allows parent to add audio messages to chat in real-time. */
+  readonly onMessageWithAudio?: (message: {
+    id: string;
+    text: string;
+    parts: readonly (AudioPart | { type: "text"; text: string })[];
+  }) => void | Promise<void>;
+  /** Called when live session ends with accumulated session data. */
+  readonly onSessionComplete?: (data: LiveSessionData) => void | Promise<void>;
 }
 
 type LiveState = "idle" | "connecting" | "connected" | "error";
 
 interface TokenResponse {
-  readonly wsUrl?: string;
   readonly accessToken?: string;
   readonly model?: string;
 }
 
 const DEFAULT_MODEL = "gemini-3.1-flash-live-preview";
 const DEFAULT_TOKEN_PATH = "/api/live/token";
-const DEFAULT_CONNECT_GREETING =
-  "Say a short warm hello and ask how you can help today.";
 const SETUP_TIMEOUT_MS = 10_000;
 
 type LiveOwnerRegistration = {
@@ -255,7 +261,7 @@ type LiveOwnerRegistration = {
 
 type GeminiLiveGlobalState = {
   activeOwner: LiveOwnerRegistration | null;
-  sockets: Set<WebSocket>;
+  sessions: Set<Session>;
 };
 
 function getGeminiLiveGlobalState(): GeminiLiveGlobalState {
@@ -269,36 +275,32 @@ function getGeminiLiveGlobalState(): GeminiLiveGlobalState {
 
   const initialized: GeminiLiveGlobalState = {
     activeOwner: null,
-    sockets: new Set<WebSocket>(),
+    sessions: new Set<Session>(),
   };
   runtime.__careAiGeminiLiveState = initialized;
   return initialized;
 }
 
-function registerGlobalSocket(socket: WebSocket) {
+function registerGlobalSession(session: Session) {
   const globalState = getGeminiLiveGlobalState();
-  globalState.sockets.add(socket);
+  globalState.sessions.add(session);
 }
 
-function unregisterGlobalSocket(socket: WebSocket) {
+function unregisterGlobalSession(session: Session) {
   const globalState = getGeminiLiveGlobalState();
-  globalState.sockets.delete(socket);
+  globalState.sessions.delete(session);
 }
 
-function closeOrphanGlobalSockets() {
+function closeOrphanGlobalSessions() {
   const globalState = getGeminiLiveGlobalState();
-  for (const socket of globalState.sockets) {
+  for (const session of globalState.sessions) {
     try {
-      socket.close(1000, "superseded-by-new-live-owner");
+      session.close();
     } catch {
-      try {
-        socket.close();
-      } catch {
-        // Ignore close failures.
-      }
+      // Ignore close failures.
     }
   }
-  globalState.sockets.clear();
+  globalState.sessions.clear();
 }
 
 function claimLiveOwner(registration: LiveOwnerRegistration) {
@@ -308,7 +310,7 @@ function claimLiveOwner(registration: LiveOwnerRegistration) {
     currentOwner.forceDisconnect("superseded-by-new-live-owner");
   }
 
-  closeOrphanGlobalSockets();
+  closeOrphanGlobalSessions();
   globalState.activeOwner = registration;
 }
 
@@ -338,12 +340,16 @@ export function GeminiLiveStandalone(
   const [speechLanguage, setSpeechLanguage] = useState(props.defaultSpeechLanguage ?? "");
   const [selectedVoice, setSelectedVoice] = useState(props.defaultVoice ?? "");
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<Session | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackTimeRef = useRef(0);
+  const activeAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const isClosingSessionRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const vadRef = useRef<LocalVAD | null>(null);
+  const modelIsSpeakingRef = useRef(false);
   const pendingMicSamplesRef = useRef<number[]>([]);
   const micBytesThisSecondRef = useRef(0);
   const totalMicBytesSentRef = useRef(0);
@@ -364,7 +370,6 @@ export function GeminiLiveStandalone(
   const shouldUseInitialHistoryRef = useRef(false);
   const connectAbortRef = useRef<AbortController | null>(null);
   const onMicStatsChangeRef = useRef(props.onMicStatsChange);
-  const socketPoolRef = useRef<Set<WebSocket>>(new Set());
   const lastEmittedMicStatsRef = useRef<{
     connected: boolean;
     micEnabled: boolean;
@@ -372,6 +377,9 @@ export function GeminiLiveStandalone(
     bytesPerSecond: number;
     totalBytes: number;
   } | null>(null);
+  const audioChunksRef = useRef<string[]>([]);
+  const currentAssistantMessageIdRef = useRef<string | null>(null);
+  const pendingAudioPartsRef = useRef<AudioPart[]>([]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -455,7 +463,7 @@ export function GeminiLiveStandalone(
     const onDeviceChange = () => void enumerateMicDevices();
     navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
     return () => navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   async function enumerateMicDevices() {
@@ -467,12 +475,20 @@ export function GeminiLiveStandalone(
     }
   }
 
-  function addMessage(role: GeminiLiveMessage["role"], text: string) {
-    if (!text.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role, text: text.trim() },
-    ]);
+  function addMessage(
+    role: GeminiLiveMessage["role"],
+    text: string,
+    parts?: readonly (AudioPart | { type: "text"; text: string })[],
+  ) {
+    if (!text.trim() && !parts?.length) return;
+    const newMessage: GeminiLiveMessage = {
+      id: crypto.randomUUID(),
+      role,
+      text: text.trim(),
+      ...(parts?.length ? { parts } : {}),
+    };
+    setMessages((prev) => [...prev, newMessage]);
+    return newMessage.id;
   }
 
   function emitConnectionChange(connected: boolean) {
@@ -511,9 +527,9 @@ export function GeminiLiveStandalone(
       if (stateRef.current !== "connecting") return;
 
       setError("Live setup timed out. Please try again.");
-      const ws = wsRef.current;
-      if (ws) {
-        closeSocket(ws, "setup-timeout");
+      const session = wsRef.current;
+      if (session) {
+        closeSession(session);
       }
 
       stateRef.current = "error";
@@ -528,32 +544,18 @@ export function GeminiLiveStandalone(
     connectAbortRef.current = null;
   }
 
-  function closeSocket(ws: WebSocket | null, reason: string) {
-    if (!ws) return;
-    socketPoolRef.current.delete(ws);
-    unregisterGlobalSocket(ws);
-    ws.onopen = null;
-    ws.onmessage = null;
-    ws.onerror = null;
-    ws.onclose = null;
-    if (ws.readyState !== WebSocket.CLOSED) {
-      try {
-        ws.close(1000, reason);
-      } catch {
-        try {
-          ws.close();
-        } catch {
-          // Ignore close failures.
-        }
-      }
+  function closeSession(session: Session | null) {
+    if (!session) return;
+    // Mark cleanup as in-progress to prevent reconnection race conditions
+    isClosingSessionRef.current = true;
+    unregisterGlobalSession(session);
+    try {
+      session.close();
+    } catch {
+      // Ignore close failures.
     }
-  }
-
-  function closeAllSockets(reason: string) {
-    for (const socket of socketPoolRef.current) {
-      closeSocket(socket, reason);
-    }
-    socketPoolRef.current.clear();
+    // Don't set wsRef.current = null here; let the onclose callback handle it
+    // This prevents race conditions where connectSession() starts before the WebSocket fully closes
   }
 
   function disconnectSessionWithReason(reason: string) {
@@ -567,16 +569,61 @@ export function GeminiLiveStandalone(
     hasSentGreetingRef.current = false;
     hasSeededHistoryRef.current = false;
     shouldAutoStartMicRef.current = false;
+    modelIsSpeakingRef.current = false;
     wsGenerationRef.current += 1;
     if (wsRef.current) {
-      closeSocket(wsRef.current, reason);
+      closeSession(wsRef.current);
       wsRef.current = null;
     }
-    closeAllSockets(reason);
     emitConnectionChange(false);
     stateRef.current = "idle";
     setState("idle");
     releaseLiveOwner(instanceOwnerIdRef.current);
+
+    // Call session completion callback if provided
+    if (props.onSessionComplete && messages.length > 0) {
+      // Extract audio parts from assistant messages to pass to session completion
+      const assistantMessages = messages.filter((msg) => msg.role === "assistant");
+      const audioParts: AudioPart[] = [];
+      for (const msg of assistantMessages) {
+        if (msg.parts) {
+          for (const part of msg.parts) {
+            if (isAudioPart(part)) {
+              audioParts.push(part);
+            }
+          }
+        }
+      }
+
+      const liveSessionData: LiveSessionData = {
+        messages: messages.map((msg) => {
+          const base = {
+            role: msg.role as "user" | "assistant",
+            text: msg.text,
+            timestamp: Date.now(),
+          };
+          // Include parts for assistant messages with audio
+          if (msg.role === "assistant" && msg.parts) {
+            return {
+              ...base,
+              parts: msg.parts,
+            };
+          }
+          return base;
+        }),
+        userTranscript: messages
+          .filter((msg) => msg.role === "user")
+          .map((msg) => msg.text)
+          .join(" "),
+        aiTranscript: messages
+          .filter((msg) => msg.role === "assistant")
+          .map((msg) => msg.text)
+          .join(" "),
+        audioChunks: audioParts.length > 0 ? audioParts : undefined,
+        durationMs: totalMicBytesSentRef.current > 0 ? Date.now() : 0,
+      };
+      void props.onSessionComplete(liveSessionData);
+    }
   }
 
   function buildSeedTurns() {
@@ -646,46 +693,11 @@ export function GeminiLiveStandalone(
     return windowed.slice(firstUserIndex);
   }
 
-  function buildSeedContextSummary(): string {
-    const source = props.seedTurns ?? [];
-    const lines = source
-      .slice(-16)
-      .map((turn) => {
-        const roleLabel = turn.role === "assistant" ? "Assistant" : "User";
-        const text = turn.text.trim();
-        if (!text) return "";
-        return `${roleLabel}: ${text}`;
-      })
-      .filter((line) => line.length > 0);
-
-    if (lines.length === 0) {
-      return "";
-    }
-
-    return lines.join("\n").slice(0, 2_800).trim();
-  }
-
-  function seedConversationHistory(ws: WebSocket | null) {
-    if (!ws) return;
-    const turns = buildSeedTurns();
-    if (turns.length === 0) return;
-
-    ws.send(
-      JSON.stringify({
-        clientContent: {
-          turns,
-          turnComplete: true,
-        },
-      }),
-    );
-  }
-
   function scheduleReconnect(delayMs: number) {
     if (!props.autoConnect) return;
     if (manualDisconnectRef.current) return;
     if (stateRef.current === "connecting" || stateRef.current === "connected") return;
     if (reconnectAttemptsRef.current >= 5) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     clearReconnectTimer();
     reconnectAttemptsRef.current += 1;
@@ -720,11 +732,18 @@ export function GeminiLiveStandalone(
     setState("connecting");
     setError(null);
 
-    if (wsRef.current) {
-      closeSocket(wsRef.current, "reconnect");
-      wsRef.current = null;
+    // If a session close is already in progress, wait for it to complete
+    // This prevents race conditions where multiple WebSocket connections are created
+    if (isClosingSessionRef.current) {
+      console.log("[GeminiLive] Session close in progress, scheduling reconnect after cleanup");
+      scheduleReconnect(200);  // Brief delay to allow cleanup to complete
+      return;
     }
-    closeAllSockets("reconnect");
+
+    if (wsRef.current) {
+      closeSession(wsRef.current);
+      // Don't set wsRef.current = null here; let onclose callback handle it
+    }
 
     hasSentGreetingRef.current = false;
     shouldAutoStartMicRef.current = props.autoStartMic === true;
@@ -765,115 +784,111 @@ export function GeminiLiveStandalone(
         return;
       }
 
+      if (!tokenPayload.accessToken) {
+        throw new Error("Token API did not return accessToken.");
+      }
+
       console.log("[GeminiLive] Token received, model:", tokenPayload.model);
-      const wsUrl = getWsUrlFromToken(tokenPayload);
-      console.log("[GeminiLive] Connecting to WebSocket:", wsUrl.slice(0, 80));
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      socketPoolRef.current.add(ws);
-      registerGlobalSocket(ws);
 
-      ws.onopen = () => {
-        if (!props.autoConnect) {
-          closeSocket(ws, "auto-connect-disabled");
-          return;
-        }
+      if (manualDisconnectRef.current || currentGeneration !== wsGenerationRef.current) {
+        return;
+      }
 
-        if (currentGeneration !== wsGenerationRef.current) {
-          closeSocket(ws, "stale-session");
-          return;
-        }
+      // Connect using @google/genai SDK
+      const ai = new GoogleGenAI({
+        apiKey: tokenPayload.accessToken,
+        apiVersion: "v1alpha",
+      });
 
-        const baseInstruction =
-          props.systemInstruction ??
-          "You are a helpful realtime medical assistant. Keep responses concise and safe.";
-        const seedContextSummary = buildSeedContextSummary();
-        const effectiveSystemInstruction = seedContextSummary
-          ? `${baseInstruction}\n\nRecent chat context:\n${seedContextSummary}\n\nUse this context to stay consistent with prior conversation. If newer user input conflicts, follow the latest user input.`
-          : baseInstruction;
+      const voiceName = selectedVoice || "Peri";
+      const sessionModel = `models/${tokenPayload.model ?? model}`;
 
-        console.log("[GeminiLive] WebSocket connected, sending setup message");
-        const setupMessage = {
-          setup: {
-            model: `models/${tokenPayload.model ?? model}`,
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              temperature: 0.6,
-            },
-            systemInstruction: {
-              parts: [
-                {
-                  text: effectiveSystemInstruction,
-                },
-              ],
-            },
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
-            sessionResumption: sessionHandleRef.current
-              ? { handle: sessionHandleRef.current }
-              : {},
-            historyConfig: {
-              initialHistoryInClientContent: false,
-            },
-            contextWindowCompression: {
-              slidingWindow: {},
-            },
-            realtimeInputConfig: {
-              automaticActivityDetection: {
-                disabled: false,
-              },
+      console.log("[GeminiLive] Connecting via SDK to", sessionModel);
+      startSetupTimeout(currentGeneration);
+
+      const session = await ai.live.connect({
+        model: sessionModel,
+        callbacks: {
+          onopen: () => {
+            if (!props.autoConnect) {
+              closeSession(session);
+              return;
+            }
+            if (currentGeneration !== wsGenerationRef.current) {
+              closeSession(session);
+              return;
+            }
+            console.log("[GeminiLive] SDK session opened");
+          },
+
+          onmessage: (message: LiveServerMessage) => {
+            if (currentGeneration !== wsGenerationRef.current) return;
+            handleServerMessage(message);
+          },
+
+          onerror: (event: ErrorEvent) => {
+            if (currentGeneration !== wsGenerationRef.current) return;
+            console.error("[GeminiLive] SDK error:", event);
+            setError("Transient network issue detected. Attempting to recover...");
+          },
+
+          onclose: (event: CloseEvent) => {
+            if (currentGeneration !== wsGenerationRef.current) return;
+
+            console.log("[GeminiLive] SDK session closed, code:", event.code, "reason:", event.reason);
+            clearSetupTimeout();
+            stopMic();
+            unregisterGlobalSession(session);
+            
+            // Properly clear the reference only in onclose callback
+            // This ensures the WebSocket is truly closed before any new connection is created
+            if (wsRef.current === session) {
+              wsRef.current = null;
+              isClosingSessionRef.current = false;  // Cleanup complete
+            }
+            
+            stateRef.current = "idle";
+            setState("idle");
+            emitConnectionChange(false);
+
+            const shouldReconnect =
+              !manualDisconnectRef.current &&
+              event.code !== 1000 &&
+              event.code !== 1001 &&
+              event.code !== 1007 &&
+              event.code !== 1008;
+
+            if (shouldReconnect) {
+              scheduleReconnect(800);
+            }
+          },
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          temperature: 0.6,
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName },
             },
           },
-        };
+          contextWindowCompression: {
+            triggerTokens: "104857",
+            slidingWindow: { targetTokens: "52428" },
+          },
+          realtimeInputConfig: {
+            automaticActivityDetection: { disabled: false },
+          },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          ...(sessionHandleRef.current
+            ? { sessionResumption: { handle: sessionHandleRef.current } }
+            : { sessionResumption: {} }),
+        },
+      });
 
-        console.log("[GeminiLive] Setup message:", JSON.stringify(setupMessage, null, 2));
-        ws.send(JSON.stringify(setupMessage));
-        startSetupTimeout(currentGeneration);
+      wsRef.current = session;
+      registerGlobalSession(session);
 
-      };
-
-      ws.onmessage = (event) => {
-        if (currentGeneration !== wsGenerationRef.current) return;
-        void handleServerMessage(event.data);
-      };
-
-      ws.onerror = (event) => {
-        if (currentGeneration !== wsGenerationRef.current) return;
-        console.error("[GeminiLive] WebSocket error:", event);
-        // Let onclose drive terminal connection state transitions.
-        // Browsers may emit transient socket errors before/without immediate close.
-        if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-          return;
-        }
-        setError("Transient network issue detected. Attempting to recover...");
-      };
-
-      ws.onclose = (event) => {
-        if (currentGeneration !== wsGenerationRef.current) return;
-
-        console.log("[GeminiLive] WebSocket closed, code:", event.code, "reason:", event.reason);
-        clearSetupTimeout();
-        stopMic();
-        socketPoolRef.current.delete(ws);
-        unregisterGlobalSocket(ws);
-        if (wsRef.current === ws) {
-          wsRef.current = null;
-        }
-        stateRef.current = "idle";
-        setState("idle");
-        emitConnectionChange(false);
-
-        const shouldReconnect =
-          !manualDisconnectRef.current &&
-          event.code !== 1000 &&
-          event.code !== 1001 &&
-          event.code !== 1007 &&
-          event.code !== 1008;
-
-        if (shouldReconnect) {
-          scheduleReconnect(800);
-        }
-      };
     } catch (err) {
       if (connectAbortRef.current === abortController) {
         connectAbortRef.current = null;
@@ -905,6 +920,15 @@ export function GeminiLiveStandalone(
 
   function clearPlaybackQueue() {
     if (!audioContextRef.current) return;
+    // Stop all scheduled audio sources immediately
+    for (const source of activeAudioSourcesRef.current) {
+      try {
+        source.stop();
+      } catch {
+        // Ignore if already stopped
+      }
+    }
+    activeAudioSourcesRef.current = [];
     playbackTimeRef.current = audioContextRef.current.currentTime;
   }
 
@@ -942,6 +966,14 @@ export function GeminiLiveStandalone(
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(audioContext.destination);
+
+    // Track source to allow stopping on interrupt
+    activeAudioSourcesRef.current.push(source);
+    source.onended = () => {
+      activeAudioSourcesRef.current = activeAudioSourcesRef.current.filter(
+        (s) => s !== source,
+      );
+    };
 
     const now = audioContext.currentTime + 0.01;
     const startAt = Math.max(playbackTimeRef.current, now);
@@ -1000,19 +1032,12 @@ export function GeminiLiveStandalone(
     }
 
     if (!functionResponses.length) return;
-    wsRef.current?.send(
-      JSON.stringify({ toolResponse: { functionResponses } }),
-    );
+    wsRef.current?.sendToolResponse({ functionResponses });
   }
 
-  async function handleServerMessage(rawData: unknown) {
+  function handleServerMessage(message: LiveServerMessage) {
     try {
-      const messageText = await decodeWebSocketMessageData(rawData);
-      const payload = JSON.parse(messageText) as Record<string, unknown>;
-
-      console.log("[GeminiLive] Server message keys:", Object.keys(payload));
-
-      if (payload.setupComplete) {
+      if (message.setupComplete) {
         if (!props.autoConnect) return;
         clearSetupTimeout();
 
@@ -1023,80 +1048,30 @@ export function GeminiLiveStandalone(
         emitConnectionChange(true);
         addMessage("system", "Gemini Live session connected.");
 
-        const shouldSeedHistory = false;
-
-        const connectGreetingText =
-          props.connectGreeting?.trim() || DEFAULT_CONNECT_GREETING;
-        let sentGreeting = false;
-        if (!hasSentGreetingRef.current && connectGreetingText) {
-          hasSentGreetingRef.current = true;
-          const greetingDelayMs = 0;
-          if (greetingDelayMs > 0) {
-            const generation = wsGenerationRef.current;
-            clearDelayedGreetingTimer();
-            delayedGreetingTimerRef.current = globalThis.setTimeout(() => {
-              delayedGreetingTimerRef.current = null;
-              if (!props.autoConnect) return;
-              if (generation !== wsGenerationRef.current) return;
-              if (stateRef.current !== "connected") return;
-              sendRealtimeInput({ text: connectGreetingText });
-            }, greetingDelayMs);
-          } else {
-            sendRealtimeInput({ text: connectGreetingText });
-          }
-          sentGreeting = true;
-        }
+        hasSentGreetingRef.current = true;
 
         if (shouldAutoStartMicRef.current && !micEnabled) {
           shouldAutoStartMicRef.current = false;
-
-          let micStartDelayMs = 0;
-          if (sentGreeting) {
-            const greetingDelayMs = 0;
-            micStartDelayMs = Math.max(micStartDelayMs, greetingDelayMs + 900);
-          }
-
-          if (micStartDelayMs > 0) {
-            const generation = wsGenerationRef.current;
-            clearDelayedMicStartTimer();
-            delayedMicStartTimerRef.current = globalThis.setTimeout(() => {
-              delayedMicStartTimerRef.current = null;
-              if (!props.autoConnect) return;
-              if (generation !== wsGenerationRef.current) return;
-              if (stateRef.current !== "connected") return;
-              if (mediaStreamRef.current) return;
-              void startMic();
-            }, micStartDelayMs);
-          } else {
-            void startMic();
-          }
+          void startMic();
         }
       }
 
-      const resumptionUpdate = payload.sessionResumptionUpdate as
-        | { newHandle?: string; resumable?: boolean }
-        | undefined;
+      const resumptionUpdate = message.sessionResumptionUpdate;
       if (resumptionUpdate?.resumable && resumptionUpdate.newHandle) {
         sessionHandleRef.current = resumptionUpdate.newHandle;
       }
 
-      if (payload.goAway) {
-        console.warn("[GeminiLive] ⚠ Server sent GoAway:", payload.goAway);
+      if (message.goAway) {
+        console.warn("[GeminiLive] ⚠ Server sent GoAway:", message.goAway);
         setError("Session ended by server (GoAway message received)");
       }
 
-      const serverContent = payload.serverContent as
-        | {
-          interrupted?: boolean;
-          inputTranscription?: { text?: string };
-          outputTranscription?: { text?: string };
-          modelTurn?: { parts?: Array<Record<string, unknown>> };
-        }
-        | undefined;
+      const serverContent = message.serverContent;
 
       if (serverContent?.interrupted) {
         console.log("[GeminiLive] Stream interrupted by server");
         clearPlaybackQueue();
+        modelIsSpeakingRef.current = false;
       }
 
       const inputText = serverContent?.inputTranscription?.text;
@@ -1109,49 +1084,60 @@ export function GeminiLiveStandalone(
       if (outputText) {
         console.log("[GeminiLive] Assistant response:", outputText);
         props.onOutputTranscription?.(outputText);
-        addMessage("assistant", outputText);
+        const messageId = addMessage("assistant", outputText);
+        if (messageId) currentAssistantMessageIdRef.current = messageId;
       }
 
       const parts = serverContent?.modelTurn?.parts ?? [];
+      let modelHasContent = false;
       for (const part of parts) {
-        const inlineData = part.inlineData as { data?: string } | undefined;
-        if (inlineData?.data) {
+        if (part.inlineData?.data) {
           console.log("[GeminiLive] Audio chunk received");
-          enqueuePcm24k(inlineData.data);
+          modelHasContent = true;
+          // Capture audio chunk for persistence
+          audioChunksRef.current.push(part.inlineData.data);
+          enqueuePcm24k(part.inlineData.data);
         }
-        const textPart = part.text;
-        if (typeof textPart === "string" && textPart.trim()) {
-          addMessage("assistant", textPart);
+        if (typeof part.text === "string" && part.text.trim()) {
+          modelHasContent = true;
+          const messageId = addMessage("assistant", part.text);
+          if (messageId) currentAssistantMessageIdRef.current = messageId;
+        }
+      }
+      // Track when model is actively generating content for barge-in detection
+      if (modelHasContent || serverContent?.modelTurn) {
+        modelIsSpeakingRef.current = true;
+      }
+      if (serverContent?.generationComplete) {
+        modelIsSpeakingRef.current = false;
+        // Save audio chunks after generation completes
+        if (audioChunksRef.current.length > 0) {
+          void saveAudioToStorage();
         }
       }
 
-      const toolCall = payload.toolCall as
-        | { functionCalls?: unknown[] }
-        | undefined;
+      const toolCall = message.toolCall;
       if (toolCall?.functionCalls?.length) {
         console.log("[GeminiLive] Tool call:", toolCall.functionCalls.length, "function(s)");
         void executeToolCalls(toolCall.functionCalls);
       }
     } catch (err) {
-      console.error("[GeminiLiveStandalone] Failed to parse server message", err);
+      console.error("[GeminiLiveStandalone] Failed to handle server message", err);
     }
-  }
-
-  function sendRealtimeInput(payload: Record<string, unknown>) {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) {
-      setError("Session is not connected.");
-      return;
-    }
-    wsRef.current.send(JSON.stringify({ realtimeInput: payload }));
   }
 
   function sendPcmChunk(pcm: Int16Array) {
+    if (!wsRef.current) {
+      setError("Session is not connected.");
+      return;
+    }
+
     const bytesSent = pcm.length * 2;
     micBytesThisSecondRef.current += bytesSent;
     totalMicBytesSentRef.current += bytesSent;
 
     const base64 = pcmToBase64(pcm);
-    sendRealtimeInput({
+    wsRef.current.sendRealtimeInput({
       audio: {
         data: base64,
         mimeType: `audio/pcm;rate=${LIVE_INPUT_SAMPLE_RATE}`,
@@ -1205,14 +1191,109 @@ export function GeminiLiveStandalone(
   function sendText() {
     const text = textInput.trim();
     if (!text) return;
-    sendRealtimeInput({ text });
+    if (!wsRef.current) {
+      setError("Session is not connected.");
+      return;
+    }
+    wsRef.current.sendRealtimeInput({ text });
     addMessage("user", text);
     setTextInput("");
   }
 
+  async function saveAudioToStorage() {
+    const chunks = audioChunksRef.current;
+    const messageId = currentAssistantMessageIdRef.current;
+    audioChunksRef.current = [];
+    currentAssistantMessageIdRef.current = null;
+
+    if (!chunks.length || !messageId) return;
+
+    try {
+      const resolvedSessionId = props.sessionId || props.title || "session";
+      const response = await fetch("/api/sessions/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: resolvedSessionId,
+          messageId,
+          audioChunks: chunks,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(
+          "[GeminiLive] Failed to save audio:",
+          await response.text(),
+        );
+        return;
+      }
+
+      const data = (await response.json()) as {
+        audioParts?: AudioPart[];
+        totalDuration?: number;
+      };
+
+      if (data.audioParts && data.audioParts.length > 0) {
+        // Store audio parts and update the message with them
+        pendingAudioPartsRef.current = data.audioParts as AudioPart[];
+        console.log(
+          "[GeminiLive] Audio saved:",
+          data.totalDuration,
+          "seconds, messageId:",
+          messageId,
+        );
+
+        // Update the message with audio parts
+        if (messageId) {
+          let updatedMsg: GeminiLiveMessage | null = null;
+          setMessages((prev) => {
+            const updated = prev.map((msg) => {
+              if (msg.id === messageId) {
+                const newMsg: GeminiLiveMessage = {
+                  ...msg,
+                  parts: [
+                    { type: "text" as const, text: msg.text },
+                    ...data.audioParts!,
+                  ],
+                };
+                console.log(
+                  "[GeminiLive] Updated message:",
+                  newMsg.id,
+                  "with",
+                  newMsg.parts?.length ?? 0,
+                  "parts",
+                );
+                updatedMsg = newMsg;
+                return newMsg;
+              }
+              return msg;
+            });
+            return updated;
+          });
+
+          // Notify parent immediately that message with audio is ready
+          if (updatedMsg && props.onMessageWithAudio) {
+            const msg = updatedMsg as GeminiLiveMessage;
+            void props.onMessageWithAudio({
+              id: msg.id,
+              text: msg.text,
+              parts: msg.parts || [],
+            });
+          }
+        } else {
+          console.warn(
+            "[GeminiLive] No messageId found for audio attachment",
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[GeminiLive] Error saving audio:", err);
+    }
+  }
+
   async function startMic() {
     if (micEnabled) return;
-    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+    if (!wsRef.current) {
       setError("Connect Gemini Live before starting microphone.");
       return;
     }
@@ -1243,6 +1324,15 @@ export function GeminiLiveStandalone(
 
       const workletNode = await createPcmWorkletNode(audioContext);
       workletNodeRef.current = workletNode;
+      
+      // Initialize local VAD for instant speech detection and barge-in
+      vadRef.current = new LocalVAD({
+        sensitivity: 0.6, // 0.6 = balanced, catches normal speech
+        minRmsThreshold: 0.001,
+        silenceGraceMs: 100, // Reduced from 300ms for faster barge-in response
+        noiseFloorAlpha: 0.1,
+      });
+      
       startMicStatsTicker();
 
       workletNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
@@ -1269,6 +1359,18 @@ export function GeminiLiveStandalone(
         }
 
         const pcm = floatToPcm16(resampled);
+        
+        // Process VAD for instant barge-in detection
+        if (vadRef.current) {
+          const isUserSpeaking = vadRef.current.process(pcm);
+          
+          // Interrupt model immediately when user speaks while model is responding
+          if (isUserSpeaking && modelIsSpeakingRef.current && wsRef.current) {
+            console.log("[GeminiLive] User speech detected — interrupting model (local VAD)");
+            wsRef.current.sendRealtimeInput({});
+          }
+        }
+        
         queueMicPcm(pcm);
       };
 
@@ -1288,6 +1390,17 @@ export function GeminiLiveStandalone(
   function stopMic() {
     flushPendingMicPcm();
     stopMicStatsTicker();
+    
+    // Stop all playing audio sources
+    clearPlaybackQueue();
+
+    // Reset VAD state
+    if (vadRef.current) {
+      vadRef.current.reset();
+      vadRef.current = null;
+    }
+    
+    modelIsSpeakingRef.current = false;
 
     if (workletNodeRef.current) {
       workletNodeRef.current.port.onmessage = null;
@@ -1307,10 +1420,8 @@ export function GeminiLiveStandalone(
       mediaStreamRef.current = null;
     }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({ realtimeInput: { audioStreamEnd: true } }),
-      );
+    if (wsRef.current) {
+      wsRef.current.sendRealtimeInput({ audioStreamEnd: true });
     }
 
     setMicEnabled(false);
@@ -1391,8 +1502,7 @@ export function GeminiLiveStandalone(
             data={VOICE_OPTIONS}
             value={selectedVoice || null}
             onChange={(v) => setSelectedVoice(v ?? "")}
-            disabled={true}
-            title="Voice selection not yet supported in Live API v1alpha"
+            disabled={state === "connected" || state === "connecting"}
             clearable
             style={{ flex: 1, minWidth: 160 }}
             leftSection={<IconVolume size={14} />}
@@ -1489,7 +1599,37 @@ export function GeminiLiveStandalone(
                     <Text size="xs" fw={700} c="dimmed" mb={2}>
                       {label}
                     </Text>
-                    <Text size="sm">{message.text}</Text>
+                    {message.text && <Text size="sm">{message.text}</Text>}
+                    {message.parts && message.parts.length > 0 && (
+                      <>
+                        {console.log(
+                          "[GeminiLive] Rendering message parts:",
+                          message.parts,
+                        )}
+                        {message.parts.map((part, idx) => {
+                          console.log(
+                            "[GeminiLive] Part:",
+                            idx,
+                            "type:",
+                            (part as Record<string, unknown>).type,
+                          );
+                          if (isAudioPart(part)) {
+                            console.log(
+                              "[GeminiLive] Rendering audio player for part",
+                              idx,
+                            );
+                            return (
+                              <Box key={`audio-${idx}`} mt="sm">
+                                <Text size="sm" c="dimmed">
+                                  Audio: {part.duration}s @ {part.sampleRate}Hz
+                                </Text>
+                              </Box>
+                            );
+                          }
+                          return null;
+                        })}
+                      </>
+                    )}
                   </Paper>
                 );
               })}

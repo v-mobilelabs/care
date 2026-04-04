@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Timestamp } from "firebase-admin/firestore";
+import type { SessionLiveConfig } from "./session-live-config";
 
 export interface SessionGroundingEvaluation {
   stage: "initial" | "internal-repair" | "web-fallback" | "failed";
@@ -47,6 +48,8 @@ export interface SessionDocument {
   };
   /** Latest strong grounding context available for reuse in this session. */
   groundingCache?: SessionGroundingCacheDocument[];
+  /** Optional live session configuration and metadata. */
+  liveConfig?: SessionLiveConfig;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

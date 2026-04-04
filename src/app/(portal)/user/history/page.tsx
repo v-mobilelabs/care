@@ -42,7 +42,7 @@ async function HistoryData({
 
 // ── History page (SSR) ────────────────────────────────────────────────────────
 interface HistoryPageProps {
-    searchParams?: Promise<{ q?: string; agent?: string; sortDir?: string }>;
+    searchParams?: Promise<{ q?: string; f?: string; s?: string }>;
 }
 
 function normalizeSortDir(value?: string): "asc" | "desc" {
@@ -56,8 +56,8 @@ export default async function HistoryPage({
     const params = await searchParams;
     const filters: HistoryInitialFilters = {
         q: params?.q?.trim() || undefined,
-        agent: params?.agent && params.agent !== "all" ? params.agent : "all",
-        sortDir: normalizeSortDir(params?.sortDir),
+        agent: params?.f && params.f !== "all" ? params.f : "all",
+        sortDir: normalizeSortDir(params?.s),
     };
 
     const user = await getServerUser();

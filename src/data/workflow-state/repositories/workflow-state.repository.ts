@@ -12,6 +12,11 @@ import {
   type WorkflowThreadDocument,
   type WorkflowThreadDto,
 } from "../models/workflow-state.model";
+import {
+  toAgentCheckpointDto,
+  type AgentCheckpointDocument,
+  type AgentCheckpointDto,
+} from "../models/agent-checkpoint.model";
 
 const DEFAULT_THREAD_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_CHECKPOINT_TTL_SECONDS = 14 * 24 * 60 * 60;
@@ -95,7 +100,11 @@ export const workflowStateRepository = {
 
     const doc = snap.data() as WorkflowThreadDocument;
     const nowMillis = Timestamp.now().toMillis();
-    if (doc.expiresAt.toMillis() <= nowMillis) return null;
+    const expiresAtMillis =
+      doc.expiresAt && typeof doc.expiresAt.toMillis === "function"
+        ? doc.expiresAt.toMillis()
+        : 0;
+    if (expiresAtMillis <= nowMillis) return null;
     return toWorkflowThreadDto(doc.threadId, doc);
   },
 
@@ -151,6 +160,8 @@ export const workflowStateRepository = {
     const nowMillis = Timestamp.now().toMillis();
     const active = (snap.docs as QueryDocumentSnapshot[]).find((docSnap) => {
       const doc = docSnap.data() as WorkflowCheckpointDocument;
+      if (!doc.expiresAt || typeof doc.expiresAt.toMillis !== "function")
+        return false;
       return doc.expiresAt.toMillis() > nowMillis;
     });
 
@@ -159,5 +170,126 @@ export const workflowStateRepository = {
       active.id,
       active.data() as WorkflowCheckpointDocument,
     );
+  },
+
+  /**
+   * Save an agent execution checkpoint (inter-node checkpointing).
+   * Called after each tool execution to enable resumption if persistence fails.
+   */
+  async saveAgentCheckpoint(args: {
+    userId: string;
+    profileId: string;
+    sessionId: string;
+    threadId: string;
+    checkpointId: string;
+    nodeName: string;
+    workflowName: string;
+    state: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    expiresAt?: Date;
+    ttlSeconds?: number;
+  }): Promise<AgentCheckpointDto> {
+    const ref = checkpointsCol(
+      args.profileId,
+      args.sessionId,
+      args.threadId,
+    ).doc(args.checkpointId);
+
+    const now = Timestamp.now();
+    const resolvedExpiresAt = args.expiresAt
+      ? Timestamp.fromDate(args.expiresAt)
+      : addTtl(now, args.ttlSeconds ?? DEFAULT_CHECKPOINT_TTL_SECONDS);
+
+    const doc = stripUndefined({
+      userId: args.userId,
+      profileId: args.profileId,
+      sessionId: args.sessionId,
+      threadId: args.threadId,
+      checkpointId: args.checkpointId,
+      nodeName: args.nodeName,
+      workflowName: args.workflowName,
+      state: args.state,
+      values: null,
+      pendings: null,
+      nextConfig: null,
+      metadata: args.metadata,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: resolvedExpiresAt,
+    }) as unknown as AgentCheckpointDocument;
+
+    await ref.set(doc, { merge: true });
+    return toAgentCheckpointDto(doc);
+  },
+
+  /**
+   * Load a specific agent checkpoint by checkpointId or get latest.
+   */
+  async loadAgentCheckpoint(args: {
+    profileId: string;
+    sessionId: string;
+    threadId: string;
+    checkpointId?: string;
+  }): Promise<AgentCheckpointDto | null> {
+    const col = checkpointsCol(args.profileId, args.sessionId, args.threadId);
+
+    let snap;
+    if (args.checkpointId) {
+      snap = await col.doc(args.checkpointId).get();
+    } else {
+      // Latest checkpoint
+      const snaps = await col.orderBy("createdAt", "desc").limit(1).get();
+      if (snaps.empty) return null;
+      snap = snaps.docs[0];
+    }
+
+    if (!snap.exists) return null;
+
+    const doc = snap.data() as AgentCheckpointDocument;
+    const nowMillis = Timestamp.now().toMillis();
+
+    // Check if expired — treat missing expiresAt as expired
+    const expiresAtMillis =
+      doc.expiresAt && typeof doc.expiresAt.toMillis === "function"
+        ? doc.expiresAt.toMillis()
+        : 0;
+    if (expiresAtMillis <= nowMillis) return null;
+
+    return toAgentCheckpointDto(doc);
+  },
+
+  /**
+   * List all checkpoints for a thread, ordered by creation time.
+   */
+  async listCheckpointsForThread(args: {
+    profileId: string;
+    sessionId: string;
+    threadId: string;
+    limit?: number;
+  }): Promise<AgentCheckpointDto[]> {
+    const snaps = await checkpointsCol(
+      args.profileId,
+      args.sessionId,
+      args.threadId,
+    )
+      .orderBy("createdAt", "desc")
+      .limit(args.limit ?? 25)
+      .get();
+
+    const nowMillis = Timestamp.now().toMillis();
+    const checkpoints: AgentCheckpointDto[] = [];
+
+    for (const docSnap of snaps.docs) {
+      const doc = docSnap.data() as AgentCheckpointDocument;
+      const expiresAtMillis =
+        doc.expiresAt && typeof doc.expiresAt.toMillis === "function"
+          ? doc.expiresAt.toMillis()
+          : 0;
+      if (expiresAtMillis > nowMillis) {
+        checkpoints.push(toAgentCheckpointDto(doc));
+      }
+    }
+
+    return checkpoints;
   },
 };

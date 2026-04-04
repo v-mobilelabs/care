@@ -4,6 +4,9 @@ import {
   GeminiLiveTokenService,
   type GeminiLiveTokenResult,
 } from "@/data/live/service/gemini-live-token.service";
+import { GeminiLiveSystemInstructionService } from "@/data/live/service/gemini-live-system-instruction.service";
+import { GetProfileUseCase } from "@/data/profile";
+import { GetPatientUseCase } from "@/data/patients";
 
 const CreateGeminiLiveTokenSchema = z.object({
   userId: z.string().min(1),
@@ -42,6 +45,36 @@ export class CreateGeminiLiveTokenUseCase extends UseCase<
   protected async run(
     input: CreateGeminiLiveTokenInput,
   ): Promise<CreateGeminiLiveTokenOutput> {
+    // Fetch user profile and patient health data server-side
+    const profileUseCase = new GetProfileUseCase();
+    const patientUseCase = new GetPatientUseCase();
+
+    const [profile, patient] = await Promise.all([
+      profileUseCase.execute({ userId: input.userId }),
+      patientUseCase.execute({ userId: input.userId }),
+    ]);
+
+    // Build UserProfileContext from fetched data
+    const userProfileContext = {
+      name: profile?.name,
+      dateOfBirth: profile?.dateOfBirth,
+      gender: profile?.gender,
+      city: profile?.city,
+      country: profile?.country,
+      heightCm: patient?.height,
+      weightKg: patient?.weight,
+      activityLevel: patient?.activityLevel,
+      bloodGroup: patient?.bloodGroup,
+      allergies: patient?.allergies,
+    };
+
+    const siService = new GeminiLiveSystemInstructionService();
+    const systemInstruction = siService.buildSystemInstruction({
+      profile: userProfileContext,
+      language: "English",
+      platformName: "CareAI",
+    });
+
     const token: GeminiLiveTokenResult =
       await this.service.createEphemeralToken({
         model: input.model,
@@ -49,6 +82,7 @@ export class CreateGeminiLiveTokenUseCase extends UseCase<
         temperature: input.temperature,
         sessionDurationMinutes: input.sessionDurationMinutes,
         newSessionWindowSeconds: input.newSessionWindowSeconds,
+        systemInstruction,
       });
 
     const wsUrl =

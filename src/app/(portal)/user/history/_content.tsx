@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     Badge,
     Box,
@@ -7,21 +8,19 @@ import {
     Divider,
     Group,
     Loader,
-    Paper,
     ScrollArea,
-    SegmentedControl,
     Skeleton,
     Stack,
     Text,
-    TextInput,
     ThemeIcon,
     Title,
 } from "@mantine/core";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { ListToolbar } from "@/ui/components/list-toolbar";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconMessageSearch, IconSearch } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { IconCheck, IconMessageSearch } from "@tabler/icons-react";
+import { useEffect, useRef } from "react";
 import {
     useInfiniteSessionsQuery,
     useDeleteSessionMutation,
@@ -73,16 +72,11 @@ const FILTER_OPTIONS = [
     { label: "Lab Report", value: "labReport" },
 ];
 
-const SORT_OPTIONS = [
-    { label: "Newest", value: "desc" },
-    { label: "Oldest", value: "asc" },
-];
-
 function HistoryLegend() {
     return (
-        <Paper withBorder radius="lg" p="md">
-            <Stack gap="sm">
-                <Stack gap={4}>
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder shadow="xs" radius="lg" p="lg" style={{ borderColor: "light-dark(var(--mantine-color-gray-2), var(--mantine-color-gray-8))" }}>
+            <Stack gap="md">
+                <Stack gap="xs">
                     <Text fw={600} size="sm">
                         How to use history
                     </Text>
@@ -109,7 +103,7 @@ function HistoryLegend() {
                     clarifications.
                 </Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -122,12 +116,10 @@ export interface HistoryInitialFilters {
 // ── Content (client) ──────────────────────────────────────────────────────────
 
 export function HistoryContent({
-    initialFilters,
+    initialFilters: _initialFilters,
 }: Readonly<{ initialFilters?: HistoryInitialFilters }>) {
-    const [query, setQuery] = useState(initialFilters?.q ?? "");
-    const [debouncedQuery] = useDebouncedValue(query, 250);
-    const [agentFilter, setAgentFilter] = useState(initialFilters?.agent ?? "all");
-    const [sortDir, setSortDir] = useState<"asc" | "desc">(initialFilters?.sortDir ?? "desc");
+    const { search, filter: agentFilter, sortAsc, setFilters } = useUrlFilters<string>();
+    const sortDir = sortAsc ? "asc" : "desc";
 
     const {
         data,
@@ -137,7 +129,7 @@ export function HistoryContent({
         fetchNextPage,
     } = useInfiniteSessionsQuery({
         agent: agentFilter === "all" ? undefined : agentFilter,
-        q: debouncedQuery.trim() || undefined,
+        q: search.trim() || undefined,
         sortDir,
     });
     const deleteSession = useDeleteSessionMutation();
@@ -169,6 +161,13 @@ export function HistoryContent({
             confirmProps: { color: "red" },
             onConfirm: () => {
                 deleteSession.mutate(id, {
+                    onSuccess: () =>
+                        notifications.show({
+                            title: "Deleted",
+                            message: "Session has been removed.",
+                            color: colors.success,
+                            icon: <IconCheck size={16} />,
+                        }),
                     onError: () =>
                         notifications.show({
                             title: "Delete failed",
@@ -181,7 +180,7 @@ export function HistoryContent({
     }
 
     return (
-        <Container pt="md">
+        <Container pt="lg" pb="lg">
             <Stack>
                 {/* Header */}
                 <Group justify="space-between" align="center">
@@ -201,36 +200,19 @@ export function HistoryContent({
 
                 <HistoryLegend />
 
-                {/* Search + Filter */}
-                <Stack gap="sm">
-                    <TextInput
-                        placeholder="Search sessions by title…"
-                        leftSection={<IconSearch size={15} />}
-                        value={query}
-                        onChange={(e) => setQuery(e.currentTarget.value)}
-                        radius="md"
-                        size="sm"
-                    />
-                    <ScrollArea type="never">
-                        <SegmentedControl
-                            value={agentFilter}
-                            onChange={setAgentFilter}
-                            data={FILTER_OPTIONS}
-                            size="xs"
-                            radius="md"
-                        />
-                    </ScrollArea>
-                    <SegmentedControl
-                        value={sortDir}
-                        onChange={(value) => setSortDir(value as "asc" | "desc")}
-                        data={SORT_OPTIONS}
-                        size="xs"
-                        radius="md"
-                    />
-                </Stack>
+                <ListToolbar<string>
+                    searchPlaceholder="Search sessions by title…"
+                    search={search}
+                    onSearchChange={(v) => setFilters({ q: v, p: 1 })}
+                    filter={agentFilter || "all"}
+                    onFilterChange={(v) => setFilters({ f: v, p: 1 })}
+                    filterData={FILTER_OPTIONS}
+                    sortAsc={sortAsc}
+                    onSortAscChange={(asc) => setFilters({ s: asc ? "asc" : "desc", p: 1 })}
+                />
 
                 {/* Content */}
-                <Box style={{ flex: 1, overflow: "hidden" }}>
+                <Box style={{ flex: 1, overflow: "hidden" }} mt="md">
                     <ScrollArea style={{ height: "100%" }}>
                         <Box>
                             {/* Loading skeletons */}
@@ -249,7 +231,7 @@ export function HistoryContent({
                                         <IconMessageSearch size={24} />
                                     </ThemeIcon>
                                     {(() => {
-                                        const hasFilters = debouncedQuery.length > 0 || agentFilter !== "all";
+                                        const hasFilters = search.length > 0 || agentFilter !== "all";
 
                                         if (hasFilters) {
                                             return (
@@ -297,13 +279,13 @@ export function HistoryContent({
                                             if (items.length === 0) continue;
                                             sections.push(
                                                 <Box key={group}>
-                                                    <Group gap="xs" mb="sm">
+                                                    <Group gap="xs" mb="md">
                                                         <Text size="xs" c="dimmed" fw={600} style={{ textTransform: "uppercase", letterSpacing: "0.6px" }}>
                                                             {group}
                                                         </Text>
                                                         <Divider style={{ flex: 1 }} />
                                                     </Group>
-                                                    <Stack gap="sm">
+                                                    <Stack gap="xs">
                                                         {items.map((s) => (
                                                             <SessionRow
                                                                 key={s.id}

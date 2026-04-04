@@ -3,6 +3,7 @@ import { Box, Stack } from "@mantine/core";
 import type { UIMessage, UIMessagePart, UIDataTypes, UITools } from "ai";
 import { ToolPartRenderer } from "@/ui/ai/tools";
 import { FileMessage, TextMessage } from "@/ui/ai/components/message";
+import { AudioPlayer } from "@/ui/ai/components/audio-player";
 import { ReasoningBlock } from "@/ui/ai/components/reasoning-block";
 import { DateSeparator } from "@/ui/ai/components/date-separator";
 import { AgentRoutingBadge } from "@/ui/chat/components/agent-routing-badge";
@@ -130,7 +131,22 @@ export function MessageRow({
                     );
                 }
 
-                if (!isUser && part.type.startsWith("tool-")) {
+                if (!isUser && (part as unknown as { type?: string }).type === "audio") {
+                    const audioPart = part as unknown as { type: "audio"; duration?: number; mimeType?: string; storagePath?: string };
+                    return (
+                        <Box key={i}>
+                            <AudioPlayer
+                                storagePath={audioPart.storagePath}
+                                sessionId={sessionId}
+                                messageId={msg.id}
+                                duration={audioPart.duration}
+                                mimeType={audioPart.mimeType}
+                            />
+                        </Box>
+                    );
+                }
+
+                if (!isUser && (part as unknown as { type?: string }).type?.startsWith("tool-")) {
                     return (
                         <Box key={i}>
                             <ToolPartRenderer

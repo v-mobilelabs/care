@@ -6,6 +6,7 @@ import type {
   AddMessageInput,
   ListMessagesInput,
 } from "../models/message.model";
+import { inferKindFromContent } from "../models/message.model";
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -14,18 +15,29 @@ export class MessageService {
    * Add a message to a session and atomically bump the session's
    * `messageCount` and `updatedAt` fields.
    * When usage is present (assistant messages), also accumulates totalUsage.
+   * If id is provided, uses that as the Firestore document ID (typically for audio messages).
    */
   async add(input: AddMessageInput): Promise<MessageDto> {
     const { userId, profileId, sessionId } = input;
     const lastMessagePreview = buildMessagePreview(input.content);
 
+    // Infer kind from content if not explicitly provided
+    const kind = input.kind ?? inferKindFromContent(input.content);
+
     const writes: Promise<unknown>[] = [
-      messageRepository.add(userId, profileId, sessionId, {
-        role: input.role,
-        content: input.content,
-        usage: input.usage,
-        agentType: input.agentType,
-      }),
+      messageRepository.add(
+        userId,
+        profileId,
+        sessionId,
+        {
+          role: input.role,
+          kind,
+          content: input.content,
+          usage: input.usage,
+          agentType: input.agentType,
+        },
+        input.id,
+      ),
       sessionRepository.incrementMessageCount(
         userId,
         profileId,

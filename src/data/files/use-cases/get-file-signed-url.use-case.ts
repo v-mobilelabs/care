@@ -27,19 +27,19 @@ export class GetFileSignedUrlUseCase extends UseCase<
   }
 
   protected async run(input: GetFileSignedUrlInput): Promise<string> {
-    const storagePath = await this.resolveStoragePath(input);
-    if (!storagePath) {
+    const path = await this.resolvePath(input);
+    if (!path) {
       throw new Error("FILE_NOT_FOUND");
     }
 
-    const [url] = await bucket.file(storagePath).getSignedUrl({
+    const [url] = await bucket.file(path).getSignedUrl({
       action: "read" as const,
       expires: Date.now() + SIGNED_URL_EXPIRY_MS,
     });
     return url;
   }
 
-  private async resolveStoragePath(
+  private async resolvePath(
     input: GetFileSignedUrlInput,
   ): Promise<string | null> {
     // 1. Files — direct lookup under current profile
@@ -47,14 +47,14 @@ export class GetFileSignedUrlUseCase extends UseCase<
       input.profileId,
       input.fileId,
     );
-    if (file) return file.storagePath;
+    if (file) return file.path;
 
     // 2. Files — cross-profile collectionGroup query
     const crossProfile = await fileRepository.findByIdForUser(
       input.userId,
       input.fileId,
     );
-    if (crossProfile) return crossProfile.storagePath;
+    if (crossProfile) return crossProfile.path;
 
     return null;
   }

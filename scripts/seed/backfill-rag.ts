@@ -34,7 +34,6 @@ import {
   toAssessmentDto,
   type AssessmentDocument,
 } from "@/data/assessments/models/assessment.model";
-import type { ExtractedPrescriptionData } from "@/data/files";
 import type { PrescriptionDto } from "@/data/prescriptions/models/prescription.model";
 
 // ── Concurrency limiter ───────────────────────────────────────────────────────
@@ -161,32 +160,37 @@ async function backfillPrescriptions(
       const data = fileDoc.data() as {
         userId: string;
         name?: string;
-        extractedData?: ExtractedPrescriptionData;
+        data?: unknown;
         label?: string;
       };
-      if (!data.extractedData?.medications?.length) continue;
+      const extractedData = (data.data as Record<string, unknown>)?.medications
+        ? (data.data as Record<string, unknown>)
+        : null;
+      if (!(extractedData?.medications as Array<unknown>)?.length) continue;
       if (data.label && data.label !== "prescription") continue;
       rxTotal++;
       if (await isAlreadyIndexed(profileId, fileDoc.id)) continue;
+      const medications =
+        (extractedData?.medications as Array<Record<string, unknown>>) ?? [];
       const syntheticDto: PrescriptionDto = {
         id: fileDoc.id,
         userId: data.userId,
         fileId: fileDoc.id,
         source: "extracted",
-        medications: (data.extractedData?.medications ?? []).map((m) => ({
-          name: m.name,
-          dosage: m.dosage ?? "",
+        medications: medications.map((m) => ({
+          name: String(m.name ?? ""),
+          dosage: String(m.dosage ?? ""),
           form:
             (m.form as PrescriptionDto["medications"][number]["form"]) ??
             "Other",
-          frequency: m.frequency ?? "",
-          duration: m.duration ?? "",
-          instructions: m.instructions,
-          indication: m.condition ?? "",
+          frequency: String(m.frequency ?? ""),
+          duration: String(m.duration ?? ""),
+          instructions: String(m.instructions ?? ""),
+          indication: String((m.condition as string) ?? ""),
         })),
-        prescribedBy: data.extractedData?.prescribedBy,
-        prescriptionDate: data.extractedData?.date,
-        notes: data.extractedData?.notes,
+        prescribedBy: extractedData?.prescribedBy as string | undefined,
+        prescriptionDate: extractedData?.date as string | undefined,
+        notes: extractedData?.notes as string | undefined,
         createdAt: new Date().toISOString(),
       };
       await ragIndexer.indexPrescription(data.userId, profileId, syntheticDto);

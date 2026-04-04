@@ -8,6 +8,9 @@ import { actionCard } from "@/data/shared/service/agents/base/tools/action-card.
 import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
 import { submitReportTool } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import { submitReferralRequestTool } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
+import { createGetPatientProfileTool } from "@/data/shared/service/agents/global-tools/get-patient-profile.tool";
+import { createGetMedicationsTool } from "@/data/shared/service/agents/global-tools/get-medications.tool";
+import { createSearchPatientRecordsTool } from "@/data/shared/service/agents/global-tools/search-patient-records.tool";
 
 export type AgentThinkingLevel = "low" | "medium" | "high";
 
@@ -28,6 +31,10 @@ export interface AgentExecutionOptions {
   needsRag?: boolean;
   preContext?: PreRunContext;
   assessmentConfig?: AgentAssessmentConfig;
+  checkpointMetadata?: {
+    threadId: string;
+    checkpointPrefix: string; // e.g., "chat_${sessionId}_${agentType}"
+  };
 }
 
 export interface AgentExecutionGraphConfig {
@@ -60,6 +67,10 @@ export interface PreparedAgentRuntime {
   activeModelId: string;
   cacheName: string | null;
   trace: string[];
+  checkpointContext?: {
+    threadId: string;
+    checkpointPrefix: string;
+  };
 }
 
 interface AgentExecutionState {
@@ -121,27 +132,17 @@ function finalizeRuntimeNode(
       activeModelId: state.activeModelId,
       cacheName: state.cacheName,
       trace,
+      ...(state.options.checkpointMetadata
+        ? { checkpointContext: state.options.checkpointMetadata }
+        : {}),
     },
   };
 }
 
-export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
-  const AgentExecutionAnnotation = Annotation.Root({
-    options: Annotation<AgentExecutionOptions>(),
-    tools: Annotation<ToolSet>(),
-    staticPrompt: Annotation<string>(),
-    dynamicContext: Annotation<string>(),
-    thinkingLevel: Annotation<AgentThinkingLevel | undefined>(),
-    useFast: Annotation<boolean>(),
-    activeModelId: Annotation<string>(),
-    cacheName: Annotation<string | null>(),
-    trace: Annotation<string[]>(),
-    result: Annotation<PreparedAgentRuntime | null>(),
-  });
-
-  async function prepareContextNode(
+function makePrepareContextNode(config: AgentExecutionGraphConfig) {
+  return async (
     state: AgentExecutionState,
-  ): Promise<Partial<AgentExecutionState>> {
+  ): Promise<Partial<AgentExecutionState>> => {
     const enrichedOptions: AgentExecutionOptions = {
       ...state.options,
       ...(config.assessmentConfig
@@ -156,6 +157,12 @@ export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
           enrichedOptions.userId,
           enrichedOptions.profileId,
           enrichedOptions.sessionId,
+        ),
+        getPatientProfile: createGetPatientProfileTool(enrichedOptions.userId),
+        getMedications: createGetMedicationsTool(enrichedOptions.userId),
+        searchPatientRecords: createSearchPatientRecordsTool(
+          enrichedOptions.userId,
+          enrichedOptions.profileId,
         ),
         ...(config.allowActionCard ? { actionCard } : {}),
         submitReport: submitReportTool,
@@ -188,18 +195,12 @@ export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
     );
 
     const trace = [...state.trace, "prepare_context"];
+    return { tools, staticPrompt, dynamicContext, trace };
+  };
+}
 
-    return {
-      tools,
-      staticPrompt,
-      dynamicContext,
-      trace,
-    };
-  }
-
-  function selectModelNode(
-    state: AgentExecutionState,
-  ): Partial<AgentExecutionState> {
+function makeSelectModelNode(config: AgentExecutionGraphConfig) {
+  return (state: AgentExecutionState): Partial<AgentExecutionState> => {
     const thinkingLevel =
       state.options.thinkingLevel ?? (config.useThinking ? "high" : undefined);
     const useFast = thinkingLevel === "low";
@@ -213,18 +214,14 @@ export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
     }
 
     const trace = [...state.trace, "select_model"];
+    return { thinkingLevel, useFast, activeModelId, trace };
+  };
+}
 
-    return {
-      thinkingLevel,
-      useFast,
-      activeModelId,
-      trace,
-    };
-  }
-
-  async function resolveCacheNode(
+function makeResolveCacheNode(config: AgentExecutionGraphConfig) {
+  return async (
     state: AgentExecutionState,
-  ): Promise<Partial<AgentExecutionState>> {
+  ): Promise<Partial<AgentExecutionState>> => {
     try {
       const cacheKey = state.useFast ? `${config.id}:fast` : config.id;
       const cacheName = await getContextCache(
@@ -240,27 +237,35 @@ export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
 
       const stageId = cacheName ? "resolve_cache:hit" : "resolve_cache:miss";
       const trace = [...state.trace, stageId];
-
-      return {
-        cacheName,
-        trace,
-      };
+      return { cacheName, trace };
     } catch (error) {
       console.warn(`[${config.id}] Context cache unavailable, continuing`, {
         error,
       });
       const trace = [...state.trace, "resolve_cache:error"];
-      return {
-        cacheName: null,
-        trace,
-      };
+      return { cacheName: null, trace };
     }
-  }
+  };
+}
+
+export function createAgentExecutionGraph(config: AgentExecutionGraphConfig) {
+  const AgentExecutionAnnotation = Annotation.Root({
+    options: Annotation<AgentExecutionOptions>(),
+    tools: Annotation<ToolSet>(),
+    staticPrompt: Annotation<string>(),
+    dynamicContext: Annotation<string>(),
+    thinkingLevel: Annotation<AgentThinkingLevel | undefined>(),
+    useFast: Annotation<boolean>(),
+    activeModelId: Annotation<string>(),
+    cacheName: Annotation<string | null>(),
+    trace: Annotation<string[]>(),
+    result: Annotation<PreparedAgentRuntime | null>(),
+  });
 
   return new StateGraph(AgentExecutionAnnotation)
-    .addNode("prepare_context", prepareContextNode)
-    .addNode("select_model", selectModelNode)
-    .addNode("resolve_cache", resolveCacheNode)
+    .addNode("prepare_context", makePrepareContextNode(config))
+    .addNode("select_model", makeSelectModelNode(config))
+    .addNode("resolve_cache", makeResolveCacheNode(config))
     .addNode("finalize_runtime", finalizeRuntimeNode)
     .addEdge(START, "prepare_context")
     .addEdge("prepare_context", "select_model")

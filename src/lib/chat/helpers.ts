@@ -14,6 +14,13 @@ export interface MessageContext {
   hasAttachment: boolean;
 }
 
+/**
+ * Fallback query used when the last user message has no text parts
+ * (e.g. attachment-only messages). Exported so downstream code can detect
+ * "no real query" without duplicating the magic string.
+ */
+export const FALLBACK_USER_QUERY = "general health inquiry";
+
 // ── Main extractor ────────────────────────────────────────────────────────────
 
 /**
@@ -40,8 +47,7 @@ export function extractMessageContext(
   const lastUserParts =
     lastUserMsg?.parts.filter((p) => p.type !== "tool-result") ?? [];
 
-  const userQuery =
-    extractTextFromParts(lastUserParts) ?? "general health inquiry";
+  const userQuery = extractTextFromParts(lastUserParts) ?? FALLBACK_USER_QUERY;
   const storableParts = buildStorableParts(lastUserParts, attachmentUrls);
   const hasAttachment = lastUserParts.some((p) => {
     const t = p.type as string;

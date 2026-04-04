@@ -3,7 +3,6 @@ import {
     ActionIcon,
     Badge,
     Box,
-    Container,
     Group,
     Pagination,
     SegmentedControl,
@@ -14,6 +13,7 @@ import {
     Title,
     Tooltip,
 } from "@mantine/core";
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
 import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -147,11 +147,10 @@ function ConditionCard({
 export function ConditionsContent() {
     const { data: conditions = [], isLoading } = useConditionsQuery();
     const deleteMutation = useDeleteConditionMutation();
-    const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebouncedValue(search, 250);
-    const [filter, setFilter] = useState<StatusFilter>("all");
-    const [sortAsc, setSortAsc] = useState(false);
-    const [page, setPage] = useState(1);
+
+    const { search, filter, sortAsc, page, setFilters, setSearch, setPage, setSortAsc, setFilter } =
+        useUrlFilters<StatusFilter>();
+    const [debouncedSearch] = useDebouncedValue(search, 300);
 
     function handleDelete(id: string) {
         modals.openConfirmModal({
@@ -210,7 +209,7 @@ export function ConditionsContent() {
     const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     return (
-        <Container pt="md">
+        <Box pt="md">
             <Stack>
                 {/* Header */}
                 <Group justify="space-between">
@@ -229,7 +228,7 @@ export function ConditionsContent() {
                     <Tooltip label={sortAsc ? "Oldest first" : "Newest first"} withArrow>
                         <ActionIcon
                             variant="light"
-                            onClick={() => { setPage(1); setSortAsc((v) => !v); }}
+                            onClick={() => { setPage(1); setSortAsc(!sortAsc); }}
                         >
                             {sortAsc ? (
                                 <IconSortAscending size={16} />
@@ -281,6 +280,6 @@ export function ConditionsContent() {
                     </Group>
                 )}
             </Stack>
-        </Container>
+        </Box>
     );
 }

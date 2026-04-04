@@ -1,6 +1,11 @@
 /**
  * RAG Middleware — Injects patient medical records and clinical guidelines.
  *
+ * @deprecated No longer used in production. All agents now use `preContextMiddleware`
+ * (see `pre-context.middleware.ts`) which injects pre-fetched RAG context from
+ * `PrepareChatUseCase` / `GatewayOrchestratorWorkflow`. This file is retained
+ * for reference only and will be removed in a future cleanup.
+ *
  * When `needsRag` is true, fetches semantically relevant patient records
  * (KNN + Bedrock reranking) and evidence-based guidelines in parallel,
  * then injects them into the prompt.

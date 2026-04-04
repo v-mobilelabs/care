@@ -1,4 +1,5 @@
-import { Container, Divider, Group, Paper, Skeleton, Stack } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
+import { Container, Divider, Group, Skeleton, Stack } from "@mantine/core";
 
 function LoadingHeader() {
     return (
@@ -29,7 +30,7 @@ function LoadingMedRows() {
 
 function LoadingCard() {
     return (
-        <Paper withBorder radius="md" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="md">
             <Stack gap="sm">
                 <LoadingBadges />
                 <Skeleton h={14} w="75%" />
@@ -37,7 +38,7 @@ function LoadingCard() {
                 <Divider />
                 <LoadingMedRows />
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 

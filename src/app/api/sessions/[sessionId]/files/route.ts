@@ -5,7 +5,7 @@ import {
   UploadFileUseCase,
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
-} from "@/data/sessions";
+} from "@/data/files";
 
 // GET /api/sessions/[sessionId]/files
 export const GET = WithContext<{ sessionId: string }>(

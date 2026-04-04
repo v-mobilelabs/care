@@ -172,11 +172,6 @@ function getUserMenus(): NavigationMenus {
                 href: "/user/health",
             },
             {
-                label: "Specialists",
-                icon: <IconUsersGroup size={ICON_SIZE} />,
-                href: "/user/specialists",
-            },
-            {
                 label: "Referrals",
                 icon: <IconArrowForwardUp size={ICON_SIZE} />,
                 href: "/user/referrals",

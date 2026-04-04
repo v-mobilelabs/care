@@ -1,5 +1,6 @@
 "use client";
-import { Box, Group, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
+import { MotionCard } from "@/ui/components/motion-card";
+import { Box, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconChevronRight } from "@tabler/icons-react";
 import { useState } from "react";
 import Link from "next/link";
@@ -26,7 +27,7 @@ export function HealthCard({
 
     return (
         <Link href={href} style={{ textDecoration: "none", display: "block" }}>
-            <Paper
+            <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                 withBorder
                 radius="lg"
                 p="lg"
@@ -68,7 +69,7 @@ export function HealthCard({
                         </Text>
                     )}
                 </Stack>
-            </Paper>
+            </MotionCard>
         </Link>
     );
 }

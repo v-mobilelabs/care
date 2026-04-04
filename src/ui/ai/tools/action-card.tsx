@@ -58,7 +58,7 @@ function ActionCardItems({ items }: Readonly<{ items: readonly string[] }>) {
     });
 
     return (
-        <Card.Section px="sm" py="sm" style={{ flex: 1, overflowY: "auto" }}>
+        <Card.Section px="sm" py="sm" style={{ overflowY: "auto" }}>
             <Stack gap="xs">
                 {keyedItems.map(({ item, key }) => (
                     <ActionCardItem key={key} text={item} />
@@ -72,7 +72,7 @@ function ActionCardItems({ items }: Readonly<{ items: readonly string[] }>) {
 
 export function ActionCardCard({ data }: Readonly<{ data: ActionCardInput }>) {
     return (
-        <Card withBorder radius="lg" style={{ height: 260, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <Card withBorder radius="lg" style={{ height: "auto", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <ActionCardHeader title={data.title} total={data.items.length} />
             <ActionCardItems items={data.items} />
             {data.disclaimer && <ActionCardDisclaimer text={data.disclaimer} />}

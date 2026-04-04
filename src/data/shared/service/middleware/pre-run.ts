@@ -11,7 +11,10 @@
  *   MEMORY_TIMEOUT_MS     — shared constant for parallel coordination.
  */
 
-import { runGuardrailCheck } from "@/data/shared/service/middleware/guardrail.middleware";
+import {
+  runGuardrailCheck,
+  runRegexGuardrailCheck,
+} from "@/data/shared/service/middleware/guardrail.middleware";
 import { UsageService } from "@/data/usage/service/lazy-reset-usage.service";
 import { UsageRepository } from "@/data/usage/repositories/usage.repository";
 import { CreditsExhaustedError } from "@/lib/errors";
@@ -45,6 +48,11 @@ export interface PreflightInput {
   userQuery: string;
   /** Skip guardrail for trusted continuation turns (tool-output auto-send). */
   skipGuardrail?: boolean;
+  /**
+   * When true, only run regex-based guardrail (0 ms) and skip the LLM
+   * classification. The unified preflight LLM call handles safety instead.
+   */
+  regexOnly?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,13 +100,27 @@ export function withTimeout<T>(
  */
 export async function runPreflightChecks(input: PreflightInput): Promise<void> {
   if (!input.skipGuardrail) {
-    await runGuardrailCheck({
-      userId: input.userId,
-      userQuery: input.userQuery.trim(),
-    });
+    if (input.regexOnly) {
+      runRegexGuardrailCheck(input.userQuery);
+    } else {
+      await runGuardrailCheck({
+        userId: input.userId,
+        userQuery: input.userQuery.trim(),
+      });
+    }
   }
 
   const remaining = await usageService.consumeCredit(input.userId);
+  if (remaining < 0) throw new CreditsExhaustedError(0);
+}
+
+/**
+ * Standalone credit consumption check. Throws `CreditsExhaustedError` if
+ * the user has no credits remaining. Can be called in parallel with other
+ * operations (orchestrator, memory fetch) for latency savings.
+ */
+export async function consumeCredit(userId: string): Promise<void> {
+  const remaining = await usageService.consumeCredit(userId);
   if (remaining < 0) throw new CreditsExhaustedError(0);
 }
 

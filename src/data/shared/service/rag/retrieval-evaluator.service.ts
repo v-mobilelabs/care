@@ -217,6 +217,33 @@ export class RetrievalEvaluatorService {
     };
   }
 
+  private isConfidentDecision(result: RetrievalEvaluation): boolean {
+    const CLEAR_PASS_MARGIN = 0.15;
+    const CLEAR_FAIL_MARGIN = 0.3;
+    const thresholds = {
+      relevance: 0.75,
+      grounding: 0.8,
+      coverage: 0.6,
+      freshness: 0.5,
+      sourceTrust: 0.7,
+    };
+    const scores = result.scores;
+    const clearPass =
+      scores.relevance >= thresholds.relevance + CLEAR_PASS_MARGIN &&
+      scores.grounding >= thresholds.grounding + CLEAR_PASS_MARGIN &&
+      scores.coverage >= thresholds.coverage + CLEAR_PASS_MARGIN &&
+      scores.freshness >= thresholds.freshness + CLEAR_PASS_MARGIN &&
+      scores.sourceTrust >= thresholds.sourceTrust + CLEAR_PASS_MARGIN;
+    if (clearPass) return true;
+    const clearFail =
+      scores.relevance <= thresholds.relevance - CLEAR_FAIL_MARGIN ||
+      scores.grounding <= thresholds.grounding - CLEAR_FAIL_MARGIN ||
+      scores.coverage <= thresholds.coverage - CLEAR_FAIL_MARGIN ||
+      scores.freshness <= thresholds.freshness - CLEAR_FAIL_MARGIN ||
+      scores.sourceTrust <= thresholds.sourceTrust - CLEAR_FAIL_MARGIN;
+    return clearFail;
+  }
+
   async evaluate(input: {
     userId: string;
     query: string;
@@ -226,6 +253,12 @@ export class RetrievalEvaluatorService {
     modelTier?: EvaluatorModelTier;
   }): Promise<RetrievalEvaluation> {
     const modelTier = parseModelTier(input.modelTier);
+
+    // Fast path: run heuristic first; only call LLM for borderline cases.
+    const heuristic = this.heuristicEvaluate(input);
+    if (this.isConfidentDecision(heuristic)) {
+      return heuristic;
+    }
 
     const prompt = [
       "You are a strict retrieval quality evaluator for healthcare AI.",

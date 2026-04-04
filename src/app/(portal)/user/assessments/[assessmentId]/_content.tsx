@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 
 import {
     Badge,
@@ -7,7 +8,6 @@ import {
     Container,
     Divider,
     Group,
-    Paper,
     Skeleton,
     Stack,
     Text,
@@ -240,7 +240,7 @@ function TrustExplainer({
     const shouldEscalate = riskLevel === "high" || riskLevel === "emergency";
 
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Stack gap="md">
                 <Group gap="sm" wrap="nowrap" align="flex-start">
                     <ThemeIcon size={38} radius="md" color="primary" variant="light">
@@ -269,7 +269,7 @@ function TrustExplainer({
                 </SimpleTrustGrid>
 
                 {explanation ? (
-                    <Paper
+                    <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                         withBorder
                         radius="md"
                         p="md"
@@ -286,7 +286,7 @@ function TrustExplainer({
                                 Next step: <Text component="span" fw={400} c="dimmed" inherit>{explanation.nextStep}</Text>
                             </Text>
                         </Stack>
-                    </Paper>
+                    </MotionCard>
                 ) : null}
 
                 {shouldEscalate ? (
@@ -305,7 +305,7 @@ function TrustExplainer({
                     </Group>
                 ) : null}
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -327,7 +327,7 @@ function TrustBlock({
     description: string;
 }>) {
     return (
-        <Paper withBorder radius="md" p="sm" style={{ flex: 1, minWidth: 220 }}>
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="md" p="sm" style={{ flex: 1, minWidth: 220 }}>
             <Stack gap={6}>
                 <Group gap={6}>
                     <ThemeIcon size={28} radius="md" color="gray" variant="light">
@@ -341,7 +341,7 @@ function TrustBlock({
                     {description}
                 </Text>
             </Stack>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -367,7 +367,7 @@ function ActionCards({
                 Action Cards
             </Text>
             {cards.map((card, cardIndex) => (
-                <Paper key={`${card.title}-${cardIndex}`} withBorder radius="md" p="sm">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={`${card.title}-${cardIndex}`} withBorder radius="md" p="sm">
                     <Stack gap={6}>
                         <Text size="sm" fw={600}>
                             {card.title}
@@ -390,7 +390,7 @@ function ActionCards({
                             </Text>
                         ) : null}
                     </Stack>
-                </Paper>
+                </MotionCard>
             ))}
         </Stack>
     );
@@ -412,7 +412,7 @@ function QaList({
                 Assessment Q&amp;A
             </Text>
             {qa.map((pair, index) => (
-                <Paper key={`${pair.question}-${index}`} withBorder radius="md" p="sm">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" key={`${pair.question}-${index}`} withBorder radius="md" p="sm">
                     <Stack gap={6}>
                         <Text size="sm" fw={600}>
                             {index + 1}. {pair.question}
@@ -421,7 +421,7 @@ function QaList({
                             {pair.answer}
                         </Text>
                     </Stack>
-                </Paper>
+                </MotionCard>
             ))}
         </Stack>
     );
@@ -497,7 +497,7 @@ export function AssessmentDetailContent(
             <Stack gap="md">
                 <Header title={assessment.title} onBack={goBack} />
 
-                <Paper withBorder radius="lg" p="md">
+                <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
                     <Stack gap="sm">
                         <MetaBadges
                             riskLevel={assessment.riskLevel}
@@ -545,7 +545,7 @@ export function AssessmentDetailContent(
                             </Button>
                         </Button>
                     </Stack>
-                </Paper>
+                </MotionCard>
 
                 <TrustExplainer
                     guidelines={guidelines}

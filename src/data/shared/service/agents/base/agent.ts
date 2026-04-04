@@ -47,6 +47,9 @@ import { actionCard } from "@/data/shared/service/agents/base/tools/action-card.
 import { createMemoryTool } from "@/data/shared/service/agents/base/tools/memory.tool";
 import { submitReportTool } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import { submitReferralRequestTool } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
+import { createGetPatientProfileTool } from "@/data/shared/service/agents/global-tools/get-patient-profile.tool";
+import { createGetMedicationsTool } from "@/data/shared/service/agents/global-tools/get-medications.tool";
+import { createSearchPatientRecordsTool } from "@/data/shared/service/agents/global-tools/search-patient-records.tool";
 import {
   createAgentExecutionGraph,
   runAgentExecutionGraph,
@@ -365,6 +368,9 @@ export function createAgent(
         assessmentConfig,
       } as AgentCallOptions),
       memory: createMemoryTool("", "", ""),
+      getPatientProfile: createGetPatientProfileTool(""),
+      getMedications: createGetMedicationsTool(""),
+      searchPatientRecords: createSearchPatientRecordsTool("", ""),
       ...(allowActionCard ? { actionCard } : {}),
       submitReport: submitReportTool,
       submitReferralRequest: submitReferralRequestTool,
@@ -378,7 +384,6 @@ export function createAgent(
       );
     },
 
-    // eslint-disable-next-line max-lines-per-function
     async stream(
       params: AgentStreamParameters<AgentCallOptions, ToolSet>,
     ): Promise<StreamTextResult<ToolSet, never>> {

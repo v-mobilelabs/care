@@ -80,7 +80,7 @@ export class ClassifyFileUseCase {
 
     await fileRepository.patch(input.profileId, input.fileId, {
       label: object.label,
-      labelConfidence: object.confidence,
+      data: { confidence: object.confidence },
     });
   }
 }

@@ -1,4 +1,5 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     ActionIcon,
     Badge,
@@ -8,7 +9,6 @@ import {
     Group,
     Loader,
     Menu,
-    Paper,
     Stack,
     Switch,
     Text,
@@ -77,7 +77,7 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete, onToggl
     })();
 
     return (
-        <Paper
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
             shadow="0"
             radius="lg"
             px="md"
@@ -221,6 +221,6 @@ export function MedicationCard({ med, onEdit, isPendingDelete, onDelete, onToggl
                     </Stack>
                 </Collapse>
             )}
-        </Paper>
+        </MotionCard>
     );
 }

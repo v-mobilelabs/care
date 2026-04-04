@@ -6,26 +6,23 @@ import {
     Container,
     Group,
     Pagination,
-    SegmentedControl,
     Stack,
     Text,
-    TextInput,
     ThemeIcon,
     Title,
     Tooltip,
 } from "@mantine/core";
-import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
+import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
     IconCheck,
     IconHeartFilled,
     IconPlus,
-    IconSearch,
-    IconSortAscending,
-    IconSortDescending,
 } from "@tabler/icons-react";
-import { useState } from "react";
+
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { ListToolbar } from "@/ui/components/list-toolbar";
 
 import {
     useVitalsQuery,
@@ -64,12 +61,12 @@ function matchesSearch(v: VitalRecord, q: string): boolean {
         v.spo2Category,
         v.tempCategory,
         v.glucoseCategory,
-        v.systolicBp !== undefined ? `${v.systolicBp}/${v.diastolicBp}` : "",
-        v.restingHr !== undefined ? `${v.restingHr} bpm` : "",
-        v.spo2 !== undefined ? `${v.spo2}%` : "",
-        v.temperatureC !== undefined ? `${v.temperatureC}` : "",
-        v.glucoseMgdl !== undefined ? `${v.glucoseMgdl}` : "",
-        v.weightKg !== undefined ? `${v.weightKg} kg` : "",
+        v.systolicBp === undefined ? "" : `${v.systolicBp}/${v.diastolicBp}`,
+        v.restingHr === undefined ? "" : `${v.restingHr} bpm`,
+        v.spo2 === undefined ? "" : `${v.spo2}%`,
+        v.temperatureC === undefined ? "" : `${v.temperatureC}`,
+        v.glucoseMgdl === undefined ? "" : `${v.glucoseMgdl}`,
+        v.weightKg === undefined ? "" : `${v.weightKg} kg`,
     ].join(" ").toLowerCase();
     return searchable.includes(lower);
 }
@@ -80,11 +77,22 @@ export function VitalsContent() {
     const { data: vitals = [], isLoading } = useVitalsQuery();
     const deleteMutation = useDeleteVitalMutation();
     const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
-    const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebouncedValue(search, 250);
-    const [filter, setFilter] = useState<VitalFilter>("all");
-    const [sortAsc, setSortAsc] = useState(false);
-    const [page, setPage] = useState(1);
+
+    const {
+        search,
+        setSearch,
+        filter,
+        setFilter,
+        sortAsc,
+        setSortAsc,
+        page,
+        setPage,
+    } = useUrlFilters<VitalFilter>({
+        defaultFilter: "all",
+        defaultSearch: "",
+        defaultSort: "desc",
+        defaultPage: 1,
+    });
 
     function handleDelete(id: string) {
         modals.openConfirmModal({
@@ -118,7 +126,7 @@ export function VitalsContent() {
 
     // ── Filtering + Sorting ──────────────────────────────────────────
     const filtered = vitals
-        .filter((v) => matchesFilter(v, filter) && matchesSearch(v, debouncedSearch))
+        .filter((v) => matchesFilter(v, filter) && matchesSearch(v, search))
         .slice()
         .sort((a, b) => {
             const cmp = new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime();
@@ -142,9 +150,11 @@ export function VitalsContent() {
                         <Box>
                             <Title order={4} lh={1.2}>My Vitals</Title>
                             <Text size="xs" c="dimmed">
-                                {vitals.length > 0
-                                    ? `${vitals.length} reading${vitals.length === 1 ? "" : "s"}`
-                                    : "Track your vital signs"}
+                                {(() => {
+                                    if (vitals.length === 0) return "Track your vital signs";
+                                    if (vitals.length === 1) return "1 reading";
+                                    return `${vitals.length} readings`;
+                                })()}
                             </Text>
                         </Box>
                     </Group>
@@ -176,51 +186,27 @@ export function VitalsContent() {
 
                 {/* Search + Filter */}
                 {!isLoading && vitals.length > 0 && (
-                    <Stack gap="sm">
-                        <Group gap="xs">
-                            <TextInput
-                                placeholder="Search vitals…"
-                                leftSection={<IconSearch size={15} />}
-                                size="sm"
-                                value={search}
-                                onChange={(e) => { setSearch(e.currentTarget.value); setPage(1); }}
-                                style={{ flex: 1 }}
-                            />
-                            <Box
-                                component="button"
-                                onClick={() => setSortAsc((p) => !p)}
-                                style={{
-                                    all: "unset",
-                                    cursor: "pointer",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                    fontSize: "var(--mantine-font-size-xs)",
-                                    color: "var(--mantine-color-dimmed)",
-                                }}
-                            >
-                                {sortAsc ? <IconSortAscending size={14} /> : <IconSortDescending size={14} />}
-                                {sortAsc ? "Oldest" : "Newest"}
-                            </Box>
-                        </Group>
-                        <SegmentedControl
-                            size="xs"
-                            value={filter}
-                            onChange={(v) => { setFilter(v as VitalFilter); setPage(1); }}
-                            data={[
-                                { value: "all", label: "All" },
-                                { value: "bp", label: "BP" },
-                                { value: "hr", label: "HR" },
-                                { value: "spo2", label: "SpO2" },
-                                { value: "temp", label: "Temp" },
-                                { value: "glucose", label: "Glucose" },
-                                { value: "weight", label: "Weight" },
-                            ]}
-                        />
-                    </Stack>
+                    <ListToolbar
+                        search={search}
+                        onSearchChange={setSearch}
+                        searchPlaceholder="Search vitals..."
+                        filter={filter}
+                        onFilterChange={setFilter}
+                        filterData={[
+                            { value: "all", label: "All" },
+                            { value: "bp", label: "BP" },
+                            { value: "hr", label: "HR" },
+                            { value: "spo2", label: "SpO2" },
+                            { value: "temp", label: "Temp" },
+                            { value: "glucose", label: "Glucose" },
+                            { value: "weight", label: "Weight" },
+                        ]}
+                        sortAsc={sortAsc}
+                        onSortAscChange={setSortAsc}
+                    />
                 )}
 
-                <Box>
+                <Box maw={1080} mx="auto" w="100%">
                     {isLoading && <VitalSkeletons />}
 
                     {!isLoading && vitals.length === 0 && (

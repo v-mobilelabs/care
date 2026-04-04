@@ -157,7 +157,7 @@ export function DietPlansContent() {
                     </Group>
                 </Group>
 
-                <Box>
+                <Box maw={1080} mx="auto" w="100%">
                     {isLoading && <DietPlanSkeletons />}
                     {!isLoading && plans.length === 0 && <EmptyState onCreateDietPlan={handleCreateDietPlan} />}
                     {!isLoading && plans.length > 0 && (

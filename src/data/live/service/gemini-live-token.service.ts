@@ -6,6 +6,7 @@ export interface GeminiLiveTokenRequest {
   readonly temperature: number;
   readonly sessionDurationMinutes: number;
   readonly newSessionWindowSeconds: number;
+  readonly systemInstruction?: string;
 }
 
 export interface GeminiLiveTokenResult {
@@ -45,8 +46,14 @@ export class GeminiLiveTokenService {
           config: {
             temperature: input.temperature,
             responseModalities,
+            ...(input.systemInstruction
+              ? { systemInstruction: { parts: [{ text: input.systemInstruction }] } }
+              : {}),
             sessionResumption: {},
-            contextWindowCompression: { slidingWindow: {} },
+            contextWindowCompression: {
+              triggerTokens: "104857",
+              slidingWindow: { targetTokens: "52428" },
+            },
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             realtimeInputConfig: {

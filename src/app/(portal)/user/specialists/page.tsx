@@ -1,10 +1,11 @@
+import { MotionCard } from "@/ui/components/motion-card";
 /**
  * Meet Your Care Team
  * Discovery page showcasing all 21 specialist agents
  * Patients can explore capabilities and start conversations
  */
 
-import { Container, Title, Text, SimpleGrid, Paper, Group, ThemeIcon, Stack, Button, Badge, List } from "@mantine/core";
+import { Container, Title, Text, SimpleGrid, Group, ThemeIcon, Stack, Button, Badge, List } from "@mantine/core";
 import * as Icons from "@tabler/icons-react";
 import Link from "next/link";
 import { getAllSpecialists, type Specialist } from "@/data/specialists/specialists.config";
@@ -22,7 +23,7 @@ function SpecialistCard({ specialist }: Readonly<SpecialistCardProps>) {
   const IconComponent = Icons.IconStethoscope;
 
   return (
-    <Paper
+    <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
       withBorder
       radius="lg"
       p="md"
@@ -99,7 +100,7 @@ function SpecialistCard({ specialist }: Readonly<SpecialistCardProps>) {
           </Button>
         </Link>
       </Stack>
-    </Paper>
+    </MotionCard>
   );
 }
 
@@ -130,7 +131,7 @@ export default function SpecialistsPage() {
       </SimpleGrid>
 
       {/* Callout section */}
-      <Paper
+      <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
         withBorder
         radius="lg"
         p="lg"
@@ -155,7 +156,7 @@ export default function SpecialistsPage() {
             </Button>
           </Link>
         </Group>
-      </Paper>
+      </MotionCard>
     </Container>
   );
 }

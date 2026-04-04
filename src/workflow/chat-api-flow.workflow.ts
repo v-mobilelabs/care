@@ -162,6 +162,7 @@ export type ChatPersistenceGraphInput = {
   totalInputTokens: number;
   totalOutputTokens: number;
   options: BackgroundPersistOptions;
+  resumeFromNode?: string;
 };
 
 export type ChatWorkflowResumeState = {
@@ -205,6 +206,47 @@ type ChatPersistenceState = ChatPersistenceGraphInput & {
   skipPersistence: boolean;
   result: { persisted: boolean } | null;
 };
+
+/** Persistence node execution order for resume routing. */
+const PERSISTENCE_NODE_ORDER = [
+  "persist_user",
+  "decide_assistant_persistence",
+  "persist_assistant_message",
+  "persist_assistant_artifacts",
+  "finalize_persistence",
+  "save_workflow_state",
+] as const;
+
+type PersistenceNodeName = (typeof PERSISTENCE_NODE_ORDER)[number];
+
+function isValidPersistenceNode(name: string): name is PersistenceNodeName {
+  return (PERSISTENCE_NODE_ORDER as readonly string[]).includes(name);
+}
+
+/**
+ * Determine the next node to execute based on the resume checkpoint.
+ *
+ * If a valid `resumeFromNode` is provided, the graph skips to the node
+ * *after* the completed checkpoint (the failed or next-unfinished node).
+ * Otherwise, it starts from the beginning.
+ */
+function resolveResumeEntry(state: ChatPersistenceState): PersistenceNodeName {
+  const resume = state.resumeFromNode;
+  if (!resume || !isValidPersistenceNode(resume)) return "persist_user";
+
+  const completedIdx = PERSISTENCE_NODE_ORDER.indexOf(resume);
+  const nextIdx = completedIdx + 1;
+
+  if (nextIdx >= PERSISTENCE_NODE_ORDER.length) {
+    // Already completed all nodes — run the last one again to save state
+    return "save_workflow_state";
+  }
+
+  console.log(
+    `[Chat API] Resuming persistence graph from node: ${PERSISTENCE_NODE_ORDER[nextIdx]} (after completed: ${resume})`,
+  );
+  return PERSISTENCE_NODE_ORDER[nextIdx];
+}
 
 /**
  * Load persisted workflow state & latest checkpoint for a chat session.
@@ -1526,6 +1568,12 @@ async function finalizePersistenceNode(
 async function saveWorkflowStateNode(
   state: ChatPersistenceState,
 ): Promise<Partial<ChatPersistenceState>> {
+  // Determine the last completed node for the checkpoint.
+  // If persistence was skipped, record up to "decide_assistant_persistence".
+  const lastCompletedNode: PersistenceNodeName = state.skipPersistence
+    ? "decide_assistant_persistence"
+    : "finalize_persistence";
+
   try {
     const threadState = {
       agentType: state.agentType,
@@ -1553,7 +1601,7 @@ async function saveWorkflowStateNode(
         sessionId: state.sessionId,
         threadId: state.sessionId,
         workflowName: "chat-api-flow",
-        nodeName: "finalize_persistence",
+        nodeName: lastCompletedNode,
         state: checkpointState,
       }),
     ]);
@@ -1575,6 +1623,7 @@ const chatPersistenceGraph = new StateGraph(
     totalInputTokens: Annotation<number>(),
     totalOutputTokens: Annotation<number>(),
     options: Annotation<BackgroundPersistOptions>(),
+    resumeFromNode: Annotation<string | undefined>(),
     capturedUsage: Annotation<CapturedUsage | undefined>(),
     assistantMessageId: Annotation<string | undefined>(),
     skipPersistence: Annotation<boolean>(),
@@ -1587,7 +1636,14 @@ const chatPersistenceGraph = new StateGraph(
   .addNode("persist_assistant_artifacts", persistAssistantArtifactsNode)
   .addNode("finalize_persistence", finalizePersistenceNode)
   .addNode("save_workflow_state", saveWorkflowStateNode)
-  .addEdge(START, "persist_user")
+  .addConditionalEdges(START, resolveResumeEntry, {
+    persist_user: "persist_user",
+    decide_assistant_persistence: "decide_assistant_persistence",
+    persist_assistant_message: "persist_assistant_message",
+    persist_assistant_artifacts: "persist_assistant_artifacts",
+    finalize_persistence: "finalize_persistence",
+    save_workflow_state: "save_workflow_state",
+  })
   .addEdge("persist_user", "decide_assistant_persistence")
   .addEdge("decide_assistant_persistence", "persist_assistant_message")
   .addEdge("persist_assistant_message", "persist_assistant_artifacts")
@@ -1610,6 +1666,56 @@ export async function runChatPersistenceGraph(
   return finalState.result ?? { persisted: false };
 }
 
+const MAX_PERSIST_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 500;
+
+async function runChatPersistenceWithRetry(
+  input: ChatPersistenceGraphInput,
+): Promise<{ persisted: boolean }> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_PERSIST_RETRIES; attempt++) {
+    try {
+      return await runChatPersistenceGraph(input);
+    } catch (err) {
+      lastError = err;
+      console.error(
+        `[Chat API] Persistence attempt ${attempt}/${MAX_PERSIST_RETRIES} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+
+      if (attempt < MAX_PERSIST_RETRIES) {
+        // On retry, load the latest checkpoint so we can resume from where we left off
+        const resumeState = await loadChatWorkflowResumeState({
+          profileId: input.profileId,
+          sessionId: input.sessionId,
+        }).catch(() => null);
+
+        if (resumeState?.checkpoint?.nodeName) {
+          input = { ...input, resumeFromNode: resumeState.checkpoint.nodeName };
+          console.log(
+            `[Chat API] Retry ${attempt + 1} will resume from: ${resumeState.checkpoint.nodeName}`,
+          );
+        }
+
+        const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  console.error(
+    "[Chat API] Persistence failed after all retries. Turn data may be lost.",
+    {
+      sessionId: input.sessionId,
+      profileId: input.profileId,
+      agentType: input.agentType,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
+    },
+  );
+  return { persisted: false };
+}
+
 export function scheduleChatPersistence(args: {
   isUserTurn: boolean;
   userId: string;
@@ -1620,10 +1726,11 @@ export function scheduleChatPersistence(args: {
   getPersistPayload: () => PersistPayload | null;
   getUsageState: () => StreamUsageState;
   options: BackgroundPersistOptions;
+  resumeFromNode?: string;
 }): void {
   after(async () => {
     const usageState = args.getUsageState();
-    await runChatPersistenceGraph({
+    await runChatPersistenceWithRetry({
       isUserTurn: args.isUserTurn,
       userId: args.userId,
       profileId: args.profileId,
@@ -1634,6 +1741,7 @@ export function scheduleChatPersistence(args: {
       totalInputTokens: usageState.totalInputTokens,
       totalOutputTokens: usageState.totalOutputTokens,
       options: args.options,
+      resumeFromNode: args.resumeFromNode,
     });
   });
 }

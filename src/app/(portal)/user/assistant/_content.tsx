@@ -3,6 +3,7 @@ import { Box, Modal, Text, Title } from "@mantine/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
+import type { UIMessage } from "ai";
 import { Messages } from "@/ui/ai/messages";
 import {
     useUploadFileMutation,
@@ -113,7 +114,7 @@ export function ChatContent() {
 
     // ── Messages hook ─────────────────────────────────────────────────────────
     const {
-        messages, messageTimestamps, messageUsage, messageAgentTypes, messageReasonings, liveUsage, sendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
+        messages, messageTimestamps, messageUsage, messageAgentTypes, messageReasonings, liveUsage, sendMessage, appendMessage, stop, setPendingAttachments, status, isLoading, isMessagesLoading, isHydrated,
         answeredIds,
         phraseIdx, phraseFading, loadingHints, agentType,
         editingId, editingText, setEditingText,
@@ -223,6 +224,82 @@ export function ChatContent() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // ── Gemini Live session completion handler ────────────────────────────────
+    const handleLiveSessionMessage = async (msg: {
+        id?: string;
+        content: string;
+        kind: "text" | "audio" | "mixed";
+        agentType?: string;
+    }) => {
+        try {
+            // Parse the JSON-serialized parts from the live message
+            const parts: UIMessage["parts"] = (() => {
+                try {
+                    const parsed = JSON.parse(msg.content) as unknown;
+                    if (Array.isArray(parsed)) return parsed as UIMessage["parts"];
+                    // Fallback: wrap content as text
+                    return [{ type: "text", text: msg.content }];
+                } catch {
+                    // If JSON parse fails, treat as plain text
+                    return [{ type: "text", text: msg.content }];
+                }
+            })();
+
+            // Use the provided messageId if available (from onMessageWithAudio with audio)
+            // Otherwise generate a new UUID (from onSessionComplete without audio association)
+            const messageId = msg.id || crypto.randomUUID();
+
+            // Create a proper UIMessage with audio parts
+            const liveMessage: UIMessage = {
+                id: messageId,
+                role: "assistant",
+                parts,
+                ...(msg.agentType ? { agentType: msg.agentType } : {}),
+            };
+
+            console.log("[ChatContent] Adding live session message:", {
+                messageId,
+                kind: msg.kind,
+                partsCount: parts.length,
+                hasAudio: parts.some((p) => (p as { type?: string }).type === "audio"),
+            });
+
+            // Add the message to the chat (immediate UI rendering)
+            appendMessage(liveMessage);
+
+            // Persist the message to Firestore with explicit kind
+            // This ensures the message is stored only in messages collection, not separately
+            try {
+                const persistResponse = await fetch(`/api/sessions/${sessionId}/messages`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id: messageId, // Use the message ID (from GeminiLiveStandalone if with audio, or generated)
+                        role: "assistant",
+                        kind: msg.kind, // Explicit kind: "audio" | "text" | "mixed"
+                        content: msg.content, // JSON-serialized parts
+                        agentType: msg.agentType || "live",
+                    }),
+                });
+
+                if (!persistResponse.ok) {
+                    const errorData = await persistResponse.json() as unknown;
+                    console.warn("[ChatContent] Failed to persist message:", {
+                        status: persistResponse.status,
+                        error: errorData,
+                    });
+                } else {
+                    const persistedMsg = (await persistResponse.json()) as { id?: string };
+                    console.log("[ChatContent] Message persisted to Firestore:", persistedMsg.id);
+                }
+            } catch (persistErr) {
+                console.error("[ChatContent] Error persisting message:", persistErr);
+            }
+        } catch (error) {
+            console.error("[ChatContent] Failed to handle live session message:", error);
+        }
+    };
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     // Compute cumulative context tokens: DB usage (previous messages) + live
@@ -252,6 +329,7 @@ export function ChatContent() {
             isUploading={isUploading}
             messages={messages}
             status={status}
+            sessionId={sessionId}
             onSend={async (text: string, files?: FileList, existingFiles?: FileRecord[]) => {
                 await checkAndSend(text, files, existingFiles);
             }}
@@ -270,6 +348,7 @@ export function ChatContent() {
             contextUsage={contextUsage}
             onOpenRecap={openRecapModal}
             onOpenContinuity={openContinuityModal}
+            onLiveSessionMessage={handleLiveSessionMessage}
             liveProfileContext={{
                 name: profile?.name,
                 dateOfBirth: profile?.dateOfBirth,

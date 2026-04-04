@@ -1,27 +1,9 @@
 "use client";
-import {
-    ActionIcon,
-    Badge,
-    Box,
-    Collapse,
-    Divider,
-    Group,
-    Loader,
-    Menu,
-    Paper,
-    Stack,
-    Text,
-    ThemeIcon,
-} from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
-import {
-    IconChevronDown,
-    IconChevronRight,
-    IconDotsVertical,
-    IconHeartFilled,
-    IconTrash,
-} from "@tabler/icons-react";
+import { MotionCard } from "@/ui/components/motion-card";
+import { ActionIcon, Box, Divider, Group, Loader, Menu, Paper, SimpleGrid, Stack, Text, ThemeIcon } from "@mantine/core";
+import { IconDotsVertical, IconHeartFilled, IconTrash } from "@tabler/icons-react";
 import type { VitalRecord } from "@/app/(portal)/user/_query";
+import { colors } from "@/ui/tokens";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,11 +32,11 @@ function timeAgo(iso: string): string {
 }
 
 const BP_CATEGORY_COLOR: Record<string, string> = {
-    normal: "teal",
-    elevated: "yellow",
+    normal: colors.success,
+    elevated: colors.warning,
     high_stage_1: "orange",
-    high_stage_2: "red",
-    hypertensive_crisis: "red",
+    high_stage_2: colors.danger,
+    hypertensive_crisis: colors.danger,
 };
 
 const BP_CATEGORY_LABEL: Record<string, string> = {
@@ -65,34 +47,114 @@ const BP_CATEGORY_LABEL: Record<string, string> = {
     hypertensive_crisis: "Crisis",
 };
 
-const HR_COLOR: Record<string, string> = { low: "blue", normal: "teal", high: "orange" };
-const SPO2_COLOR: Record<string, string> = { normal: "teal", low: "orange", critical: "red" };
+const HR_COLOR: Record<string, string> = { low: colors.info, normal: colors.success, high: colors.warning };
+const SPO2_COLOR: Record<string, string> = { normal: colors.success, low: colors.warning, critical: colors.danger };
 const TEMP_COLOR: Record<string, string> = {
-    low: "blue", normal: "teal", elevated: "yellow", fever: "orange", high_fever: "red",
+    low: colors.info, normal: colors.success, elevated: colors.warning, fever: "orange", high_fever: colors.danger,
 };
 const GLUCOSE_COLOR: Record<string, string> = {
-    low: "blue", normal: "teal", elevated: "yellow", high: "red",
+    low: colors.info, normal: colors.success, elevated: colors.warning, high: colors.danger,
 };
 
-function categoryBadge(label: string, color: string) {
+// ── Vital Item Card Component ─────────────────────────────────────────────────
+
+function VitalItemCard({
+    label,
+    value,
+    category,
+    categoryColor,
+}: Readonly<{
+    label: string;
+    value: string;
+    category?: string;
+    categoryColor?: string;
+}>) {
+    const accentColor = categoryColor || colors.success;
+
     return (
-        <Badge size="xs" variant="light" color={color} radius="sm">
-            {label}
-        </Badge>
+        <Paper
+            p="md"
+            radius="md"
+            style={{
+                background: "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8))",
+                borderLeft: `4px solid var(--mantine-color-${accentColor}-6)`,
+                minHeight: "100%",
+            }}
+            withBorder={false}
+        >
+            <Stack gap={8}>
+                <Text size="xs" fw={500} c="dimmed" tt="uppercase" style={{ letterSpacing: "0.5px" }}>
+                    {label}
+                </Text>
+                <Text size="xl" fw={700} style={{ lineHeight: 1 }}>
+                    {value}
+                </Text>
+                {category && (
+                    <Text size="xs" c={accentColor} fw={500}>
+                        {category}
+                    </Text>
+                )}
+            </Stack>
+        </Paper>
     );
 }
 
-/** Pick the most relevant vital to show as the primary indicator. */
-function primaryLabel(v: VitalRecord): string {
-    if (v.systolicBp !== undefined && v.diastolicBp !== undefined) {
-        return `${v.systolicBp}/${v.diastolicBp} mmHg`;
-    }
-    if (v.restingHr !== undefined) return `${v.restingHr} bpm`;
-    if (v.spo2 !== undefined) return `${v.spo2}% SpO2`;
-    if (v.temperatureC !== undefined) return `${v.temperatureC}°C`;
-    if (v.glucoseMgdl !== undefined) return `${v.glucoseMgdl} mg/dL`;
-    if (v.weightKg !== undefined) return `${v.weightKg} kg`;
-    return "Vitals";
+// ── Build vitals array helper ────────────────────────────────────────────────
+
+function buildVitalsArray(vital: VitalRecord) {
+    return [
+        vital.systolicBp !== undefined && vital.diastolicBp !== undefined
+            ? {
+                label: "Blood Pressure",
+                value: `${vital.systolicBp}/${vital.diastolicBp}`,
+                category: vital.bpCategory ? BP_CATEGORY_LABEL[vital.bpCategory] : undefined,
+                categoryColor: vital.bpCategory ? BP_CATEGORY_COLOR[vital.bpCategory] : colors.success,
+            }
+            : null,
+        vital.restingHr !== undefined
+            ? {
+                label: "Heart Rate",
+                value: `${vital.restingHr}`,
+                category: vital.hrCategory && vital.hrCategory !== "normal" ? `${vital.hrCategory.toUpperCase()}` : undefined,
+                categoryColor: vital.hrCategory ? HR_COLOR[vital.hrCategory] : colors.success,
+            }
+            : null,
+        vital.spo2 !== undefined
+            ? {
+                label: "SpO₂",
+                value: `${vital.spo2}%`,
+                category: vital.spo2Category && vital.spo2Category !== "normal" ? vital.spo2Category.toUpperCase() : undefined,
+                categoryColor: vital.spo2Category ? SPO2_COLOR[vital.spo2Category] : colors.success,
+            }
+            : null,
+        vital.temperatureC !== undefined
+            ? {
+                label: "Temperature",
+                value: `${vital.temperatureC}°C`,
+                category: vital.tempCategory && vital.tempCategory !== "normal" ? vital.tempCategory.replace("_", " ").toUpperCase() : undefined,
+                categoryColor: vital.tempCategory ? TEMP_COLOR[vital.tempCategory] : colors.success,
+            }
+            : null,
+        vital.respiratoryRate !== undefined
+            ? { label: "Resp. Rate", value: `${vital.respiratoryRate}`, category: undefined, categoryColor: colors.success }
+            : null,
+        vital.glucoseMgdl !== undefined
+            ? {
+                label: "Glucose",
+                value: `${vital.glucoseMgdl}`,
+                category: vital.glucoseCategory && vital.glucoseCategory !== "normal" ? vital.glucoseCategory.toUpperCase() : undefined,
+                categoryColor: vital.glucoseCategory ? GLUCOSE_COLOR[vital.glucoseCategory] : colors.success,
+            }
+            : null,
+        vital.weightKg !== undefined ? { label: "Weight", value: `${vital.weightKg} kg`, category: undefined, categoryColor: colors.success } : null,
+        vital.heightCm !== undefined ? { label: "Height", value: `${vital.heightCm} cm`, category: undefined, categoryColor: colors.success } : null,
+        vital.bmi !== undefined ? { label: "BMI", value: `${vital.bmi}`, category: undefined, categoryColor: colors.success } : null,
+    ].filter(Boolean) as Array<{
+        label: string;
+        value: string;
+        category?: string;
+        categoryColor?: string;
+    }>;
 }
 
 // ── Vital Card ────────────────────────────────────────────────────────────────
@@ -103,35 +165,20 @@ export function VitalCard({ vital, isPendingDelete, onDelete, isOptimistic = fal
     onDelete: () => void;
     isOptimistic?: boolean;
 }>) {
-    const [expanded, { toggle }] = useDisclosure(false);
-
-    const details = [
-        vital.systolicBp !== undefined && vital.diastolicBp !== undefined
-            ? { label: "Blood Pressure", value: `${vital.systolicBp}/${vital.diastolicBp} mmHg` }
-            : null,
-        vital.restingHr !== undefined ? { label: "Heart Rate", value: `${vital.restingHr} bpm` } : null,
-        vital.spo2 !== undefined ? { label: "SpO2", value: `${vital.spo2}%` } : null,
-        vital.temperatureC !== undefined ? { label: "Temperature", value: `${vital.temperatureC}°C` } : null,
-        vital.respiratoryRate !== undefined ? { label: "Resp. Rate", value: `${vital.respiratoryRate} breaths/min` } : null,
-        vital.glucoseMgdl !== undefined ? { label: "Glucose", value: `${vital.glucoseMgdl} mg/dL` } : null,
-        vital.weightKg !== undefined ? { label: "Weight", value: `${vital.weightKg} kg` } : null,
-        vital.heightCm !== undefined ? { label: "Height", value: `${vital.heightCm} cm` } : null,
-        vital.bmi !== undefined ? { label: "BMI", value: `${vital.bmi}` } : null,
-    ].filter(Boolean) as Array<{ label: string; value: string }>;
-
-    const hasDetails = details.length > 1;
+    const vitals = buildVitalsArray(vital);
 
     return (
-        <Paper
+        <MotionCard
+            interactive
+            blobColor="var(--mantine-color-primary-6)"
             shadow="0"
             radius="lg"
-            px="md"
-            py="md"
+            p="lg"
             withBorder={false}
             style={{
                 opacity: isPendingDelete ? 0.4 : 1,
                 transition: "opacity 150ms ease",
-                backgroundColor: "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-7))",
+                backgroundColor: "light-dark(var(--mantine-color-white), var(--mantine-color-dark-7))",
                 position: isOptimistic ? "relative" as const : undefined,
             }}
         >
@@ -151,98 +198,55 @@ export function VitalCard({ vital, isPendingDelete, onDelete, isOptimistic = fal
                     <Loader size="sm" />
                 </Box>
             )}
-            <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
-                {/* Left: icon + primary reading + badges */}
-                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }} align="flex-start">
-                    <ThemeIcon
-                        size={36}
-                        radius="md"
-                        color="red"
-                        variant="light"
-                        style={{ flexShrink: 0, marginTop: 2 }}
-                    >
+
+            {/* Header with timestamp and actions */}
+            <Group justify="space-between" wrap="nowrap" gap="sm" align="center" mb="lg">
+                <Group gap="xs" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+                    <ThemeIcon size={32} radius="md" color={colors.brand} variant="light" style={{ flexShrink: 0 }}>
                         <IconHeartFilled size={18} />
                     </ThemeIcon>
-                    <Box style={{ minWidth: 0 }}>
-                        <Text size="sm" fw={500} lineClamp={1}>{primaryLabel(vital)}</Text>
-                        <Group gap={6} mt={0} wrap="wrap">
-                            {vital.bpCategory && categoryBadge(
-                                BP_CATEGORY_LABEL[vital.bpCategory] ?? vital.bpCategory,
-                                BP_CATEGORY_COLOR[vital.bpCategory] ?? "gray",
-                            )}
-                            {vital.hrCategory && vital.hrCategory !== "normal" && categoryBadge(
-                                `HR ${vital.hrCategory}`,
-                                HR_COLOR[vital.hrCategory] ?? "gray",
-                            )}
-                            {vital.spo2Category && vital.spo2Category !== "normal" && categoryBadge(
-                                `SpO2 ${vital.spo2Category}`,
-                                SPO2_COLOR[vital.spo2Category] ?? "gray",
-                            )}
-                            {vital.tempCategory && vital.tempCategory !== "normal" && categoryBadge(
-                                vital.tempCategory.replace("_", " "),
-                                TEMP_COLOR[vital.tempCategory] ?? "gray",
-                            )}
-                            {vital.glucoseCategory && vital.glucoseCategory !== "normal" && categoryBadge(
-                                `Glucose ${vital.glucoseCategory}`,
-                                GLUCOSE_COLOR[vital.glucoseCategory] ?? "gray",
-                            )}
-                            {vital.bmi !== undefined && (
-                                <Text size="xs" c="dimmed">BMI {vital.bmi}</Text>
-                            )}
-                            <Text size="xs" c="dimmed">{formatDateTime(vital.measuredAt)} · {timeAgo(vital.measuredAt)}</Text>
-                        </Group>
-                    </Box>
+                    <Stack gap={0} style={{ minWidth: 0 }}>
+                        <Text size="sm" fw={600} c="dimmed">
+                            Vitals Record
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                            {formatDateTime(vital.measuredAt)} · {timeAgo(vital.measuredAt)}
+                        </Text>
+                    </Stack>
                 </Group>
-
-                {/* Right: expand + actions */}
-                <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }} align="center">
-                    {hasDetails && (
-                        <ActionIcon
-                            size={28}
-                            variant="subtle"
-                            color="gray"
-                            onClick={toggle}
-                            aria-label={expanded ? "Collapse" : "Expand"}
-                        >
-                            {expanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                <Menu withinPortal position="bottom-end" shadow="md" radius="md">
+                    <Menu.Target>
+                        <ActionIcon size={28} variant="subtle" color="gray" aria-label="Options">
+                            <IconDotsVertical size={14} />
                         </ActionIcon>
-                    )}
-                    <Menu withinPortal position="bottom-end" shadow="md" radius="md">
-                        <Menu.Target>
-                            <ActionIcon size={28} variant="subtle" color="gray" aria-label="Options">
-                                <IconDotsVertical size={14} />
-                            </ActionIcon>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                            <Menu.Item
-                                leftSection={<IconTrash size={14} />}
-                                color="red"
-                                onClick={onDelete}
-                                disabled={isPendingDelete}
-                            >
-                                Delete
-                            </Menu.Item>
-                        </Menu.Dropdown>
-                    </Menu>
-                </Group>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                        <Menu.Item
+                            leftSection={<IconTrash size={14} />}
+                            color="red"
+                            onClick={onDelete}
+                            disabled={isPendingDelete}
+                        >
+                            Delete
+                        </Menu.Item>
+                    </Menu.Dropdown>
+                </Menu>
             </Group>
 
-            {/* Expandable details */}
-            {hasDetails && (
-                <Collapse in={expanded}>
-                    <Divider my="sm" />
-                    <Stack gap={6}>
-                        {details.map(({ label, value }) => (
-                            <Group key={label} gap={8}>
-                                <Text size="xs" fw={600} c="dimmed" w={100} style={{ flexShrink: 0 }}>
-                                    {label}
-                                </Text>
-                                <Text size="xs">{value}</Text>
-                            </Group>
-                        ))}
-                    </Stack>
-                </Collapse>
-            )}
-        </Paper>
+            <Divider mb="lg" />
+
+            {/* Vital items grid */}
+            <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+                {vitals.map(({ label, value, category, categoryColor }) => (
+                    <VitalItemCard
+                        key={label}
+                        label={label}
+                        value={value}
+                        category={category}
+                        categoryColor={categoryColor}
+                    />
+                ))}
+            </SimpleGrid>
+        </MotionCard>
     );
 }

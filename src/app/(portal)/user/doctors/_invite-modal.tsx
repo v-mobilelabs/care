@@ -1,11 +1,11 @@
 "use client";
+import { MotionCard } from "@/ui/components/motion-card";
 import {
     Avatar,
     Box,
     Button,
     Group,
     Modal,
-    Paper,
     Skeleton,
     Stack,
     Text,
@@ -45,7 +45,7 @@ function InviteCard({
     isPending: boolean;
 }>) {
     return (
-        <Paper withBorder radius="lg" p="md">
+        <MotionCard interactive blobColor="var(--mantine-color-primary-6)" withBorder radius="lg" p="md">
             <Group gap="md" wrap="nowrap" mb="sm">
                 <Avatar src={invite.doctorPhotoUrl ?? null} radius="xl" size="lg" color="primary">
                     {getInitials(invite.doctorName)}
@@ -100,7 +100,7 @@ function InviteCard({
                     Accept & Connect
                 </Button>
             </Group>
-        </Paper>
+        </MotionCard>
     );
 }
 
@@ -253,7 +253,7 @@ export function InviteModal({
                                 }
                             />
                         ))}
-                        <Paper
+                        <MotionCard interactive blobColor="var(--mantine-color-primary-6)"
                             radius="lg"
                             p="md"
                             style={{
@@ -275,7 +275,7 @@ export function InviteModal({
                                     </Text>
                                 </Stack>
                             </Group>
-                        </Paper>
+                        </MotionCard>
                     </>
                 )}
             </Stack>
