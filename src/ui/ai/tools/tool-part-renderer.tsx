@@ -1,6 +1,6 @@
 "use client";
-import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
-import { IconExclamationCircle } from "@tabler/icons-react";
+import { Box, Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
+import { IconExclamationCircle, IconCheck } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import type { ReactElement } from "react";
@@ -15,11 +15,15 @@ import { PrescriptionCard } from "./prescription-card";
 import { QuestionCard } from "./question-card";
 import { ReportCard } from "./report-card";
 import { ReferralCard } from "./referral-card";
+import { LabReportAnalysisCard } from "./lab-report-analysis-card";
+import { ExposureSliderCard } from "./exposure-slider-card";
+import type { ExposureSliderInput } from "./exposure-slider-card";
 import type { ActionCardInput } from "@/data/shared/service/agents/base/tools/action-card.tool";
 import type { EnhancedDietDay } from "@/data/diet-plans/models/nutrition.model";
 import type { SubmitPrescriptionInput } from "@/data/shared/service/agents/global-tools/submit-prescription.tool";
 import type { SubmitReportInput } from "@/data/shared/service/agents/base/tools/submit-report.tool";
 import type { SubmitReferralRequestInput } from "@/data/shared/service/agents/base/tools/submit-referral-request.tool";
+import type { SubmitLabReportAnalysisInput } from "@/data/shared/service/agents/global-tools/submit-lab-report-analysis.tool";
 import { confirmReferral, dismissReferral } from "@/data/referrals/actions";
 import { trackEvent } from "@/lib/analytics";
 import { buildReferralContinuationMessage } from "@/lib/build-referral-continuation-message";
@@ -34,6 +38,10 @@ const TOOL_LABELS: Record<string, string> = {
     recordCondition: "Recording condition…",
     generatePrescription: "Preparing prescription…",
     submitPrescription: "Preparing prescription…",
+    fetchLabReports: "Reading lab reports…",
+    fetchPrescriptions: "Retrieving prescriptions…",
+    logVital: "Logging vital signs…",
+    submitLabReportAnalysis: "Submitting lab report analysis…",
 };
 
 // ── Tool Part Dispatcher ──────────────────────────────────────────────────────
@@ -224,6 +232,30 @@ function renderDisplayOnlyTool(part: UIMessagePart<UIDataTypes, UITools>): React
     const report = extractToolInput<SubmitReportInput>(part, "submitReport");
     if (report?.specialty && report?.reportType && report?.title) return <ReportCard data={report} />;
 
+    const labReportAnalysis = extractToolInput<SubmitLabReportAnalysisInput>(part, "submitLabReportAnalysis");
+    if (labReportAnalysis?.panels && labReportAnalysis?.overallAssessment) {
+        return <LabReportAnalysisCard data={labReportAnalysis} />;
+    }
+
+    const logVital = extractToolInput<{ vitalType: string; value: string; unit?: string }>(part, "logVital");
+    if (logVital?.vitalType && logVital?.value) {
+        return (
+            <Paper withBorder radius="lg" p="md">
+                <Group gap="sm">
+                    <ThemeIcon size="md" color="teal" variant="light">
+                        <IconCheck size={16} />
+                    </ThemeIcon>
+                    <Box>
+                        <Text size="xs" c="dimmed" fw={500}>Logged Vital Sign</Text>
+                        <Text size="sm" fw={700}>
+                            {logVital.vitalType.charAt(0).toUpperCase() + logVital.vitalType.slice(1)}: {logVital.value} {logVital.unit || ""}
+                        </Text>
+                    </Box>
+                </Group>
+            </Paper>
+        );
+    }
+
     return null;
 }
 
@@ -268,6 +300,20 @@ function getOutcomeLink(part: UIMessagePart<UIDataTypes, UITools>): OutcomeLink 
         return {
             href: "/user/referrals",
             label: "Review referrals",
+        };
+    }
+
+    if (toolName === "logVital") {
+        return {
+            href: "/user/health/vitals",
+            label: "View logged vitals",
+        };
+    }
+
+    if (toolName === "submitLabReportAnalysis") {
+        return {
+            href: "/user/health/summary",
+            label: "View summary records",
         };
     }
 
@@ -322,6 +368,9 @@ function renderInteractiveTool(opts: InteractiveToolRenderOptions): ReactElement
 
     const question = extractToolInput<AskQuestionInput>(part, "askQuestion");
     if (question) return <QuestionCard data={question} toolCallId={toolCallId} isAnswered={answeredIds.has(toolCallId)} answeredValue={answeredIds.get(toolCallId)} isLoading={isLoading} onAnswer={onAnswer} />;
+
+    const exposureSlider = extractToolInput<ExposureSliderInput>(part, "exposureSlider");
+    if (exposureSlider) return <ExposureSliderCard data={exposureSlider} toolCallId={toolCallId} isAnswered={answeredIds.has(toolCallId)} answeredValue={answeredIds.get(toolCallId)} isLoading={isLoading} onAnswer={onAnswer} />;
 
     if (state === "approval-requested") return renderApproval(part, toolName, onApproval);
     return null;

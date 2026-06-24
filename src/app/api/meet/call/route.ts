@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   CreateCallRequestUseCase,
-  CancelCallUseCase,
   GetActiveCallForPatientUseCase,
 } from "@/data/meet";
+import { CancelCallUseCase } from "@/data/meet/use-cases/call-actions.use-case";
 import { GetDoctorProfileUseCase } from "@/data/doctors";
 // GET /api/meet/call — get active call for patient
 export const GET = WithContext(async ({ user }) => {

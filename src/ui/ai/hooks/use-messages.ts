@@ -10,6 +10,8 @@ import { progressPartSchema } from "@/ui/ai/types/progress";
 import { usagePartSchema } from "@/ui/ai/types/usage";
 import type { UsageData } from "@/ui/ai/types/usage";
 import { errorPartSchema } from "@/ui/ai/types/error";
+import { getAuth } from "firebase/auth";
+import { firebaseApp } from "@/lib/firebase/client";
 import { getWelcomeMessage } from "@/ui/ai/session";
 import {
   useMessagesQuery,
@@ -42,6 +44,18 @@ const INLINE_ANSWER_TYPES = new Set([
   "multi_choice",
   "scale",
 ]);
+
+/** Returns true only when the question can actually render inline answer UI.
+ *  Choice types without options fall back to free-text via the input bar. */
+function hasUsableInlineUI(q: AskQuestionInput): boolean {
+  if (!INLINE_ANSWER_TYPES.has(q.type)) return false;
+  if (
+    (q.type === "single_choice" || q.type === "multi_choice") &&
+    (!q.options || q.options.length === 0)
+  )
+    return false;
+  return true;
+}
 
 /**
  * Check if all tool calls in the last assistant message have outputs provided.
@@ -162,30 +176,27 @@ export function useMessages(sessionId: string) {
   } = useChat({
     id: sessionId,
     transport: new DefaultChatTransport({
-      api: "/api/chat",
-      body: {
-        sessionId,
-        chatMode: "quick",
-        ...(pendingAttachments.length > 0
-          ? { attachmentUrls: pendingAttachments }
-          : {}),
-      },
-      // Server-managed persistence — only send the last message.
-      // Server loads full conversation history from Firestore.
+      api: "https://api.care.cosmoops.com/api/v1/chat",
       // Strip step-start boundaries before sending. These are structural UI
       // markers for multi-step rendering and should not round-trip.
-      prepareSendMessagesRequest({ messages: allMessages, body }) {
+      async prepareSendMessagesRequest({ messages: allMessages }) {
+        const currentUser = getAuth(firebaseApp).currentUser;
+        const token = currentUser ? await currentUser.getIdToken() : undefined;
         const lastMsg = allMessages.at(-1);
-        if (!lastMsg) {
-          return { body: body ?? {} };
-        }
         return {
+          ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
           body: {
-            ...body,
-            message: {
-              ...lastMsg,
-              parts: lastMsg.parts.filter((p) => p.type !== "step-start"),
-            },
+            sessionId,
+            chatMode: "quick",
+            ...(pendingAttachments.length > 0
+              ? { attachmentUrls: pendingAttachments }
+              : {}),
+            ...(lastMsg && {
+              message: {
+                ...lastMsg,
+                parts: lastMsg.parts.filter((p) => p.type !== "step-start"),
+              },
+            }),
           },
         };
       },
@@ -584,7 +595,7 @@ export function useMessages(sessionId: string) {
         for (const p of m.parts) {
           if (!isToolPart(p) || p.state !== "input-available") continue;
           const q = extractToolInput<AskQuestionInput>(p, "askQuestion");
-          if (q && !INLINE_ANSWER_TYPES.has(q.type)) {
+          if (q && !hasUsableInlineUI(q)) {
             return {
               toolCallId: p.toolCallId!,
               question: q.question,
@@ -610,8 +621,8 @@ export function useMessages(sessionId: string) {
           const q = extractToolInput<AskQuestionInput>(p, "askQuestion");
           // Non-askQuestion tool calls always block (e.g. approval flows).
           if (!q) return true;
-          // Only block for question types that render inline answer UI.
-          return INLINE_ANSWER_TYPES.has(q.type);
+          // Only block for question types that can actually render inline answer UI.
+          return hasUsableInlineUI(q);
         });
       }
       return false;

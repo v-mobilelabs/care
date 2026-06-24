@@ -22,5 +22,19 @@
       ],
       "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
     }
+  ],
+  "hosting": [
+    {
+      "site": "care-ai-cosmoops-api",
+      "public": "public",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        {
+          "source": "/**",
+          "function": "api",
+          "region": "us-central1"
+        }
+      ]
+    }
   ]
 }

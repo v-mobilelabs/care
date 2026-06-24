@@ -7,17 +7,12 @@
  *
  * Initialization happens automatically inside AnalyticsProvider on mount.
  */
-import {
-  getAnalytics,
-  isSupported,
-  logEvent,
-  type Analytics,
-} from "firebase/analytics";
-import { firebaseApp } from "@/lib/firebase/client";
+import type { Analytics } from "firebase/analytics";
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
 let _analytics: Analytics | null = null;
+let _logEvent: any = null;
 
 /**
  * Initialize Firebase Analytics once on the client.
@@ -27,9 +22,17 @@ export async function initAnalytics(): Promise<void> {
   if (globalThis.window === undefined) return; // SSR guard
   if (_analytics) return;
 
-  const supported = await isSupported();
-  if (supported) {
-    _analytics = getAnalytics(firebaseApp);
+  try {
+    const { getAnalytics, isSupported, logEvent } = await import("firebase/analytics");
+    const { firebaseApp } = await import("@/lib/firebase/client");
+
+    const supported = await isSupported();
+    if (supported) {
+      _analytics = getAnalytics(firebaseApp);
+      _logEvent = logEvent;
+    }
+  } catch (error) {
+    console.error("Failed to initialize Firebase Analytics:", error);
   }
 }
 
@@ -266,7 +269,7 @@ export type AnalyticsEvent =
  * Silently drops events before analytics is initialized (e.g. during SSR).
  */
 export function trackEvent(event: AnalyticsEvent): void {
-  if (!_analytics) return;
+  if (!_analytics || !_logEvent) return;
   // Firebase overloads don't resolve cleanly against union types that include
   // standard GA4 reserved names — cast to a plain-string signature to bypass.
   type LogEventFn = (
@@ -274,7 +277,7 @@ export function trackEvent(event: AnalyticsEvent): void {
     name: string,
     params?: Record<string, unknown>,
   ) => void;
-  (logEvent as LogEventFn)(
+  (_logEvent as LogEventFn)(
     _analytics,
     event.name,
     event.params as Record<string, unknown>,

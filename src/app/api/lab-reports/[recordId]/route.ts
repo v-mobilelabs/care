@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { WithContext, ApiError } from "@/lib/api/with-context";
 import {
   GetLabReportUseCase,
@@ -30,6 +30,7 @@ export const DELETE = WithContext<{ recordId: string }>(
         userId: user.uid,
         profileId,
         recordId,
+        runInBackground: after,
       }),
     );
   },

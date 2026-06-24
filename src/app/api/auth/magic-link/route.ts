@@ -74,14 +74,23 @@ export async function POST(req: NextRequest) {
   const ip = clientIp(req);
 
   // ── reCAPTCHA v3 ─────────────────────────────────────────────────────────
-  const captcha = await verifyCaptcha(captchaToken, ip);
-  if (!captcha.ok) {
-    return NextResponse.json(
-      {
-        error:
-          "Request blocked. If you're human, please refresh and try again.",
-      },
-      { status: 403 },
+  // Skip in development (localhost) — reCAPTCHA v3 rejects localhost tokens.
+  // Skip when secret key is not configured (e.g. CI / preview envs).
+  const isDev = process.env.NODE_ENV === "development";
+  if (!isDev && RECAPTCHA_SECRET) {
+    const captcha = await verifyCaptcha(captchaToken, ip);
+    if (!captcha.ok) {
+      return NextResponse.json(
+        {
+          error:
+            "Request blocked. If you're human, please refresh and try again.",
+        },
+        { status: 403 },
+      );
+    }
+  } else if (isDev) {
+    console.warn(
+      "[magic-link] Development mode — skipping reCAPTCHA verification",
     );
   }
 

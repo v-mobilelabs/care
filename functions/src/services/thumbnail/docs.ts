@@ -120,7 +120,7 @@ async function generateWordThumbnail(buffer: Buffer): Promise<Buffer> {
 
 async function generateExcelThumbnail(buffer: Buffer): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  await workbook.xlsx.load(buffer as any);
   const sheet = workbook.worksheets[0];
   if (!sheet) return renderTextThumbnail("(Empty spreadsheet)");
   return renderTableThumbnail(sheet);

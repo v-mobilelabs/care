@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
-import { RejectCallUseCase } from "@/data/meet";
+import { RejectCallUseCase } from "@/data/meet/use-cases/call-actions.use-case";
 
 // POST /api/meet/[requestId]/reject — doctor rejects the incoming call
 export const POST = WithContext(

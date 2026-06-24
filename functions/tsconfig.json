@@ -1,16 +1,29 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
+    "module": "commonjs",
     "esModuleInterop": true,
-    "moduleResolution": "nodenext",
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
+    "moduleResolution": "node",
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
     "outDir": "lib",
     "sourceMap": true,
-    "strict": true,
-    "target": "es2017",
-    "skipLibCheck": true
+    "strict": false,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "target": "es2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "paths": {
+      "server-only": ["./src/lib/server-only-mock.ts"],
+      "@ai-sdk/devtools": ["./src/lib/ai-sdk-devtools-mock.ts"],
+      "@/data/*": ["../packages/data/src/*"],
+      "@/workflow/*": ["../packages/workflow/src/*"],
+      "@/lib/*": ["./src/lib/*", "../src/lib/*"],
+      "@/ui/*": ["../src/ui/*"],
+      "@/*": ["./src/*", "../src/*"]
+    }
   },
   "compileOnSave": true,
-  "include": ["src"]
+  "include": ["src", "../packages/data/src", "../packages/workflow/src"]
 }

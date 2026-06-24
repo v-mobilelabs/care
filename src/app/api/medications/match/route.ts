@@ -1,5 +1,5 @@
 import { revalidateTag } from "next/cache";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { CacheTags, getCachedMedicationMatches } from "@/data/cached";
 import { WithContext } from "@/lib/api/with-context";
 import { runMedicationMatchGraph } from "@/workflow/medication-match.workflow";
@@ -39,6 +39,7 @@ export const GET = WithContext(async ({ user, profileId, req }) => {
       userId: user.uid,
       profileId,
       req: refreshReq,
+      runInBackground: after,
     });
 
     revalidateTag(
@@ -65,6 +66,7 @@ export const POST = WithContext(async ({ user, profileId, req }) => {
     userId: user.uid,
     profileId,
     req,
+    runInBackground: after,
   });
   return NextResponse.json(result);
 });

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { WithContext } from "@/lib/api/with-context";
 import {
   ListLabReportsUseCase,
@@ -21,6 +21,7 @@ export const POST = WithContext(async ({ user, profileId, req }) => {
     userId: user.uid,
     profileId,
     req,
+    runInBackground: after,
   });
 
   return NextResponse.json(record, { status: 201 });

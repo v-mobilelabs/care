@@ -5,6 +5,8 @@ import {
   GetDoctorProfileUseCase,
   UpdateDoctorProfileUseCase,
   doctorProfileRepository,
+  UpdateDoctorAvailabilityUseCase,
+  toDoctorProfileDto,
 } from "@/data/doctors";
 import { UpsertProfileUseCase } from "@/data/profile";
 import { auth } from "@/lib/firebase/admin";
@@ -113,4 +115,15 @@ export const PUT = WithContext({ kind: "doctor" }, async ({ user, req }) => {
     uid: user.uid,
   });
   return NextResponse.json(profile);
+});
+
+// PATCH /api/doctors/me — update doctor availability
+export const PATCH = WithContext({ kind: "doctor" }, async ({ user, req }) => {
+  const body = await req.json();
+  const { availability } = body;
+  const updatedDoc = await new UpdateDoctorAvailabilityUseCase().execute({
+    uid: user.uid,
+    availability,
+  });
+  return NextResponse.json(toDoctorProfileDto(updatedDoc));
 });

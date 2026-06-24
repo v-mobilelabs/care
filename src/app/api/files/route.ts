@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { revalidateTag } from "next/cache";
 import { WithContext } from "@/lib/api/with-context";
 import { ListAllFilesUseCase, type FileLabel, FILE_LABELS } from "@/data/files";
@@ -62,6 +62,8 @@ export const POST = WithContext(async ({ user, profileId, req }) => {
     name: uploadResult.fileName,
     mimeType: uploadResult.mimeType,
     buffer: uploadResult.buffer,
+    runInBackground: after,
+    onRevalidateTag: revalidateTag,
   });
 
   return NextResponse.json(uploaded, { status: 201 });

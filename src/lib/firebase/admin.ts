@@ -10,7 +10,16 @@ const DEFAULT_FIREBASE_DB_URL =
   "http://127.0.0.1:9000?ns=demo-local-default-rtdb";
 
 function getResolvedProjectId(): string {
-  return process.env.FIREBASE_PROJECT_ID ?? DEFAULT_FIREBASE_PROJECT_ID;
+  const envProjectId =
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    (process.env.FIREBASE_CONFIG
+      ? (JSON.parse(process.env.FIREBASE_CONFIG) as { projectId?: string }).projectId
+      : undefined);
+
+  return envProjectId ?? DEFAULT_FIREBASE_PROJECT_ID;
 }
 
 function getResolvedStorageBucket(): string {
@@ -32,11 +41,19 @@ function getAdminApp(): App {
 
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
   const isFirestoreEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+  const isGoogleCloud = Boolean(
+    process.env.K_SERVICE ||
+    process.env.FUNCTIONS_EMULATOR ||
+    process.env.GCP_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.FIREBASE_CONFIG
+  );
   const storageBucket = getResolvedStorageBucket();
   const databaseURL = getResolvedDatabaseUrl();
 
   if (!privateKey) {
-    if (!isFirestoreEmulator) {
+    if (!isFirestoreEmulator && !isGoogleCloud) {
       throw new Error("FIREBASE_PRIVATE_KEY env var is not set");
     }
 

@@ -1,9 +1,9 @@
 import { after } from "next/server";
-import { meetRepository } from "../repositories/meet.repository";
+import { meetRepository } from "@/data/meet/repositories/meet.repository";
 import { rtdb } from "@/lib/firebase/admin";
 import { deleteChimeMeeting } from "@/lib/meet/chime";
 import { ApiError } from "@/lib/api/with-context";
-import { recomputeQueuePositions } from "./recompute-queue";
+import { recomputeQueuePositions } from "@/data/meet/use-cases/recompute-queue";
 
 export class RejectCallUseCase {
   async execute(params: {

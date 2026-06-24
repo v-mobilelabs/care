@@ -1,14 +1,20 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
+import {
+  initializeFirebase,
+  getFirestoreInstance,
+  getStorageInstance,
+  logFirebaseStatus,
+} from "./lib/firebase-admin.js";
 import { generate } from "./services/thumbnail/thumbnail.js";
+import { api } from "./server.js";
 
-initializeApp();
+// Initialize Firebase Admin SDK on startup
+initializeFirebase();
+logFirebaseStatus();
 
-const db = getFirestore();
-const bucket = getStorage().bucket();
+const db = getFirestoreInstance();
+const bucket = getStorageInstance().bucket();
 
 /** GCS object path for a thumbnail */
 const gcThumbnailPath = (profileId: string, fileId: string) =>
@@ -90,3 +96,6 @@ export const generateThumbnail = onDocumentCreated(
     }
   },
 );
+
+// Export HTTP API endpoints
+export { api };

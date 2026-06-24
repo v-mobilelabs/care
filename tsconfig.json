@@ -21,6 +21,12 @@
       }
     ],
     "paths": {
+      "@/data/cached": ["./src/data/cached.ts"],
+      "@/data/actions": ["./src/data/actions.ts"],
+      "@/data/referrals/actions": ["./src/data/referrals/actions.ts"],
+      "@/data/meet/use-cases/call-actions.use-case": ["./src/data/meet/use-cases/call-actions.use-case.ts"],
+      "@/data/*": ["./packages/data/src/*"],
+      "@/workflow/*": ["./packages/workflow/src/*"],
       "@/*": ["./src/*"]
     }
   },

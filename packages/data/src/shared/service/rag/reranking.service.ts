@@ -1,0 +1,193 @@
+/**
+ * Reranking Service — Vertex AI Ranking API reranking for RAG results
+ *
+ * Architecture:
+ * 1. Initial vector search retrieves top-N candidates (e.g., 30-50)
+ * 2. Vertex AI Ranking API (ranking-e5-base) scores each candidate for relevance
+ * 3. Return top-K reranked results (e.g., 10)
+ *
+ * Benefits:
+ * - Purpose-built reranking model (more accurate than LLM-based scoring)
+ * - Fast and cost-effective
+ * - Understands semantic nuances and medical context
+ *
+ * Usage:
+ * ```ts
+ * const reranked = await rerankingService.rerank(query, results, { topK: 10 });
+ * ```
+ */
+
+import { rankWithVertexAI } from "@/lib/vertex-ai/ranking-client";
+import type { SearchResult } from "./rag.types";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface RerankOptions {
+  /** Number of top results to return after reranking (default: 10) */
+  topK?: number;
+  /** Minimum absolute relevance score 0-1 (default: 0.01) */
+  minScore?: number;
+  /**
+   * Minimum score as a ratio of the top result's score (0-1, default: none).
+   * E.g. 0.85 keeps only results scoring ≥ 85% of the best match.
+   * Applied after the absolute minScore filter. Adaptive to each query's
+   * score distribution — avoids hard-coding a brittle absolute threshold.
+   */
+  minScoreRatio?: number;
+}
+
+// ── Reranking Service ─────────────────────────────────────────────────────────
+
+const RERANK_TIMEOUT_MS = (() => {
+  const raw = process.env.AI_RERANK_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000;
+})();
+
+export class RerankingService {
+  /**
+   * Rerank search results using Vertex AI Ranking API.
+   *
+   * @param query - User's query/question
+   * @param results - Initial search results from vector search
+   * @param options - Reranking options (topK, minScore)
+   * @returns Top-K reranked results sorted by relevance
+   */
+  async rerank(
+    query: string,
+    results: SearchResult[],
+    options: RerankOptions = {},
+  ): Promise<SearchResult[]> {
+    const startTime = performance.now();
+
+    // Early exit if no results or too few to rerank
+    if (results.length === 0) {
+      return [];
+    }
+
+    const topK = options.topK ?? 10;
+    const minScore = options.minScore ?? 0.01;
+    const minScoreRatio = options.minScoreRatio;
+
+    // If we already have <= topK results, no need to rerank
+    if (results.length <= topK) {
+      console.log(
+        `[Reranking] Skipped (only ${results.length} results), returning all`,
+      );
+      return results;
+    }
+
+    console.log(
+      `[Reranking] Started: ${results.length} candidates → top ${topK}`,
+    );
+
+    try {
+      // Prepare documents for reranking
+      const records = results.map((result, index) => ({
+        id: String(index),
+        title:
+          typeof result.chunk.metadata.title === "string"
+            ? result.chunk.metadata.title
+            : result.chunk.sourceId,
+        content: result.chunk.content,
+      }));
+
+      // Call Vertex AI Ranking API with a timeout for graceful degradation
+      const rerankStart = performance.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RERANK_TIMEOUT_MS);
+
+      let ranking: { index: number; score: number }[];
+      try {
+        const rerankResult = await rankWithVertexAI({
+          query,
+          records,
+          topN: topK,
+          abortSignal: controller.signal,
+        });
+        ranking = rerankResult.ranking;
+      } catch (rerankError) {
+        if (
+          rerankError instanceof Error &&
+          rerankError.message.includes("timed out")
+        ) {
+          console.warn(
+            `[Reranking] Timed out after ${RERANK_TIMEOUT_MS}ms — returning unsorted KNN candidates`,
+          );
+          clearTimeout(timeoutId);
+          return results.slice(0, topK);
+        }
+        throw rerankError;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      console.log(
+        `[Reranking] Vertex AI rerank: ${(performance.now() - rerankStart).toFixed(0)}ms, returned: ${ranking.length}`,
+      );
+
+      // Map reranked indices back to original SearchResult objects
+      const topScore = ranking.length > 0 ? ranking[0].score : 0;
+      const ratioThreshold =
+        minScoreRatio == null ? 0 : topScore * minScoreRatio;
+      const effectiveMin = Math.max(minScore, ratioThreshold);
+
+      if (minScoreRatio == null) {
+        // no ratio logging
+      } else if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[Reranking] Top score: ${(topScore * 100).toFixed(1)}% → ratio cutoff: ${(ratioThreshold * 100).toFixed(1)}% (effective min: ${(effectiveMin * 100).toFixed(1)}%)`,
+        );
+      }
+
+      const reranked: SearchResult[] = [];
+      for (const item of ranking) {
+        const originalResult = results[item.index];
+        const title =
+          typeof originalResult.chunk.metadata.title === "string"
+            ? originalResult.chunk.metadata.title
+            : originalResult.chunk.sourceId;
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[Reranking] [${item.index}] Score: ${(item.score * 100).toFixed(1)}% ${item.score >= effectiveMin ? "✓" : "✗"} - ${originalResult.chunk.type}: ${title}`,
+          );
+        }
+
+        if (item.score >= effectiveMin) {
+          reranked.push({
+            ...originalResult,
+            score: item.score,
+          });
+        }
+      }
+
+      console.log(
+        `[Reranking] Complete: ${(performance.now() - startTime).toFixed(0)}ms, returned: ${reranked.length}`,
+      );
+
+      return reranked;
+    } catch (error) {
+      console.error("[Reranking] Failed:", error);
+      // Fallback: return original top-K results
+      console.warn("[Reranking] Fallback: returning original top results");
+      return results.slice(0, topK);
+    }
+  }
+
+  /**
+   * Batch reranking for multiple queries (useful for multi-turn conversations).
+   * Runs all reranking operations in parallel.
+   */
+  async rerankBatch(
+    queries: Array<{ query: string; results: SearchResult[] }>,
+    options: RerankOptions = {},
+  ): Promise<SearchResult[][]> {
+    return Promise.all(
+      queries.map((q) => this.rerank(q.query, q.results, options)),
+    );
+  }
+}
+
+/** Singleton instance */
+export const rerankingService = new RerankingService();

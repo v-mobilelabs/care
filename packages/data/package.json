@@ -1,0 +1,19 @@
+{
+  "name": "@sd/data",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "@ai-sdk/google": "^3.0.34",
+    "@ai-sdk/google-vertex": "^4.0.93",
+    "@ai-sdk/react": "^3.0.211",
+    "@google/genai": "^1.46.0",
+    "ai": "^6.0.209",
+    "dayjs": "^1.11.19",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.3.6"
+  }
+}
